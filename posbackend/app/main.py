@@ -21,12 +21,14 @@ app = FastAPI(title="POS Backend")
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://postrack.vercel.app"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
