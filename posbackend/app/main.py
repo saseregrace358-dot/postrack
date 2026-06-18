@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+import os
+from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 from app.routes import product_routes, sales_routes
@@ -24,6 +26,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Routes
@@ -31,9 +37,6 @@ app.include_router(product_routes.router)
 app.include_router(sales_routes.router)
 app.include_router(auth_router)
 
-@app.options("/{full_path:path}")
-def preflight():
-    return Response(status_code=200)
 
 
 @app.get("/")
