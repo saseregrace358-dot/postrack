@@ -1,20 +1,43 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI()
 
+# 1. CORS FIRST (VERY IMPORTANT)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://postrack-khaki.vercel.app"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 2. SAFE STATIC FILES
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# 3. IMPORT ROUTES AFTER APP INIT
+from app.routes import product_routes, sales_routes
+from app.auth.routes import router as auth_router
+
+app.include_router(auth_router)
+app.include_router(product_routes.router)
+app.include_router(sales_routes.router)
+
+# 4. DB ONLY AFTER EVERYTHING (OR MOVE TO STARTUP EVENT)
+from app.database import engine, Base
+
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
+
 @app.get("/")
 def home():
-    return {"status": "ok"}
-
-@app.get("/products")
-def products():
-    return [{"id": 1, "name": "test"}]
+    return {"message": "POS Backend Running"}
