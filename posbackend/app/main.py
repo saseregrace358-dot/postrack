@@ -15,7 +15,7 @@ from app.auth.routes import router as auth_router
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="POS Backend")
-app.include_router(auth_router)
+
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
@@ -33,6 +33,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Routes
 app.include_router(product_routes.router)
 app.include_router(sales_routes.router)
+app.include_router(auth_router)
 
 
 @app.get("/")
