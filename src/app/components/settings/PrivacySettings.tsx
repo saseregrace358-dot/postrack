@@ -28,12 +28,12 @@ export function PrivacySettings({
 
   useEffect(() => {
     if (isOpen) {
-      fetch("http://localhost:8000/staff")
+      fetch("https://postrack.onrender.com/staff")
         .then((res) => res.json())
         .then(setStaff)
         .catch(console.error);
 
-      fetch("http://localhost:8000/users")
+      fetch("https://postrack.onrender.com/users")
         .then((res) => res.json())
         .then(setUsers)
         .catch(console.error);

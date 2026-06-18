@@ -25,7 +25,7 @@ export function ProfileSettings({
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:8000/users/me");
+      const res = await fetch("https://postrack.onrender.com/users/me");
       const data = await res.json();
 
       setProfile(data);

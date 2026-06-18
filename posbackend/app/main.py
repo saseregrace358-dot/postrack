@@ -5,19 +5,25 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 from app.routes import product_routes, sales_routes
+from app.auth.routes import router as auth_router
+
+
+
+
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="POS Backend")
-
+app.include_router(auth_router)
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://10.236.8.25:5173",
+        
+        "https://postrack.vercel.app",
+        "https://postrack-git-main-saseregrace358-9128s-projects.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],

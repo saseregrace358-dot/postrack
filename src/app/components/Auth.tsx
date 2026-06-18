@@ -1,3 +1,4 @@
+import { loginUser, registerUser } from "../../api/auth";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Mail, Lock, User, Eye, EyeOff, Store } from "lucide-react";
@@ -14,17 +15,44 @@ export function Auth({ onLogin }: AuthProps) {
     email: "",
     password: "",
   });
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Simple validation
-    if (isLogin && formData.email && formData.password) {
-      onLogin();
-    } else if (!isLogin && formData.name && formData.email && formData.password) {
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (loading) return; // ❌ stops spam clicks
+
+  setLoading(true);
+
+  try {
+    if (isLogin) {
+      const res = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      localStorage.setItem("token", res.data.access_token);
+
+      onLogin(); // navigation trigger
+    } else {
+      await registerUser(formData);
+
+      const res = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      localStorage.setItem("token", res.data.access_token);
+
       onLogin();
     }
-  };
-
+  } catch (err) {
+    console.log(err);
+    alert("Auth failed");
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <motion.div
@@ -136,11 +164,13 @@ export function Auth({ onLogin }: AuthProps) {
             )}
 
             <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              {isLogin ? "Login" : "Create Account"}
-            </button>
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+
+        >
+          {loading ? "Please wait..." : isLogin ? "Login" : "Create Account"}
+        </button>
             <div className="text-center mt-1">
                     {isLogin ? (
                       <p className="text-sm text-slate-600">
