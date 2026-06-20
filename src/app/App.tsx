@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
-import { RouterProvider } from "react-router";
+import { RouterProvider } from 'react-router-dom';
 import { router } from "./routes";
 import { Splash } from "./components/Splash";
 import { Auth } from "./components/Auth";
 import { ThemeProvider } from "./context/ThemeContext";
+import { AuthContext } from "./context/AuthContext";
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (savedToken) setToken(savedToken);
-  }, []);
+useEffect(() => {
+  setToken(localStorage.getItem("token"));
+}, []);
 
   const handleLogin = (token: string) => {
     localStorage.setItem("token", token);
@@ -33,11 +33,10 @@ export default function App() {
   }
 
   return (
+    <AuthContext.Provider value={{ handleLogout }}>
     <ThemeProvider>
-      <RouterProvider
-        router={router}
-        
-      />
+      <RouterProvider router={router} />
     </ThemeProvider>
-  );
+  </AuthContext.Provider>
+);
 }
