@@ -15,9 +15,17 @@ export function Settings() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const toggleSection = (section: string) => {
-    setExpanded(expanded === section ? null : section);
-  };
+ const toggleSection = (section: string) => {
+  setExpanded(expanded === section ? null : section);
+};
+
+const handleLogout = () => {
+  localStorage.removeItem("isAuthenticated");
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+
+  window.location.reload();
+};
 
   return (
     <div className="space-y-6 pb-20">
@@ -65,12 +73,7 @@ export function Settings() {
       />
 
       <button
-  onClick={() => {
-    localStorage.clear();
-    setUser(null);
-
-    window.location.href = "/auth";
-  }}
+  onClick={handleLogout}
   className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 text-white rounded-xl"
 >
   <LogOut size={18} />
