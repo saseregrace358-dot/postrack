@@ -5,7 +5,7 @@ export function useUser() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("https://postrack.onrender.com/user/profile")
+    fetch("https://postrack.onrender.com/auth/profile")
       .then((res) => res.json())
       .then((data) => {
         setUser(data);

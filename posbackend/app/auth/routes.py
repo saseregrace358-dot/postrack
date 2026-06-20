@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from app.auth.jwt import decode_token  # you must have this
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+
 
 from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
@@ -8,7 +12,7 @@ from app.database import get_db
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-
+security = HTTPBearer()
 
 class UserRegister(BaseModel):
     name: str
@@ -61,4 +65,24 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer"
+    }
+@router.get("/me")
+def get_me(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token = credentials.credentials
+
+    payload = decode_token(token)
+    email = payload.get("sub")
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email
     }

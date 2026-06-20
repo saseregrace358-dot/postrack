@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { Mail, Lock, User, Eye, EyeOff, Store } from "lucide-react";
 
 interface AuthProps {
-  onLogin: () => void;
+  onLogin: (token: string) => void;
 }
 
 export function Auth({ onLogin }: AuthProps) {
@@ -33,7 +33,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       localStorage.setItem("token", res.data.access_token);
 
-      onLogin(); // navigation trigger
+      onLogin(res.data.access_token); // navigation trigger
     } else {
       await registerUser(formData);
 
@@ -44,7 +44,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       localStorage.setItem("token", res.data.access_token);
 
-      onLogin();
+      onLogin(res.data.access_token);
     }
   } catch (err) {
     console.log(err);

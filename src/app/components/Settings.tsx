@@ -8,7 +8,7 @@ import { PrivacySettings } from "./settings/PrivacySettings";
 import { NotificationSettings } from "./settings/NotificationSettings";
 import { LanguageSettings } from "./settings/LanguageSettings";
 import { SupportSettings } from "./settings/SupportSettings";
-
+import { useNavigate } from "react-router-dom";
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
   const { user, setUser } = useUser();
@@ -16,17 +16,15 @@ export function Settings() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
  const toggleSection = (section: string) => {
-  setExpanded(expanded === section ? null : section);
-};
+    setExpanded(expanded === section ? null : section);
+  };
+
+ const navigate = useNavigate();
 
 const handleLogout = () => {
-  localStorage.removeItem("isAuthenticated");
   localStorage.removeItem("token");
-  localStorage.removeItem("user");
-
-  window.location.reload();
+  navigate("/"); // back to Auth
 };
-
   return (
     <div className="space-y-6 pb-20">
 
