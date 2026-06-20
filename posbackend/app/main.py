@@ -1,3 +1,5 @@
+
+print("MAIN.PY LOADED - VERSION 123")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
