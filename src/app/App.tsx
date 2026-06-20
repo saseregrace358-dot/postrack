@@ -11,9 +11,7 @@ export default function App() {
 
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
-    if (savedToken) {
-      setToken(savedToken);
-    }
+    if (savedToken) setToken(savedToken);
   }, []);
 
   const handleLogin = (token: string) => {
@@ -36,7 +34,10 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <RouterProvider
+        router={router}
+        
+      />
     </ThemeProvider>
   );
 }
