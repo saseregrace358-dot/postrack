@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 import os
 
 
 app = FastAPI()
+
 
 # 1. CORS FIRST (VERY IMPORTANT)
 app.add_middleware(
@@ -20,7 +22,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(auth_router)
 # 2. SAFE STATIC FILES
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
@@ -57,3 +59,8 @@ def cors_test():
             "https://postrack-i7gnxzu7r-saseregrace358-9128s-projects.vercel.app",
         ]
     }
+
+
+@app.options("/{rest_of_path:path}")
+def preflight_handler():
+    return Response(status_code=200)
