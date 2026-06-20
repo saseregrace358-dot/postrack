@@ -2,11 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models.user import User
-
 from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
+from app.database import get_db
+from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -43,6 +42,8 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
     db.refresh(new_user)
 
     return {"message": "User created successfully"}
+
+
 # LOGIN
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
