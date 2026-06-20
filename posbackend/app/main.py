@@ -8,8 +8,7 @@ app = FastAPI()
 # 1. CORS FIRST (VERY IMPORTANT)
 app.add_middleware(
     CORSMiddleware,
-   app.add_middleware(
-    CORSMiddleware,
+   
     allow_origins=[
         "http://localhost:5173",
         "https://postrack.vercel.app",
