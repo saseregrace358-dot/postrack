@@ -16,7 +16,7 @@ app.add_middleware(
         "https://postrack-khaki.vercel.app",
         "https://postrack-i7gnxzu7r-saseregrace358-9128s-projects.vercel.app",
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
