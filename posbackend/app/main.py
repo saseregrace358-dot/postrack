@@ -1,9 +1,8 @@
-
-print("MAIN.PY LOADED - VERSION 123")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+
 
 app = FastAPI()
 
@@ -31,6 +30,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # 3. IMPORT ROUTES AFTER APP INIT
 from app.routes import product_routes, sales_routes
 from app.auth.routes import router as auth_router
+
 
 app.include_router(auth_router)
 app.include_router(product_routes.router)
