@@ -44,3 +44,14 @@ def startup():
 @app.get("/")
 def home():
     return {"message": "POS Backend Running"}
+
+@app.get("/cors-test")
+def cors_test():
+    return {
+        "origins": [
+            "http://localhost:5173",
+            "https://postrack.vercel.app",
+            "https://postrack-khaki.vercel.app",
+            "https://postrack-i7gnxzu7r-saseregrace358-9128s-projects.vercel.app",
+        ]
+    }
