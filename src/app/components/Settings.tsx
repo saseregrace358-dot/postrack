@@ -64,18 +64,10 @@ export function Settings() {
         toggleSection={toggleSection}
       />
 
-     <button
-  onClick={() => {
-    localStorage.removeItem("token");
-    setUser(null);
-
-    window.location.href = "/auth";
-  }}
-  className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 text-white rounded-xl"
->
-  <LogOut size={18} />
-  Logout
-</button>
+      <button className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 text-white rounded-xl">
+        <LogOut size={18} />
+        Logout
+      </button>
     </div>
   );
 }
