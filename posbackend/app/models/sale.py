@@ -2,10 +2,12 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, JSON
 from datetime import datetime
 from app.database import Base
 
+
 class Sale(Base):
     __tablename__ = "sales"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(String, unique=True, index=True)
 
     date = Column(DateTime, default=datetime.utcnow)
 

@@ -16,6 +16,7 @@ type SaleStatus = "PAID" | "DEBT";
 
 type Sale = {
   id: string;
+  order_id: string;
   date: string;
   items: CartItem[];
   subtotal: number;
@@ -246,7 +247,7 @@ const totalRevenue = filteredSales.reduce(
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <p className="font-semibold text-slate-900 dark:text-white">{sale.id}</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">{sale.order_id}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(sale.date)}</p>
                 </div>
                 <div className="text-right">
@@ -312,7 +313,7 @@ const totalRevenue = filteredSales.reduce(
                       Order ID:
                     </span>
                     <span className="font-medium text-slate-900 dark:text-white">
-                      {selectedSale.id}
+                      {selectedSale.order_id}
                     </span>
                   </div>
 

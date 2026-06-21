@@ -7,7 +7,7 @@ from app.database import SessionLocal
 from app.models.sale import Sale
 from app.models.product import Product
 from app.schemas.sale import SaleCreate
-
+import random
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"]
@@ -71,8 +71,9 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
             "date": datetime.utcnow().isoformat(),
             "method": payload.paymentMethod
         })
-
+        order_id = f"ORD{random.randint(1000000, 9999999)}"
     sale = Sale(
+         order_id=order_id,
         items=sale_items,
         subtotal=payload.subtotal,
         tax=payload.tax,

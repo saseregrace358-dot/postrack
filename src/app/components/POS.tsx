@@ -226,17 +226,9 @@ await createSaleApi({
       onClick={() => addToCart(product)}
       className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 hover:shadow-md hover:border-blue-500 transition text-left flex flex-col"
     >
-      {/* IMAGE (SMALL + CENTERED) */}
-      <div className="w-full h-16 flex items-center justify-center mb-1">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="h-14 w-14 object-contain"
-        />
-      </div>
-
+      
       {/* NAME */}
-      <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-1">
+      <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-3">
         {product.name}
       </h3>
 
@@ -285,11 +277,7 @@ await createSaleApi({
                     key={item.id}
                     className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl p-3"
                   >
-                    <div className="text-3xl"><img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-10 h-10 object-cover rounded-md bg-gray-100"
-                  /></div>
+                    
                     <div className="flex-1">
                       <h4 className="font-medium text-slate-900 dark:text-white text-sm">
                         {item.name}
