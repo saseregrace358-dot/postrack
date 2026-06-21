@@ -62,7 +62,7 @@ export function Dashboard() {
     setSales(s.data);
     setProducts(p.data);
   };
-
+  
   // ================= WEEK HELPERS =================
   const { weekStart, weekEnd } = useMemo(() => {
     const d = new Date(weekDate);
@@ -96,20 +96,7 @@ export function Dashboard() {
     })
     .reduce((a, s) => a + s.total, 0);
 
-  const totalDebt = sales.reduce((a, s) => a + (s.balance || 0), 0);
-
-  const totalItems = sales.reduce(
-    (a, s) =>
-      a +
-      (s.items?.reduce((x, i) => x + i.quantity, 0) || 0),
-    0
-  );
-
-  const totalInvoices = sales.length;
-
-  const stockOut = products.filter((p) => p.stock === 0).length;
-
-  const profit = sales.reduce((a, s) => {
+    const profit = sales.reduce((a, s) => {
     const cost = s.items?.reduce(
       (sum, i) => sum + i.price * i.quantity * 0.7,
       0
@@ -166,6 +153,37 @@ const busyDay =
   sales.length > 0
     ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][maxDayIndex]
     : "No data";
+
+    
+  const monthlySales = useMemo(() => {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  return sales
+    .filter((s) => {
+      const d = new Date(s.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((sum, s) => sum + (s.total || 0), 0);
+}, [sales]);
+
+const monthlyTrend = useMemo(() => {
+  const data: Record<string, number> = {};
+
+  sales.forEach((s) => {
+    const d = new Date(s.date);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+
+    data[key] = (data[key] || 0) + (s.total || 0);
+  });
+
+  return Object.entries(data)
+    .map(([month, value]) => ({ month, value }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .slice(-6); // last 6 months
+}, [sales]);
+
   // ================= TOP PRODUCTS =================
   const topProducts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -221,14 +239,35 @@ const busyDay =
           value={`₦${aov.toFixed(2)}`}
           icon={DollarSign}
         />
-        <Metric title="Stock Out" value={stockOut} icon={AlertTriangle} />
+        <Metric
+        title="Monthly Sales"
+        value={`₦${monthlySales.toLocaleString()}`}
+        icon={DollarSign}
+      />
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+    <h3 className="font-semibold text-slate-900 dark:text-white">
+      🧠 Sales Insights
+    </h3>
 
-        <Metric title="Customer Debt" value={`₦${totalDebt.toLocaleString()}`} icon={CreditCard} />
-        <Metric title="Total Items" value={totalItems} icon={ShoppingCart} />
-        <Metric title="Total Invoices" value={totalInvoices} icon={FileText} />
-        <Metric title="Products" value={products.length} icon={Package} />
+    <div className="mt-3 space-y-2 text-sm">
+      <p>
+        ⏰ Peak Sales Hour:{" "}
+        <span className="font-bold text-blue-500">
+          {peakHourLabel}
+        </span>
+      </p>
+
+      <p>
+        📅 Busiest Day:{" "}
+        <span className="font-bold text-green-500">
+          {busyDay}
+        </span>
+      </p>
+    </div>
+  </div>
 
       </div>
+
 
       {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -261,30 +300,21 @@ const busyDay =
             </BarChart>
           </ResponsiveContainer>
         </div>
-       
+       {/* MONTHLY SALES */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+          <h3 className="font-semibold mb-3">Monthly Sales Trend</h3>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={monthlyTrend}>
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
         {/* INSIGHTS SECTION */}
-  <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
-    <h3 className="font-semibold text-slate-900 dark:text-white">
-      🧠 Sales Insights
-    </h3>
-
-    <div className="mt-3 space-y-2 text-sm">
-      <p>
-        ⏰ Peak Sales Hour:{" "}
-        <span className="font-bold text-blue-500">
-          {peakHourLabel}
-        </span>
-      </p>
-
-      <p>
-        📅 Busiest Day:{" "}
-        <span className="font-bold text-green-500">
-          {busyDay}
-        </span>
-      </p>
-    </div>
-  </div>
-
+  
 </div>
       </div>
 
