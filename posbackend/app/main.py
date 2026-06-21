@@ -54,9 +54,9 @@ def cors_test():
     return {
         "origins": [
             "http://localhost:5173",
-            "https://postrack.vercel.app",
-            "https://postrack-khaki.vercel.app",
-            "https://postrack-i7gnxzu7r-saseregrace358-9128s-projects.vercel.app",
+        "https://postrack.vercel.app",
+        "https://postrack-khaki.vercel.app",
+        "https://postrack-26kb7icg1-saseregrace358-9128s-projects.vercel.app",
         ]
     }
 
