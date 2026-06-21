@@ -155,35 +155,26 @@ const busyDay =
     : "No data";
 
     
-  const monthlySales = useMemo(() => {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+ const monthlyTrend = useMemo(() => {
+  const months = [
+    "Jan","Feb","Mar","Apr","May","Jun",
+    "Jul","Aug","Sep","Oct","Nov","Dec"
+  ];
 
-  return sales
-    .filter((s) => {
-      const d = new Date(s.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
-    .reduce((sum, s) => sum + (s.total || 0), 0);
-}, [sales]);
-
-const monthlyTrend = useMemo(() => {
-  const data: Record<string, number> = {};
+  const data = months.map((m) => ({
+    month: m,
+    value: 0,
+  }));
 
   sales.forEach((s) => {
     const d = new Date(s.date);
-    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const monthIndex = d.getMonth(); // 0 = Jan, 11 = Dec
 
-    data[key] = (data[key] || 0) + (s.total || 0);
+    data[monthIndex].value += s.total || 0;
   });
 
-  return Object.entries(data)
-    .map(([month, value]) => ({ month, value }))
-    .sort((a, b) => a.month.localeCompare(b.month))
-    .slice(-6); // last 6 months
+  return data;
 }, [sales]);
-
   // ================= TOP PRODUCTS =================
   const topProducts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -268,7 +259,7 @@ const monthlyTrend = useMemo(() => {
 
 
       {/* CHARTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
 
         {/* WEEKLY SALES */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
@@ -298,8 +289,9 @@ const monthlyTrend = useMemo(() => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
        {/* MONTHLY SALES */}
-       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
           <h3 className="font-semibold mb-3">Monthly Sales Trend</h3>
 
