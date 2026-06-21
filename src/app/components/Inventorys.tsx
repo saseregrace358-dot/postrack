@@ -546,26 +546,7 @@ if (loading) {
         </div>
       </div>
 
-      {/* IMAGE */}
-     <div>
-  <input
-    type="file"
-    onChange={(e) => {
-      if (e.target.files?.[0]) {
-        handleImageUpload(e.target.files[0]);
-      }
-    }}
-  />
-
-  {imagePreview && (
-     <img className="w-32 h-32 object-cover rounded-lg border cursor-zoom-in hover:scale-105 transition" 
-      src={imagePreview}
-      loading="lazy"
-      
-    />
-  )}
-</div>
-      {/* ACTIONS */}
+           {/* ACTIONS */}
       <div className="flex justify-end gap-3 pt-4 border-t">
 
         <button
