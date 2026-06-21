@@ -155,19 +155,7 @@ const busyDay =
     : "No data";
 
     
-  const monthlySales = useMemo(() => {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  return sales
-    .filter((s) => {
-      const d = new Date(s.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
-    .reduce((sum, s) => sum + (s.total || 0), 0);
-}, [sales]);
-
+  
 const monthlyTrend = useMemo(() => {
   const data: Record<string, number> = {};
 
@@ -201,7 +189,7 @@ const monthlyTrend = useMemo(() => {
   }, [weekSales]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-2 space-y-3">
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
@@ -218,7 +206,8 @@ const monthlyTrend = useMemo(() => {
       </div>
 
       {/* WEEK SELECT */}
-      <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border dark:border-slate-800">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
+      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
         <p className="text-sm text-slate-500 mb-2">Select Week</p>
         <input
           type="date"
@@ -226,24 +215,7 @@ const monthlyTrend = useMemo(() => {
           onChange={(e) => setWeekDate(e.target.value)}
           className="p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
         />
-      </div>
 
-      {/* METRICS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-
-        <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
-        <Metric title="Today Sales" value={`₦${todaySales.toLocaleString()}`} icon={Activity} />
-        <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
-        <Metric
-          title="Average Order Value"
-          value={`₦${aov.toFixed(2)}`}
-          icon={DollarSign}
-        />
-        <Metric
-        title="Monthly Sales"
-        value={`₦${monthlySales.toLocaleString()}`}
-        icon={DollarSign}
-      />
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
     <h3 className="font-semibold text-slate-900 dark:text-white">
       🧠 Sales Insights
@@ -265,7 +237,21 @@ const monthlyTrend = useMemo(() => {
       </p>
     </div>
   </div>
+      </div>
+      </div>
 
+      {/* METRICS GRID */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+
+        <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
+        <Metric title="Today Sales" value={`₦${todaySales.toLocaleString()}`} icon={Activity} />
+        <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
+        <Metric
+          title="Average Order Value"
+          value={`₦${aov.toFixed(2)}`}
+          icon={DollarSign}
+        />
+        
       </div>
 
 

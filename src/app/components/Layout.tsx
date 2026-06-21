@@ -98,24 +98,7 @@ export function Layout() {
             )}
           </NavLink>
 
-          <NavLink
-            to="/reports"
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
-                isActive
-                  ? "text-blue-600 dark:text-blue-400"
-                  : "text-slate-600 dark:text-slate-400"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <FileText className={`size-5 ${isActive ? "stroke-[2.5px]" : ""}`} />
-                <span className="text-xs font-medium">Reports</span>
-              </>
-            )}
-          </NavLink>
-
+          
           <NavLink
             to="/settings"
             className={({ isActive }) =>
