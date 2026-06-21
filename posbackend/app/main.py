@@ -16,7 +16,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(auth_router)
+
 # 2. SAFE STATIC FILES
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
