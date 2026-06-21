@@ -162,11 +162,14 @@ await createSaleApi({
   setShowCheckout(false);
   setShowCart(false);
 
-  alert(
-    balance >= 0
-      ? `Payment successful! Order #${sale.id}`
-      : `DEBT recorded! Owes ₦${Math.abs(balance).toLocaleString()}`
-  );
+ 
+const createdSale = res.data;
+
+alert(
+  createdSale.status === "PAID"
+    ? `Payment successful! Order #${createdSale.order_id}`
+    : `DEBT recorded! Owes ₦${Math.abs(createdSale.balance).toLocaleString()}`
+);
 };
    return (
     <div className="space-y-4 pb-4">
