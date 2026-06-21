@@ -11,18 +11,12 @@ app = FastAPI()
 # 1. CORS FIRST (VERY IMPORTANT)
 app.add_middleware(
     CORSMiddleware,
-   
-    allow_origins=[
-        "http://localhost:5173",
-        "https://postrack.vercel.app",
-        "https://postrack-khaki.vercel.app",
-        "https://postrack-26kb7icg1-saseregrace358-9128s-projects.vercel.app",
-    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(auth_router)
 # 2. SAFE STATIC FILES
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
@@ -49,16 +43,6 @@ def startup():
 def home():
     return {"message": "POS Backend Running"}
 
-@app.get("/cors-test")
-def cors_test():
-    return {
-        "origins": [
-            "http://localhost:5173",
-        "https://postrack.vercel.app",
-        "https://postrack-khaki.vercel.app",
-        "https://postrack-26kb7icg1-saseregrace358-9128s-projects.vercel.app",
-        ]
-    }
 
 
 @app.options("/{rest_of_path:path}")
