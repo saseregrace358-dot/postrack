@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-security = HTTPBearer()
+security = HTTPBearer(auto_error=True)
 
 class UserRegister(BaseModel):
     name: str
@@ -55,26 +55,38 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
 
     if not db_user:
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    
     if not verify_password(user.password, db_user.password):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    
     token = create_access_token({"sub": user.email})
 
     return {
-        "access_token": token,
-        "token_type": "bearer"
+    "access_token": token,
+    "token_type": "bearer",
+    "user": {
+        "id": db_user.id,
+        "name": db_user.name,
+        "email": db_user.email
     }
+}
+
 @router.get("/me")
 def get_me(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
-    token = credentials.credentials
+    try:
+        token = credentials.credentials
+        payload = decode_token(token)
 
-    payload = decode_token(token)
-    email = payload.get("sub")
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     user = db.query(User).filter(User.email == email).first()
 
