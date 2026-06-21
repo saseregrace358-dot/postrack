@@ -87,7 +87,7 @@ export function Dashboard() {
   }, [sales, weekStart, weekEnd]);
 
   // ================= CORE METRICS =================
-  const totalSales = sales.reduce((a, s) => a + (s.total || 0), 0);
+  const totalRevenue = sales.reduce((a, s) => a + (s.total || 0), 0);
 
   const todaySales = sales
     .filter((s) => {
@@ -117,6 +117,9 @@ export function Dashboard() {
     return a + ((s.total || 0) - (cost || 0));
   }, 0);
 
+  const totalOrders = sales.length;
+const aov = totalOrders ? totalRevenue / totalOrders : 0;
+
   // ================= WEEKLY CHART =================
   const weeklyData = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -133,6 +136,36 @@ export function Dashboard() {
     return data;
   }, [weekSales]);
 
+const salesByHour: Record<number, number> = {};
+
+sales.forEach((s) => {
+  const hour = new Date(s.date).getHours();
+  salesByHour[hour] = (salesByHour[hour] || 0) + (s.total || 0);
+});
+
+const peakHour = Object.entries(salesByHour).reduce(
+  (max, curr) => (curr[1] > max[1] ? curr : max),
+  ["0", 0]
+);
+
+const peakHourLabel =
+  sales.length > 0
+    ? `${peakHour[0]}:00 - ${Number(peakHour[0]) + 1}:00`
+    : "No data";
+
+    const salesByDay = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(
+  (_, i) =>
+    sales
+      .filter((s) => new Date(s.date).getDay() === i)
+      .reduce((sum, s) => sum + (s.total || 0), 0)
+);
+
+const maxDayIndex = salesByDay.indexOf(Math.max(...salesByDay));
+
+const busyDay =
+  sales.length > 0
+    ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][maxDayIndex]
+    : "No data";
   // ================= TOP PRODUCTS =================
   const topProducts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -163,9 +196,7 @@ export function Dashboard() {
           </p>
         </div>
 
-        <button className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white">
-          Export ⬇
-        </button>
+       
       </div>
 
       {/* WEEK SELECT */}
@@ -182,9 +213,14 @@ export function Dashboard() {
       {/* METRICS GRID */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
 
-        <Metric title="Total Sales" value={`₦${totalSales.toLocaleString()}`} icon={DollarSign} />
+        <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
         <Metric title="Today Sales" value={`₦${todaySales.toLocaleString()}`} icon={Activity} />
         <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
+        <Metric
+          title="Average Order Value"
+          value={`₦${aov.toFixed(2)}`}
+          icon={DollarSign}
+        />
         <Metric title="Stock Out" value={stockOut} icon={AlertTriangle} />
 
         <Metric title="Customer Debt" value={`₦${totalDebt.toLocaleString()}`} icon={CreditCard} />
@@ -225,11 +261,36 @@ export function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+       
+        {/* INSIGHTS SECTION */}
+  <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+    <h3 className="font-semibold text-slate-900 dark:text-white">
+      🧠 Sales Insights
+    </h3>
+
+    <div className="mt-3 space-y-2 text-sm">
+      <p>
+        ⏰ Peak Sales Hour:{" "}
+        <span className="font-bold text-blue-500">
+          {peakHourLabel}
+        </span>
+      </p>
+
+      <p>
+        📅 Busiest Day:{" "}
+        <span className="font-bold text-green-500">
+          {busyDay}
+        </span>
+      </p>
+    </div>
+  </div>
+
+</div>
       </div>
 
-    </div>
-  );
+      );
 }
+
 
 // ================= SMALL COMPONENT =================
 function Metric({ title, value, icon: Icon }: any) {
