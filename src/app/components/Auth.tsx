@@ -46,10 +46,13 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       onLogin(res.data.access_token);
     }
-  } catch (err) {
-    console.log(err);
-    alert("Auth failed");
-  } finally {
+  } 
+  catch (err: any) {
+  console.log("ERROR RESPONSE:", err?.response?.data);
+  console.log("STATUS:", err?.response?.status);
+  alert(JSON.stringify(err?.response?.data));
+}
+ finally {
     setLoading(false);
   }
 };
