@@ -17,7 +17,7 @@ class Sale(Base):
     tax = Column(Float)
     total = Column(Float)
 
-    amountPaid = Column(Float, default=0)
+    amountPaid = Column(Float,)
     balance = Column(Float, default=0)
 
     paymentMethod = Column(String)

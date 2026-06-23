@@ -15,4 +15,4 @@ class SaleCreate(BaseModel):
     amountPaid: float
     balance: float
     paymentMethod: str
-    status: str
+    
