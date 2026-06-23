@@ -7,6 +7,7 @@ from app.schemas.product import (
     ProductUpdate,
     ProductCreate
 )
+from app.auth.dependencies import get_current_user
 from pydantic import BaseModel
 import os
 
@@ -22,9 +23,19 @@ class StockUpdate(BaseModel):
 # GET PRODUCTS
 # =========================
 @router.get("", response_model=list[ProductOut])
-def get_products(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    return db.query(Product).offset(skip).limit(limit).all()
-
+def get_products(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    return (
+        db.query(Product)
+        .filter(Product.business_id == user["business_id"])
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 # =========================
 # CREATE PRODUCT (FIXED)
@@ -32,7 +43,8 @@ def get_products(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
 @router.post("", response_model=ProductOut)
 def create_product(
     product: ProductCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     new_product = Product(
         name=product.name,
@@ -41,7 +53,12 @@ def create_product(
         category=product.category,
         stock=product.stock,
         barcode=product.barcode,
-        image=product.image
+        image=product.image,
+
+        # 🔥 ownership
+        business_id=user["business_id"],
+        created_by=user["id"],
+        created_by_name=user.get("name")
     )
 
     db.add(new_product)
@@ -49,7 +66,6 @@ def create_product(
     db.refresh(new_product)
 
     return new_product
-
 # =========================
 # UPDATE PRODUCT
 # =========================

@@ -11,10 +11,11 @@ export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+  name: "",
+  email: "",
+  password: "",
+  business_name: "",
+});
   const [loading, setLoading] = useState(false);
 
 const handleSubmit = async (e: React.FormEvent) => {
@@ -35,8 +36,12 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       onLogin(res.data.access_token); // navigation trigger
     } else {
-      await registerUser(formData);
-
+      await registerUser({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          business_name: formData.business_name,
+        });
       const res = await loginUser({
         email: formData.email,
         password: formData.password,
@@ -146,6 +151,28 @@ const handleSubmit = async (e: React.FormEvent) => {
                   )}
                 </button>
               </div>
+             
+  <div>
+    <label className="block text-sm font-medium text-slate-700 mb-2">
+      Business Name
+    </label>
+
+    <div className="relative">
+      <Store className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
+      
+      <input
+        type="text"
+        value={formData.business_name}
+        onChange={(e) =>
+          setFormData({ ...formData, business_name: e.target.value })
+        }
+        placeholder="e.g Seun Store"
+        className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        required
+      />
+    </div>
+  </div>
+
             </div>
 
             {isLogin && (

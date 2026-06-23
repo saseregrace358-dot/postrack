@@ -138,7 +138,7 @@ const categories = [
       stock: Math.max(0, product.stock - soldItem.quantity),
     };
   });
-await createSaleApi({
+const saleRes = await createSaleApi({
   items: cart.map(item => ({
     product_id: item.id,
     quantity: item.quantity,
@@ -147,10 +147,9 @@ await createSaleApi({
   subtotal,
   tax,
   total,
-  amountPaid: amountPaid,
+  amountPaid,
   balance,
-  paymentMethod: paymentMethod,
-  status: balance >= 0 ? "paid" : "DEBT",
+  paymentMethod,
 });
  
   // refresh products

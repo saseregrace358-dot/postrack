@@ -11,7 +11,7 @@ class Sale(Base):
 
     date = Column(DateTime, default=datetime.utcnow)
 
-    items = Column(JSON)  # [{product_id, qty, price}]
+    items = Column(JSON)
 
     subtotal = Column(Float)
     tax = Column(Float)
@@ -23,4 +23,9 @@ class Sale(Base):
     paymentMethod = Column(String)
     payments = Column(JSON, default=[])
 
-    status = Column(String, default="UNPAID")  # PAID, DEBT
+    status = Column(String, default="UNPAID")
+
+    # 🔥 MULTI-TENANT FIELDS
+    business_id = Column(String, index=True)
+    created_by = Column(Integer)
+    created_by_name = Column(String)

@@ -8,6 +8,7 @@ from app.models.sale import Sale
 from app.models.product import Product
 from app.schemas.sale import SaleCreate
 import uuid
+from app.auth.dependencies import get_current_user
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"]
@@ -25,25 +26,26 @@ def get_db():
 
 
 @router.post("/")
-def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
-    
+def create_sale(
+    payload: SaleCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     order_id = f"ORD-{uuid.uuid4().hex[:10]}"
     sale_items = []
 
     for item in payload.items:
 
         product = db.query(Product).filter(
-            Product.id == item.product_id
+            Product.id == item.product_id,
+            Product.business_id == user["business_id"]   # 🔥 IMPORTANT
         ).first()
 
         if not product:
             raise HTTPException(404, "Product not found")
 
         if product.stock < item.quantity:
-            raise HTTPException(
-                400,
-                f"Insufficient stock for {product.name}"
-            )
+            raise HTTPException(400, f"Insufficient stock for {product.name}")
 
         product.stock -= item.quantity
 
@@ -57,10 +59,8 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     balance = payload.total - payload.amountPaid
 
     status = (
-        "PAID"
-        if balance <= 0
-        else "PARTIAL"
-        if payload.amountPaid > 0
+        "PAID" if balance <= 0
+        else "PARTIAL" if payload.amountPaid > 0
         else "DEBT"
     )
 
@@ -72,9 +72,9 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
             "date": datetime.utcnow().isoformat(),
             "method": payload.paymentMethod
         })
-        
+
     sale = Sale(
-         order_id=order_id,
+        order_id=order_id,
         items=sale_items,
         subtotal=payload.subtotal,
         tax=payload.tax,
@@ -83,7 +83,12 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         balance=balance,
         paymentMethod=payload.paymentMethod,
         payments=payments,
-        status=status
+        status=status,
+
+        # 🔥 OWNERSHIP
+        business_id=user["business_id"],
+        created_by=user["id"],
+        created_by_name=user.get("name")
     )
 
     db.add(sale)
@@ -93,22 +98,30 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     return sale
 
 @router.get("/")
-def get_sales(db: Session = Depends(get_db)):
+def get_sales(
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
     return (
         db.query(Sale)
+        .filter(Sale.business_id == user["business_id"])
         .order_by(Sale.date.desc())
         .all()
-    )  
+    )
 
 @router.patch("/{sale_id}/payment")
 def add_payment(
     sale_id: int,
     payment: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
 ):
     sale = (
         db.query(Sale)
-        .filter(Sale.id == sale_id)
+        .filter(
+            Sale.id == sale_id,
+            Sale.business_id == user["business_id"]   # 🔥 IMPORTANT
+        )
         .first()
     )
 
@@ -120,12 +133,14 @@ def add_payment(
     payments.append({
         "amount": payment["amount"],
         "date": datetime.utcnow().isoformat(),
-        "method": payment.get("method", "Cash")
+        "method": payment.get("method", "Cash"),
+
+        # 🔥 AUDIT INFO
+        "added_by": user["id"],
+        "added_by_name": user.get("name")
     })
 
-    total_paid = sum(
-        p["amount"] for p in payments
-    )
+    total_paid = sum(p["amount"] for p in payments)
 
     sale.payments = payments
     sale.amountPaid = total_paid

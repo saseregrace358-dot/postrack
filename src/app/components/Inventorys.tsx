@@ -6,8 +6,10 @@ import {
   updateProductApi
 } from "../../api/products";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import axios from "axios";
+
 import { supabase } from "../../lib/supabase";
+
+
 type Product = {
   id: number;
   name: string;
@@ -15,13 +17,16 @@ type Product = {
   price: number;
   category: string;
   stock: number;
-  image: string
+  image: string;
   barcode?: string;
- created_at: string;
- updated_at: string;
- 
-};
+  created_at: string;
+  updated_at: string;
 
+  // NEW
+  created_by: number;
+  created_by_name: string;
+  business_id: string;
+};
 
 type NewProduct = {
   name: string;
@@ -329,20 +334,7 @@ if (loading) {
   <div className="mt-4 border-t pt-4">
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-      <div className="flex justify-center">
-  <img
-  src={product.image}
-  alt={product.name}
-  className="w-32 h-32 object-cover rounded-lg border cursor-pointer"
- onClick={() =>
-  openViewer(
-    product.image,
-    products
-      .filter(p => p.category === product.category)
-      .map(p => p.image)
-  )
-}/>
-</div>
+      
       {/* Product Details */}
       <div className="space-y-2 text-sm">
         <p>
@@ -424,11 +416,16 @@ if (loading) {
         >
           Edit Product
         </button>
+        <p>
+          <span className="font-semibold text-gray-600">Created By:</span>{" "}
+          {product.created_by_name}
+        </p>
       </div>
 
     </div>
   </div>
-)}          </div>
+      )}    
+     </div>
         ))}
       </div>
 
