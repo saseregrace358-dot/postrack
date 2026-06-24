@@ -477,7 +477,7 @@ const totalRevenue = filteredSales.reduce(
   <p>Total: ₦{selectedSale.total}</p>
   <p>Paid: ₦{totalPaid}</p>
   <p>Balance: ₦{balance}</p>
-  <p>Status: {selectedSale.status}</p>
+ 
 </div>             {/* Footer */}
               <div className="text-center border-t border-dashed border-slate-300 dark:border-slate-700 pt-4">
                 <p className="text-sm text-slate-600 dark:text-slate-400">Thank you for your business!</p>
