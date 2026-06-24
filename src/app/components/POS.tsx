@@ -2,7 +2,6 @@ import { useState, useEffect} from "react";
 import { Search, Plus, Minus, Trash2, ShoppingCart, X } from "lucide-react";
 import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
- import {updateProductStockApi } from "../../api/products"; 
  
 /* ✅ MOVE TYPES TO TOP (IMPORTANT FIX) */
 type Product = {
@@ -100,14 +99,13 @@ const categories = [
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-
+const [taxEnabled, setTaxEnabled] = useState(false);
       const TAX_ENABLED = false; // true = tax on, false = tax off
     const TAX_RATE = 0.075;
 
     const tax = TAX_ENABLED ? subtotal * TAX_RATE : 0;
     const total = subtotal + tax;
-  const balance = paidAmount - total;
-
+ const balance = total - paidAmount;
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = () => setShowCheckout(true);
@@ -125,8 +123,8 @@ const categories = [
     amountPaid,
     balance,
     paymentMethod,
-    status: balance >= 0 ? "paid" : "DEBT",
-  };
+    status: balance <= 0 ? "PAID" : "DEBT",
+    };
 
   const sales = JSON.parse(localStorage.getItem("sales") || "[]");
   sales.unshift(sale);
@@ -143,7 +141,7 @@ const saleRes = await createSaleApi({
   subtotal,
   tax,
   total,
-  amountPaid,
+  amountPaid: paidAmount,
   balance,
   paymentMethod,
 });
@@ -320,12 +318,20 @@ alert(
                     <span>Subtotal</span>
                     <span>₦{subtotal.toLocaleString()}</span>
                   </div>
-                  {TAX_ENABLED && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>Tax (7.5%)</span>
-                      <span>₦{tax.toFixed(2)}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  <span>Apply Tax (7.5%)</span>
+
+                  <button
+                    onClick={() => setTaxEnabled(!taxEnabled)}
+                    className={`px-3 py-1 rounded ${
+                      taxEnabled
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-300 text-black"
+                    }`}
+                  >
+                    {taxEnabled ? "ON" : "OFF"}
+                  </button>
+                </div>
                   <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span>Total</span>
                     <span>₦{total.toFixed(2)}</span>
@@ -389,12 +395,12 @@ alert(
         balance >= 0 ? "text-green-600" : "text-red-600"
       }`}
     >
-      ₦{balance.toLocaleString()}
+      ₦{Math.abs(balance).toLocaleString()}
     </p>
 
     <p className="text-xs mt-1">
-      {balance >= 0 ? "Fully Paid" : "DEBT (Owing)"}
-    </p>
+  {balance > 0 ? "DEBT (Owing)" : "Fully Paid"}
+</p>
   </div>
 </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Select payment method:</p>
