@@ -259,10 +259,7 @@ const totalRevenue = filteredSales.reduce(
                 <div className="text-right">
                   <p className="text-lg font-bold text-blue-600 dark:text-blue-400">₦{sale.total.toFixed(2)}</p>
                   <div className="flex flex-col items-end gap-1">
-                  <span className="inline-block px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
-                    {sale.paymentMethod}
-                  </span>
-
+                  
                   <span
                     className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                     sale.status === "PAID"
@@ -283,12 +280,7 @@ const totalRevenue = filteredSales.reduce(
                 </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                <span>{sale.items.length} items</span>
-                <span>•</span>
-                <span>{sale.items.reduce((sum, item) => sum + item.quantity, 0)} qty</span>
-                
-              </div>
+              
             </div>
             
           ))
@@ -398,6 +390,7 @@ const totalRevenue = filteredSales.reduce(
     </span>
   </div>
 
+ {selectedSale.tax > 0 && (
   <div className="flex justify-between text-slate-600 dark:text-slate-400">
     <span>Tax (7.5%)</span>
     <span>
@@ -406,7 +399,7 @@ const totalRevenue = filteredSales.reduce(
       })}
     </span>
   </div>
-
+)}
   <div className="flex justify-between font-semibold text-slate-900 dark:text-white border-t pt-2">
     <span>Total Amount</span>
     <span>
@@ -441,16 +434,7 @@ const totalRevenue = filteredSales.reduce(
   </div>
 
   <div className="flex justify-between font-bold text-base border-t pt-2">
-    <span>Status</span>
-    <span
-      className={
-       selectedSale.status === "PAID"
-          ? "text-green-600"
-          : "text-red-600"
-      }
-    >
-      {selectedSale.status}
-    </span>
+    
   </div>
   
 </div>

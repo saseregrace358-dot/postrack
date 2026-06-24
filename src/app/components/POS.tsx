@@ -101,8 +101,11 @@ const categories = [
     0
   );
 
-  const tax = subtotal * 0.075;
-  const total = subtotal + tax;
+      const TAX_ENABLED = false; // true = tax on, false = tax off
+    const TAX_RATE = 0.075;
+
+    const tax = TAX_ENABLED ? subtotal * TAX_RATE : 0;
+    const total = subtotal + tax;
   const balance = paidAmount - total;
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -129,6 +132,7 @@ const categories = [
   sales.unshift(sale);
   
   // ✅ UPDATE STOCK IN BACKEND
+  const tax = TAX_ENABLED ? subtotal * TAX_RATE : 0;
  
 const saleRes = await createSaleApi({
   items: cart.map(item => ({
@@ -316,10 +320,12 @@ alert(
                     <span>Subtotal</span>
                     <span>₦{subtotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Tax (7.5%)</span>
-                    <span>₦{tax.toFixed(2)}</span>
-                  </div>
+                  {TAX_ENABLED && (
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                      <span>Tax (7.5%)</span>
+                      <span>₦{tax.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span>Total</span>
                     <span>₦{total.toFixed(2)}</span>
