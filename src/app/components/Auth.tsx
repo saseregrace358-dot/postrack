@@ -2,7 +2,9 @@ import { loginUser, registerUser } from "../../api/auth";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Mail, Lock, User, Eye, EyeOff, Store } from "lucide-react";
-
+import {
+   forgotPassword,
+} from "../../api/auth";
 interface AuthProps {
   onLogin: (token: string) => void;
 }
@@ -10,6 +12,7 @@ interface AuthProps {
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [formData, setFormData] = useState({
   name: "",
   email: "",
@@ -47,6 +50,14 @@ const handleSubmit = async (e: React.FormEvent) => {
         password: formData.password,
       });
 
+     if (rememberMe) {
+  localStorage.setItem("token", res.data.access_token);
+} else {
+  sessionStorage.setItem("token", res.data.access_token);
+}
+
+onLogin(res.data.access_token);
+
       localStorage.setItem("token", res.data.access_token);
 
       onLogin(res.data.access_token);
@@ -60,10 +71,31 @@ const handleSubmit = async (e: React.FormEvent) => {
  finally {
     setLoading(false);
   }
+
 };
+const handleForgotPassword = async () => {
+  if (!formData.email) {
+    alert("Enter your email first");
+    return;
+  }
+
+  try {
+    const res = await forgotPassword(formData.email);
+
+    alert(
+      `Reset token generated:\n\n${res.data.token}\n\nUse it on the reset password page.`
+    );
+  } catch (err: any) {
+    alert(
+      err?.response?.data?.detail || "Unable to generate reset token"
+    );
+  }
+};
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <motion.div
+
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -151,7 +183,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   )}
                 </button>
               </div>
-             
+     {!isLogin && (         
   <div>
     <label className="block text-sm font-medium text-slate-700 mb-2">
       Business Name
@@ -171,25 +203,29 @@ const handleSubmit = async (e: React.FormEvent) => {
         required
       />
     </div>
+    
   </div>
-
+ )}
             </div>
 
             {isLogin && (
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
+                 <input
                     type="checkbox"
-                    className="size-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="size-4 rounded border-slate-300 text-blue-600"
                   />
                   <span className="text-slate-600">Remember me</span>
                 </label>
                 <button
-                  type="button"
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Forgot password?
-                </button>
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Forgot password?
+              </button>
               </div>
             )}
 

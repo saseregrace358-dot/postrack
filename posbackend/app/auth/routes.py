@@ -8,9 +8,14 @@ from app.auth.password import hash_password, verify_password
 from app.database import get_db
 from app.models.user import User
 from app.utils.business_id import generate_business_id
+from pydantic import BaseModel, EmailStr
 
+import secrets
 router = APIRouter(prefix="/auth", tags=["Auth"])
 security = HTTPBearer(auto_error=True)
+
+
+
 
 # =====================
 # SCHEMAS
@@ -27,6 +32,12 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 # =====================
 # REGISTER
@@ -127,4 +138,56 @@ def get_me(
         "email": user.email,
         "business_id": user.business_id,
         "role": user.role
+    }
+
+@router.post("/forgot-password")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == payload.email
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Email not found"
+        )
+
+    reset_token = secrets.token_urlsafe(32)
+
+    # Save token to DB
+    user.reset_token = reset_token
+
+    db.commit()
+
+    return {
+        "message": "Password reset link generated",
+        "token": reset_token
+    }
+
+@router.post("/reset-password")
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.reset_token == payload.token
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid token"
+        )
+
+    user.password = hash_password(payload.new_password)
+
+    user.reset_token = None
+
+    db.commit()
+
+    return {
+        "message": "Password updated successfully"
     }

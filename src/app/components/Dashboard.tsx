@@ -192,49 +192,49 @@ const busyDay =
   }, [weekSales]);
 
   return (
-   <div className="
-  bg-white
-  dark:bg-slate-900
-  border
-  border-slate-200
-  dark:border-slate-800
-  shadow-sm
-  hover:shadow-md
-  transition-all
-  rounded-xl
-  p-4
-">
+  <div className="space-y-6 pb-6">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
-            POS Dashboard
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Sales • Inventory • Analytics
-          </p>
-        </div>
+     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
-       
-      </div>
+  <div>
+    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+      Dashboard
+    </h2>
 
-      {/* WEEK SELECT */}
-      
-      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
-        <p className="text-sm text-slate-500 mb-2">Select Week</p>
-        <input
-          type="date"
-          value={weekDate}
-          onChange={(e) => setWeekDate(e.target.value)}
-          className="p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-        />
+    <p className="text-sm text-slate-500 dark:text-slate-400">
+      Monitor sales, revenue and business performance
+    </p>
+  </div>
 
-      </div>
+  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-sm">
+    <p className="text-xs text-slate-500 dark:text-slate-400">
+      Select Week
+    </p>
 
+    <input
+      type="date"
+      value={weekDate}
+      onChange={(e) => setWeekDate(e.target.value)}
+      className="
+        mt-2
+        w-full
+        rounded-lg
+        border
+        border-slate-200
+        dark:border-slate-700
+        bg-white
+        dark:bg-slate-900
+        px-3
+        py-2
+        text-sm
+      "
+    />
+  </div>
+
+</div>
       {/* METRICS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-
+     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
         <Metric title="Today Sales" value={`₦${todaySales.toLocaleString()}`} icon={Activity} />
         <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
@@ -244,28 +244,44 @@ const busyDay =
           icon={DollarSign}
         />
        
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
-    <h3 className="font-semibold text-slate-900 dark:text-white">
-      🧠 Sales Insights
-    </h3>
+      <div className="
+  bg-white
+  dark:bg-slate-800
+  border
+  border-slate-200
+  dark:border-slate-700
+  rounded-2xl
+  p-4
+  shadow-sm
+">
+  <h3 className="font-semibold text-slate-900 dark:text-white">
+    Sales Insights
+  </h3>
 
-    <div className="mt-3 space-y-2 text-sm">
-      <p>
-        ⏰ Peak Sales Hour:{" "}
-        <span className="font-bold text-blue-500">
-          {peakHourLabel}
-        </span>
-      </p>
+  <div className="mt-4 space-y-3">
 
-      <p>
-        📅 Busiest Day:{" "}
-        <span className="font-bold text-green-500">
-          {busyDay}
-        </span>
-      </p>
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-slate-500">
+        Peak Hour
+      </span>
+
+      <span className="font-semibold text-blue-600">
+        {peakHourLabel}
+      </span>
     </div>
-  </div>
 
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-slate-500">
+        Busiest Day
+      </span>
+
+      <span className="font-semibold text-emerald-600">
+        {busyDay}
+      </span>
+    </div>
+
+  </div>
+</div>
       </div>
 
 
@@ -273,7 +289,14 @@ const busyDay =
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
 
         {/* WEEKLY SALES */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+        <div className="lg:col-span-2 bg-white
+dark:bg-slate-800
+border
+border-slate-200
+dark:border-slate-700
+rounded-2xl
+p-5
+shadow-sm">
           <h3 className="font-semibold mb-3">Weekly Sales (Sun – Sat)</h3>
 
           <ResponsiveContainer width="100%" height={300}>
@@ -288,7 +311,14 @@ const busyDay =
         </div>
 
         {/* TOP PRODUCTS */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+        <div className="bg-white
+dark:bg-slate-800
+border
+border-slate-200
+dark:border-slate-700
+rounded-2xl
+p-5
+shadow-sm">
           <h3 className="font-semibold mb-3">Top Selling Products</h3>
 
           <ResponsiveContainer width="100%" height={300}>
@@ -303,7 +333,14 @@ const busyDay =
 
        {/* MONTHLY SALES */}
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800">
+        <div className="bg-white
+dark:bg-slate-800
+border
+border-slate-200
+dark:border-slate-700
+rounded-2xl
+p-5
+shadow-sm">
           <h3 className="font-semibold mb-3">Monthly Sales Trend</h3>
 
           <ResponsiveContainer width="100%" height={300}>
@@ -327,15 +364,46 @@ const busyDay =
 // ================= SMALL COMPONENT =================
 function Metric({ title, value, icon: Icon }: any) {
   return (
-    <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-xl">
-      <div className="flex justify-between">
+    <div
+      className="
+        bg-white
+        dark:bg-slate-800
+        border
+        border-slate-200
+        dark:border-slate-700
+        rounded-2xl
+        p-4
+        shadow-sm
+        hover:shadow-md
+        transition-all
+      "
+    >
+      <div className="flex items-start justify-between">
+
         <div>
-          <p className="text-xs text-slate-500">{title}</p>
-          <p className="text-lg font-bold text-slate-900 dark:text-white">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {title}
+          </p>
+
+          <p className="mt-2 text-xl font-bold text-slate-900 dark:text-white">
             {value}
           </p>
         </div>
-        <Icon className="text-blue-500 size-5" />
+
+        <div
+          className="
+            size-10
+            rounded-xl
+            bg-blue-50
+            dark:bg-blue-500/10
+            flex
+            items-center
+            justify-center
+          "
+        >
+          <Icon className="size-5 text-blue-600" />
+        </div>
+
       </div>
     </div>
   );

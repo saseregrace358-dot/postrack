@@ -15,3 +15,4 @@ class User(Base):
 
     business_id = Column(String, unique=True, index=True)
     business_name = Column(String, unique=True, index=True)
+    reset_token = Column(String, nullable=True)
