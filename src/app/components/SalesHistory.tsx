@@ -277,7 +277,7 @@ const totalRevenue = filteredSales.reduce(
                     Sold By:
                   </span>
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {selectedSale!.created_by_name}
+                    {sale.created_by_name}
                   </span>
                 </div>
                 </div>
