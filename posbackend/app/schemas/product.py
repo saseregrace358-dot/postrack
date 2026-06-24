@@ -27,9 +27,15 @@ class ProductUpdate(BaseModel):
 
 class ProductOut(ProductBase):
     id: int
+
+    created_by: int | None = None
+    created_by_name: str | None = None
+
     created_at: datetime
     updated_at: datetime
 
+    class Config:
+        from_attributes = True
     class Config:
        from_attributes = True
        alias_generator = None

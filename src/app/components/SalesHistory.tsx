@@ -27,7 +27,13 @@ type Sale = {
   paymentMethod: string;
   status: SaleStatus;
   payments?: Payment[];
+
+  created_by?: number;
+  created_by_name?: string;
+
+  
 };
+
 type Payment = {
   amount: number;
   date: string;
@@ -266,6 +272,14 @@ const totalRevenue = filteredSales.reduce(
                   >
                     {sale.status}
                   </span>
+                  <div className="flex justify-between">
+                  <span className="text-slate-600 dark:text-slate-400">
+                    Sold By:
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {selectedSale!.created_by_name}
+                  </span>
+                </div>
                 </div>
                 </div>
               </div>

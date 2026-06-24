@@ -15,4 +15,23 @@ class SaleCreate(BaseModel):
     amountPaid: float
     balance: float
     paymentMethod: str
+
+class SaleOut(BaseModel):
+    id: int
+    order_id: str
+
+    subtotal: float
+    tax: float
+    total: float
+
+    amountPaid: float
+    balance: float
+    paymentMethod: str
+    status: str
+
+    created_by: int | None = None
+    created_by_name: str | None = None
+
+    class Config:
+        from_attributes = True    
     
