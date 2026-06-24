@@ -165,7 +165,7 @@ const totalRevenue = filteredSales.reduce(
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
           <p className="text-sm opacity-90 mb-1">Total Revenue</p>
           <p className="text-2xl font-bold">₦{totalRevenue.toFixed(2)}</p>

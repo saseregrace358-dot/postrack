@@ -26,7 +26,8 @@ export function POS() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [amountPaid, setAmountPaid] = useState("");
+  const paidAmount = Number(amountPaid) || 0;
 
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -102,14 +103,14 @@ const categories = [
 
   const tax = subtotal * 0.075;
   const total = subtotal + tax;
-  const balance = amountPaid - total;
+  const balance = paidAmount - total;
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = () => setShowCheckout(true);
 
   const completeCheckout = async (paymentMethod: string) => {
-  const balance = amountPaid - total;
+  const balance = paidAmount - total;
 
   const sale = {
     id: `ORD${Date.now()}`,
@@ -128,16 +129,7 @@ const categories = [
   sales.unshift(sale);
   
   // ✅ UPDATE STOCK IN BACKEND
-  const updatedInventory = products.map((product) => {
-    const soldItem = cart.find((item) => item.id === product.id);
-
-    if (!soldItem) return product;
-
-    return {
-      ...product,
-      stock: Math.max(0, product.stock - soldItem.quantity),
-    };
-  });
+ 
 const saleRes = await createSaleApi({
   items: cart.map(item => ({
     product_id: item.id,
@@ -157,12 +149,12 @@ const saleRes = await createSaleApi({
   setProducts(res.data);
 
   setCart([]);
-  setAmountPaid(0);
+  setAmountPaid("");
   setShowCheckout(false);
   setShowCart(false);
 
  
-const createdSale = res.data;
+const createdSale = saleRes.data;
 
 alert(
   createdSale.status === "PAID"
@@ -377,7 +369,7 @@ alert(
     <input
       type="number"
       value={amountPaid}
-      onChange={(e) => setAmountPaid(Number(e.target.value))}
+      onChange={(e) => setAmountPaid(e.target.value)}
       className="w-full p-3 border rounded-xl dark:bg-slate-800 dark:border-slate-700"
       placeholder="Enter amount paid"
     />
