@@ -50,22 +50,10 @@ export function SalesHistory() {
   try {
     const res = await getSalesApi();
 
-    const safeSales = res.data.map((sale: Sale) => {
-      const payments = sale.payments ?? [];
-
-      const totalPaid = payments.reduce(
-        (sum: number, p: Payment) => sum + p.amount,
-        0
-      );
-
-      return {
-        ...sale,
-        payments,
-        amountPaid: totalPaid,
-        balance: sale.total - totalPaid,
-        status: totalPaid >= sale.total ? "PAID" : "DEBT",
-      };
-    });
+    const safeSales = res.data.map((sale: Sale) => ({
+  ...sale,
+  payments: sale.payments ?? [],
+}));
 
     setSales(safeSales);
   } catch (err) {
