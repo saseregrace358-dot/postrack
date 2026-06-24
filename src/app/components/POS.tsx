@@ -133,11 +133,7 @@ const categories = [
   
   // ✅ UPDATE STOCK IN BACKEND
   
- const TAX_ENABLED = false;
-const TAX_RATE = 0.075;
-
-const tax = TAX_ENABLED ? subtotal * TAX_RATE : 0;
-const total = subtotal + tax;
+ 
 const saleRes = await createSaleApi({
   items: cart.map(item => ({
     product_id: item.id,
