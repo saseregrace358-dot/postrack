@@ -31,6 +31,10 @@ def create_employee(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+
+    print("RAW PASSWORD:", payload.password)
+    print("HASHED PASSWORD:", hash_password(payload.password))
+
     employee = Employee(
         name=payload.name,
         password=hash_password(payload.password),
@@ -43,7 +47,6 @@ def create_employee(
     db.refresh(employee)
 
     return employee
-
 
 @router.get("/")
 def get_employees(
