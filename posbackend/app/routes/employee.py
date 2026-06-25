@@ -116,7 +116,7 @@ def employee_login(
     print("LOGIN PAYLOAD:", payload.dict())
 
     employee = db.query(Employee).filter(
-        Employee.name == payload.name
+        Employee.email == payload.email
     ).first()
 
     print("FOUND EMPLOYEE:", employee)
