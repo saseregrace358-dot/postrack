@@ -14,6 +14,7 @@ export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isEmployeeLogin, setIsEmployeeLogin] = useState(false);
   const [formData, setFormData] = useState({
   name: "",
   email: "",
@@ -50,7 +51,23 @@ const handleSubmit = async (e: React.FormEvent) => {
         email: formData.email,
         password: formData.password,
       });
+if (isLogin) {
 
+  if (isEmployeeLogin) {
+    await handleEmployeeLogin();
+    return;
+  }
+
+  const res = await loginUser({
+    email: formData.email,
+    password: formData.password,
+  });
+
+  localStorage.setItem("token", res.data.access_token);
+  localStorage.setItem("role", res.data.user.role);
+
+  onLogin(res.data.access_token);
+}
      if (rememberMe) {
   localStorage.setItem("token", res.data.access_token);
 } else {
