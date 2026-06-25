@@ -31,10 +31,8 @@ const handleSubmit = async (e: React.FormEvent) => {
   setLoading(true);
 
   try {
-    // LOGIN
     if (isLogin) {
       try {
-        // Try owner login first
         const res = await loginUser({
           email: formData.email,
           password: formData.password,
@@ -47,12 +45,11 @@ const handleSubmit = async (e: React.FormEvent) => {
 
         localStorage.setItem(
           "role",
-          res.data.user.role
+          res.data.user?.role || "owner"
         );
 
         onLogin(res.data.access_token);
       } catch {
-        // If owner login fails, try employee login
         const employeeRes = await employeeLogin({
           name: formData.email,
           password: formData.password,
@@ -66,7 +63,7 @@ const handleSubmit = async (e: React.FormEvent) => {
         localStorage.setItem(
           "permissions",
           JSON.stringify(
-            employeeRes.data.permissions
+            employeeRes.data.permissions || []
           )
         );
 
@@ -83,7 +80,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       return;
     }
 
-    // REGISTER
     await registerUser({
       name: formData.name,
       email: formData.email,
@@ -110,7 +106,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
     localStorage.setItem(
       "role",
-      res.data.user.role
+      res.data.user?.role || "owner"
     );
 
     onLogin(res.data.access_token);
@@ -144,29 +140,6 @@ const handleForgotPassword = async () => {
   }
 };
 
-const handleEmployeeLogin = async () => {
-  const res = await employeeLogin({
-    name: formData.name,
-    password: formData.password,
-  });
-
-  localStorage.setItem(
-    "token",
-    res.data.access_token
-  );
-
-  localStorage.setItem(
-    "permissions",
-    JSON.stringify(res.data.permissions)
-  );
-
-  localStorage.setItem(
-    "role",
-    "employee"
-  );
-
-  onLogin(res.data.access_token);
-};
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <motion.div
