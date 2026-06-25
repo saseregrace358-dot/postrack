@@ -143,10 +143,20 @@ def employee_login(
         )
 
     token = create_access_token({
+        "sub": employee.name,
         "employee_id": employee.id,
-        "role": "employee"
+        "business_id": employee.business_id,
+        "permissions": employee.permissions,
+        "role": "employee",
+        "name": employee.name
     })
 
     return {
-        "access_token": token
-    }   
+        "access_token": token,
+        "user": {
+            "id": employee.id,
+            "name": employee.name,
+            "role": "employee",
+            "permissions": employee.permissions
+        }
+    }
