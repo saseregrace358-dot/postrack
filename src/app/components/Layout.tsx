@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { ShoppingCart, Package, Receipt, BarChart3, FileText, Settings as SettingsIcon } from "lucide-react";
-import { hasPermission } from "../utils/permissions";
+
 export function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
@@ -27,7 +27,6 @@ export function Layout() {
       {/* Mobile Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-20">
         <div className="flex items-center justify-around">
-          {hasPermission("products") && (
           <NavLink
             to="/"
             end
@@ -46,8 +45,6 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          )}
-          {hasPermission("products") && (
           <NavLink
             to="/Inventory"
             className={({ isActive }) =>
@@ -65,8 +62,6 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          )}
-          {hasPermission("sales") && (
           <NavLink
             to="/sales"
             className={({ isActive }) =>
@@ -84,8 +79,7 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          )}
-          {hasPermission("settings") && (
+           
           <NavLink
             to="/dashboard"
             className={({ isActive }) =>
@@ -103,8 +97,8 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          )}
-          {hasPermission("settings") && (
+
+          
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -122,7 +116,6 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          )}
         </div>
       </nav>
     </div>
