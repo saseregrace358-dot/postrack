@@ -14,7 +14,7 @@ export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [isEmployeeLogin, setIsEmployeeLogin] = useState(false);
+ 
   const [formData, setFormData] = useState({
   name: "",
   email: "",
@@ -26,70 +26,104 @@ export function Auth({ onLogin }: AuthProps) {
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
 
-  if (loading) return; // ❌ stops spam clicks
+  if (loading) return;
 
   setLoading(true);
 
   try {
+    // LOGIN
     if (isLogin) {
-      const res = await loginUser({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      localStorage.setItem("token", res.data.access_token);
-
-      onLogin(res.data.access_token); // navigation trigger
-    } else {
-      await registerUser({
-          name: formData.name,
+      try {
+        // Try owner login first
+        const res = await loginUser({
           email: formData.email,
           password: formData.password,
-          business_name: formData.business_name,
         });
-      const res = await loginUser({
-        email: formData.email,
-        password: formData.password,
-      });
-if (isLogin) {
 
-  if (isEmployeeLogin) {
-    await handleEmployeeLogin();
-    return;
-  }
+        localStorage.setItem(
+          "token",
+          res.data.access_token
+        );
 
-  const res = await loginUser({
-    email: formData.email,
-    password: formData.password,
-  });
+        localStorage.setItem(
+          "role",
+          res.data.user.role
+        );
 
-  localStorage.setItem("token", res.data.access_token);
-  localStorage.setItem("role", res.data.user.role);
+        onLogin(res.data.access_token);
+      } catch {
+        // If owner login fails, try employee login
+        const employeeRes = await employeeLogin({
+          name: formData.email,
+          password: formData.password,
+        });
 
-  onLogin(res.data.access_token);
-}
-     if (rememberMe) {
-  localStorage.setItem("token", res.data.access_token);
-} else {
-  sessionStorage.setItem("token", res.data.access_token);
-}
+        localStorage.setItem(
+          "token",
+          employeeRes.data.access_token
+        );
 
-onLogin(res.data.access_token);
+        localStorage.setItem(
+          "permissions",
+          JSON.stringify(
+            employeeRes.data.permissions
+          )
+        );
 
-      localStorage.setItem("token", res.data.access_token);
+        localStorage.setItem(
+          "role",
+          "employee"
+        );
 
-      onLogin(res.data.access_token);
+        onLogin(
+          employeeRes.data.access_token
+        );
+      }
+
+      return;
     }
-  } 
-  catch (err: any) {
-  console.log("ERROR RESPONSE:", err?.response?.data);
-  console.log("STATUS:", err?.response?.status);
-  alert(JSON.stringify(err?.response?.data));
-}
- finally {
+
+    // REGISTER
+    await registerUser({
+      name: formData.name,
+      email: formData.email,
+      password: formData.password,
+      business_name: formData.business_name,
+    });
+
+    const res = await loginUser({
+      email: formData.email,
+      password: formData.password,
+    });
+
+    if (rememberMe) {
+      localStorage.setItem(
+        "token",
+        res.data.access_token
+      );
+    } else {
+      sessionStorage.setItem(
+        "token",
+        res.data.access_token
+      );
+    }
+
+    localStorage.setItem(
+      "role",
+      res.data.user.role
+    );
+
+    onLogin(res.data.access_token);
+  } catch (err: any) {
+    console.log(err);
+
+    alert(
+      err?.response?.data?.detail ||
+      "Login failed"
+    );
+  } finally {
     setLoading(false);
   }
-
 };
 const handleForgotPassword = async () => {
   if (!formData.email) {
@@ -182,25 +216,24 @@ const handleEmployeeLogin = async () => {
             )}
 
             <div>
-              <label>
-                {isEmployeeLogin ? "Staff Name" : "Email Address"}
-              </label>
-              <input
-                  type={isEmployeeLogin ? "text" : "email"}
-                  value={isEmployeeLogin ? formData.name : formData.email}
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Email or Staff Name
+                </label>
+
+                <input
+                  type="text"
+                  value={formData.email}
                   onChange={(e) =>
-                    isEmployeeLogin
-                      ? setFormData({
-                          ...formData,
-                          name: e.target.value,
-                        })
-                      : setFormData({
-                          ...formData,
-                          email: e.target.value,
-                        })
+                    setFormData({
+                      ...formData,
+                      email: e.target.value,
+                    })
                   }
+                  placeholder="Enter email or staff name"
+                  className="w-full pl-4 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
+                          
             </div>
 
             <div>
