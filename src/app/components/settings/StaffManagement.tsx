@@ -32,20 +32,6 @@ function StaffManagement({ onBack }: StaffManagementProps) {
     console.log(error);
   }
 };
- const handleStatusChange = async (
-  employeeId: string,
-  newStatus: string
-) => {
-  try {
-    await updateEmployee(employeeId, {
-      status: newStatus,
-    });
-
-    fetchEmployees();
-  } catch (error) {
-    console.log(error);
-  }
-};
     
 
   const handleAddEmployee = async (employee: any) => {
@@ -76,6 +62,20 @@ const handleUpdateEmployee = async (employee: any) => {
     setEditingEmployee(employee);
     setIsModalOpen(true);
   };
+  const handleDeleteEmployee = async (id: string) => {
+  try {
+    await deleteEmployee(id);
+
+    setEmployees((prev: any[]) =>
+      prev.filter((employee) => employee.id !== id)
+    );
+
+    alert("Employee deleted successfully");
+  } catch (err) {
+    console.error(err);
+    alert("Failed to delete employee");
+  }
+};
 
   const filteredEmployees = employees.filter((employee) => {
     if (activeTab === "all") return true;
@@ -175,11 +175,11 @@ const handleUpdateEmployee = async (employee: any) => {
         ) : (
           filteredEmployees.map((employee) => (
             <EmployeeRow
-              key={employee.id}
-              employee={employee}
-              onStatusChange={handleStatusChange}
-              onEditEmployee={handleEditEmployee}
-            />
+                    key={employee.id}
+                    employee={employee}
+                    onEditEmployee={handleEditEmployee}
+                    onDeleteEmployee={handleDeleteEmployee}
+                    />
           ))
         )}
       </div>
