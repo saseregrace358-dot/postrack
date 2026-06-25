@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.user import User
 from app.utils.business_id import generate_business_id
 from pydantic import BaseModel, EmailStr
-
+from app.auth.dependencies import get_current_user
 import secrets
 router = APIRouter(prefix="/auth", tags=["Auth"])
 security = HTTPBearer(auto_error=True)
@@ -20,6 +20,16 @@ security = HTTPBearer(auto_error=True)
 # =====================
 # SCHEMAS
 # =====================
+
+router = APIRouter(
+    prefix="/staff",
+    tags=["Staff"]
+)
+
+class StaffCreate(BaseModel):
+    name: str
+    email: str
+    password: str
 
 class UserRegister(BaseModel):
     name: str
@@ -190,4 +200,47 @@ def reset_password(
 
     return {
         "message": "Password updated successfully"
+    }
+
+
+@router.post("/")
+def create_staff(
+    payload: StaffCreate,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
+    if user["role"] != "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Only owners can create staff"
+        )
+
+    existing = db.query(User).filter(
+        User.email == payload.email
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already exists"
+        )
+
+    staff = User(
+        name=payload.name,
+        email=payload.email,
+        password=hash_password(payload.password),
+
+        role="staff",
+
+        business_name="",
+
+        business_id=user["business_id"]
+    )
+
+    db.add(staff)
+    db.commit()
+
+    return {
+        "message": "Staff account created"
     }
