@@ -113,25 +113,27 @@ def employee_login(
     payload: EmployeeLogin,
     db: Session = Depends(get_db)
 ):
-    print("LOGIN PAYLOAD:", payload.dict())
-
     employee = db.query(Employee).filter(
-        Employee.email == payload.email
+        Employee.name == payload.name
     ).first()
 
-    print("FOUND EMPLOYEE:", employee)
-
-    
     if not employee:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
         )
 
-    if not verify_password(
+    print("INPUT PASSWORD:", payload.password)
+    print("STORED HASH:", employee.password)
+
+    match = verify_password(
         payload.password,
         employee.password
-    ):
+    )
+
+    print("PASSWORD MATCH:", match)
+
+    if not match:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
@@ -139,18 +141,9 @@ def employee_login(
 
     token = create_access_token({
         "employee_id": employee.id,
-        "name": employee.name,
-        "business_id": employee.business_id,
-        "permissions": employee.permissions,
         "role": "employee"
     })
 
     return {
-        "access_token": token,
-        "user": {
-            "id": employee.id,
-            "name": employee.name,
-            "role": "employee",
-            "permissions": employee.permissions
-        }
-    }
+        "access_token": token
+    }   
