@@ -113,10 +113,15 @@ def employee_login(
     payload: EmployeeLogin,
     db: Session = Depends(get_db)
 ):
+    print("LOGIN PAYLOAD:", payload.dict())
+
     employee = db.query(Employee).filter(
         Employee.name == payload.name
     ).first()
 
+    print("FOUND EMPLOYEE:", employee)
+
+    
     if not employee:
         raise HTTPException(
             status_code=401,
