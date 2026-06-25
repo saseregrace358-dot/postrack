@@ -182,20 +182,25 @@ const handleEmployeeLogin = async () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+              <label>
+                {isEmployeeLogin ? "Staff Name" : "Email Address"}
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="your@email.com"
-                  className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              <input
+                  type={isEmployeeLogin ? "text" : "email"}
+                  value={isEmployeeLogin ? formData.name : formData.email}
+                  onChange={(e) =>
+                    isEmployeeLogin
+                      ? setFormData({
+                          ...formData,
+                          name: e.target.value,
+                        })
+                      : setFormData({
+                          ...formData,
+                          email: e.target.value,
+                        })
+                  }
                   required
                 />
-              </div>
             </div>
 
             <div>
