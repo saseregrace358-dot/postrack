@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
 import secrets
 
-auth_router = APIRouter(
+router = APIRouter(
     prefix="/auth",
     tags=["Auth"]
 )
@@ -57,7 +57,7 @@ class ResetPasswordRequest(BaseModel):
 # =====================
 # REGISTER
 # =====================
-@auth_router.post("/register")
+@router.post("/register")
 def register(user: UserRegister, db: Session = Depends(get_db)):
 
     existing = db.query(User).filter(User.email == user.email).first()
@@ -90,7 +90,7 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
 # =====================
 # LOGIN
 # =====================
-@auth_router.post("/login")
+@router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
 
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -125,7 +125,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 # =====================
 # ME
 # =====================
-@auth_router.get("/me")
+@router.get("/me")
 def get_me(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -155,7 +155,7 @@ def get_me(
         "role": user.role
     }
 
-@auth_router.post("/forgot-password")
+@router.post("/forgot-password")
 def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db)
@@ -182,7 +182,7 @@ def forgot_password(
         "token": reset_token
     }
 
-@auth_router.post("/reset-password")
+@router.post("/reset-password")
 def reset_password(
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db)
