@@ -3,16 +3,27 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.employee import Employee
+from app.schemas.employee import EmployeeCreate, EmployeeUpdate
+from app.auth.dependencies import get_current_user
+from app.auth.password import hash_password
 from app.schemas.employee import (
     EmployeeCreate,
-    EmployeeUpdate
+    EmployeeUpdate,
+    EmployeeLogin
 )
-from app.auth.dependencies import get_current_user
+
+from app.auth.password import (
+    hash_password,
+    verify_password
+)
+
+from app.auth.jwt import create_access_token
 
 router = APIRouter(
     prefix="/employees",
     tags=["Employees"]
 )
+
 
 @router.post("/")
 def create_employee(
@@ -22,18 +33,8 @@ def create_employee(
 ):
     employee = Employee(
         name=payload.name,
-        age=payload.age,
-        sex=payload.sex,
-        email=payload.email,
-        phone=payload.phone,
-        address=payload.address,
-        state_of_origin=payload.stateOfOrigin,
-        position=payload.position,
-        date_of_employment=payload.dateOfEmployment,
-        status=payload.status,
-        performance=payload.performance,
-        salary_range=payload.salaryRange,
-        avatar=payload.avatar,
+        password=hash_password(payload.password),
+        permissions=payload.permissions,
         business_id=user["business_id"]
     )
 
@@ -42,6 +43,8 @@ def create_employee(
     db.refresh(employee)
 
     return employee
+
+
 @router.get("/")
 def get_employees(
     db: Session = Depends(get_db),
@@ -50,6 +53,8 @@ def get_employees(
     return db.query(Employee).filter(
         Employee.business_id == user["business_id"]
     ).all()
+
+
 @router.put("/{employee_id}")
 def update_employee(
     employee_id: int,
@@ -69,23 +74,16 @@ def update_employee(
         )
 
     employee.name = payload.name
-    employee.age = payload.age
-    employee.sex = payload.sex
-    employee.email = payload.email
-    employee.phone = payload.phone
-    employee.address = payload.address
-    employee.state_of_origin = payload.stateOfOrigin
-    employee.position = payload.position
-    employee.date_of_employment = payload.dateOfEmployment
-    employee.status = payload.status
-    employee.performance = payload.performance
-    employee.salary_range = payload.salaryRange
-    employee.avatar = payload.avatar
+    employee.permissions = payload.permissions
+
+    if payload.password:
+        employee.password = hash_password(payload.password)
 
     db.commit()
     db.refresh(employee)
 
     return employee
+
 
 @router.delete("/{employee_id}")
 def delete_employee(
@@ -109,4 +107,45 @@ def delete_employee(
 
     return {
         "message": "Employee deleted successfully"
+    }
+@router.post("/login")
+def employee_login(
+    payload: EmployeeLogin,
+    db: Session = Depends(get_db)
+):
+    employee = db.query(Employee).filter(
+        Employee.name == payload.name
+    ).first()
+
+    if not employee:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    if not verify_password(
+        payload.password,
+        employee.password
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    token = create_access_token({
+        "employee_id": employee.id,
+        "name": employee.name,
+        "business_id": employee.business_id,
+        "permissions": employee.permissions,
+        "role": "employee"
+    })
+
+    return {
+        "access_token": token,
+        "user": {
+            "id": employee.id,
+            "name": employee.name,
+            "role": "employee",
+            "permissions": employee.permissions
+        }
     }

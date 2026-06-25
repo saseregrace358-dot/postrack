@@ -5,10 +5,11 @@ import { Mail, Lock, User, Eye, EyeOff, Store } from "lucide-react";
 import {
    forgotPassword,
 } from "../../api/auth";
+
 interface AuthProps {
   onLogin: (token: string) => void;
 }
-
+import { employeeLogin } from "../../api/employee";
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -92,6 +93,29 @@ const handleForgotPassword = async () => {
   }
 };
 
+const handleEmployeeLogin = async () => {
+  const res = await employeeLogin({
+    name: formData.name,
+    password: formData.password,
+  });
+
+  localStorage.setItem(
+    "token",
+    res.data.access_token
+  );
+
+  localStorage.setItem(
+    "permissions",
+    JSON.stringify(res.data.permissions)
+  );
+
+  localStorage.setItem(
+    "role",
+    "employee"
+  );
+
+  onLogin(res.data.access_token);
+};
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <motion.div

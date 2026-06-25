@@ -17,10 +17,6 @@ router = APIRouter(
     tags=["Auth"]
 )
 
-employee_router = APIRouter(
-    prefix="/employees",
-    tags=["Employees"]
-)
 security = HTTPBearer(auto_error=True)
 
 
@@ -31,10 +27,6 @@ security = HTTPBearer(auto_error=True)
 # =====================
 
 
-class EmployeeCreate(BaseModel):
-    name: str
-    email: str
-    password: str
 
 class UserRegister(BaseModel):
     name: str
@@ -208,44 +200,3 @@ def reset_password(
     }
 
 
-@employee_router.post("/")
-def create_employee(
-    payload: EmployeeCreate,
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
-):
-
-    if user["role"] != "owner":
-        raise HTTPException(
-            status_code=403,
-            detail="Only owners can create staff"
-        )
-
-    existing = db.query(User).filter(
-        User.email == payload.email
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="Email already exists"
-        )
-
-    employee = User(
-        name=payload.name,
-        email=payload.email,
-        password=hash_password(payload.password),
-
-        role="employee",
-
-        business_name="",
-
-        business_id=user["business_id"]
-    )
-
-    db.add(employee)
-    db.commit()
-
-    return {
-        "message": "employee account created"
-    }

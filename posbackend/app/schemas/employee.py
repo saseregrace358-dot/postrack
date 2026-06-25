@@ -1,29 +1,25 @@
 from pydantic import BaseModel
-from typing import Optional
-
+from typing import List
 
 class EmployeeCreate(BaseModel):
     name: str
-    age: Optional[str] = ""
-    sex: Optional[str] = ""
-    email: str
-    phone: Optional[str] = ""
-    address: Optional[str] = ""
-    stateOfOrigin: Optional[str] = ""
-    position: Optional[str] = ""
-    dateOfEmployment: Optional[str] = ""
-    status: Optional[str] = "active"
-    performance: Optional[str] = ""
-    salaryRange: Optional[str] = ""
-    avatar: Optional[str] = ""
+    password: str
+    permissions: List[str]
 
+class EmployeeUpdate(BaseModel):
+    name: str
+    password: str
+    permissions: List[str]
 
-class EmployeeUpdate(EmployeeCreate):
-    pass
-
-
-class EmployeeResponse(EmployeeCreate):
+class EmployeeResponse(BaseModel):
     id: int
+    name: str
+    permissions: List[str]
+
+class EmployeeLogin(BaseModel):
+    name: str
+    password: str
 
     class Config:
         from_attributes = True
+

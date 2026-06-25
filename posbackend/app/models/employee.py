@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, JSON
 from app.database import Base
-
 
 class Employee(Base):
     __tablename__ = "employees"
@@ -8,25 +7,8 @@ class Employee(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     name = Column(String, nullable=False)
-    age = Column(String)
-    sex = Column(String)
+    password = Column(String, nullable=False)
 
-    email = Column(String, unique=True, nullable=False)
-    phone = Column(String)
-
-    address = Column(String)
-    state_of_origin = Column(String)
-
-    position = Column(String)
-
-    date_of_employment = Column(String)
-
-    status = Column(String, default="active")
-
-    performance = Column(String)
-
-    salary_range = Column(String)
-
-    avatar = Column(String)
+    permissions = Column(JSON, default=[])
 
     business_id = Column(String, nullable=False)

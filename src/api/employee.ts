@@ -38,4 +38,5 @@ export const deleteEmployee = (
 ) =>
   api.delete(`/employees/${id}`);
 
-  
+  export const employeeLogin = (data: any) =>
+  api.post("/employees/login", data);
