@@ -37,10 +37,9 @@ const [permissions, setPermissions] = useState<string[]>([]);
 
 const permissionOptions = [
 "dashboard",
-"products",
+"Inventory",
 "sales",
-"reports",
-"staff",
+"POS",
 "settings",
 ];
 
