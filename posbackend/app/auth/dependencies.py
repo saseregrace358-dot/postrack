@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.jwt import decode_token
 from app.models.user import User
+from app.models.employee import Employee
 
 security = HTTPBearer()
 
@@ -16,25 +17,48 @@ def get_current_user(
         token = credentials.credentials
         payload = decode_token(token)
 
-        email = payload.get("sub")
-        business_id = payload.get("business_id")
         role = payload.get("role")
-
-        if not email:
-            raise HTTPException(401, "Invalid token")
+        business_id = payload.get("business_id")
 
     except:
         raise HTTPException(401, "Invalid token")
 
-    user = db.query(User).filter(User.email == email).first()
+    # OWNER
+    if role == "owner":
+        email = payload.get("sub")
 
-    if not user:
-        raise HTTPException(404, "User not found")
+        user = db.query(User).filter(
+            User.email == email
+        ).first()
 
-    return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "business_id": business_id,
-        "role": role
-    }
+        if not user:
+            raise HTTPException(404, "User not found")
+
+        return {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "business_id": business_id,
+            "role": "owner"
+        }
+
+    # EMPLOYEE
+    elif role == "employee":
+        employee_id = payload.get("employee_id")
+
+        employee = db.query(Employee).filter(
+            Employee.id == employee_id
+        ).first()
+
+        if not employee:
+            raise HTTPException(404, "Employee not found")
+
+        return {
+            "id": employee.id,
+            "name": employee.name,
+            "business_id": employee.business_id,
+            "role": "employee",
+            "permissions": employee.permissions
+        }
+
+    raise HTTPException(401, "Invalid token")
