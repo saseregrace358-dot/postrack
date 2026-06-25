@@ -129,7 +129,7 @@ const handleUpdateEmployee = async (employee: any) => {
           "
         >
           <Plus size={18} />
-          Add Staff
+          Add Employee
         </button>
       </div>
 

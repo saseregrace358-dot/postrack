@@ -15,12 +15,12 @@ export function PrivacySettings({
   const isOpen = expanded === "privacy";
 
   const [openTab, setOpenTab] = useState<
-    "security" | "staff" | "roles" | "accounts"
+    "security" | "employee" | "roles" | "accounts"
   >("security");
 
   const [currentUserRole, setCurrentUserRole] = useState("admin");
 
-  const [staff, setStaff] = useState<any[]>([]);
+  const [employee, setemployee] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
 
   const isAdmin =
@@ -28,9 +28,9 @@ export function PrivacySettings({
 
   useEffect(() => {
     if (isOpen) {
-      fetch("https://postrack.onrender.com/staff")
+      fetch("https://postrack.onrender.com/employee")
         .then((res) => res.json())
-        .then(setStaff)
+        .then(setemployee)
         .catch(console.error);
 
       fetch("https://postrack.onrender.com/users")
@@ -71,10 +71,10 @@ export function PrivacySettings({
             </button>
 
             <button
-              onClick={() => setOpenTab("staff")}
+              onClick={() => setOpenTab("employee")}
               className="px-3 py-1 text-sm"
             >
-              Staff
+              Employee
             </button>
 
             <button
@@ -116,9 +116,9 @@ export function PrivacySettings({
             )}
 
             {/* STAFF (ADMIN ONLY) */}
-            {openTab === "staff" && isAdmin && (
+            {openTab === "employee" && isAdmin && (
               <div className="space-y-2">
-                {staff.map((s) => (
+                {employee.map((s) => (
                   <div
                     key={s.id}
                     className="flex justify-between border p-2 rounded"

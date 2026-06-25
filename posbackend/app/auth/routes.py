@@ -11,7 +11,16 @@ from app.utils.business_id import generate_business_id
 from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
 import secrets
-router = APIRouter(prefix="/auth", tags=["Auth"])
+
+auth_router = APIRouter(
+    prefix="/auth",
+    tags=["Auth"]
+)
+
+employee_router = APIRouter(
+    prefix="/employees",
+    tags=["Employees"]
+)
 security = HTTPBearer(auto_error=True)
 
 
@@ -21,12 +30,8 @@ security = HTTPBearer(auto_error=True)
 # SCHEMAS
 # =====================
 
-router = APIRouter(
-    prefix="/staff",
-    tags=["Staff"]
-)
 
-class StaffCreate(BaseModel):
+class EmployeeCreate(BaseModel):
     name: str
     email: str
     password: str
@@ -52,7 +57,7 @@ class ResetPasswordRequest(BaseModel):
 # =====================
 # REGISTER
 # =====================
-@router.post("/register")
+@auth_router.post("/register")
 def register(user: UserRegister, db: Session = Depends(get_db)):
 
     existing = db.query(User).filter(User.email == user.email).first()
@@ -85,7 +90,7 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
 # =====================
 # LOGIN
 # =====================
-@router.post("/login")
+@auth_router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
 
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -120,7 +125,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 # =====================
 # ME
 # =====================
-@router.get("/me")
+@auth_router.get("/me")
 def get_me(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -150,7 +155,7 @@ def get_me(
         "role": user.role
     }
 
-@router.post("/forgot-password")
+@auth_router.post("/forgot-password")
 def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db)
@@ -177,7 +182,7 @@ def forgot_password(
         "token": reset_token
     }
 
-@router.post("/reset-password")
+@auth_router.post("/reset-password")
 def reset_password(
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db)
@@ -203,9 +208,9 @@ def reset_password(
     }
 
 
-@router.post("/")
-def create_staff(
-    payload: StaffCreate,
+@employee_router.post("/")
+def create_employee(
+    payload: EmployeeCreate,
     db: Session = Depends(get_db),
     user = Depends(get_current_user)
 ):
@@ -226,21 +231,21 @@ def create_staff(
             detail="Email already exists"
         )
 
-    staff = User(
+    employee = User(
         name=payload.name,
         email=payload.email,
         password=hash_password(payload.password),
 
-        role="staff",
+        role="employee",
 
         business_name="",
 
         business_id=user["business_id"]
     )
 
-    db.add(staff)
+    db.add(employee)
     db.commit()
 
     return {
-        "message": "Staff account created"
+        "message": "employee account created"
     }
