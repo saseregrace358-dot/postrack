@@ -44,9 +44,13 @@ const handleSubmit = async (e: React.FormEvent) => {
         );
 
         localStorage.setItem(
-          "role",
-          res.data.user?.role || "owner"
-        );
+            "user",
+            JSON.stringify({
+              ...res.data.user,
+              role: "owner",
+              permissions: ["all"]
+            })
+          );
 
         onLogin(res.data.access_token);
       } catch {
@@ -61,16 +65,16 @@ const handleSubmit = async (e: React.FormEvent) => {
         );
 
         localStorage.setItem(
-          "permissions",
-          JSON.stringify(
-            employeeRes.data.permissions || []
-          )
-        );
+        "user",
+        JSON.stringify({
+          role: "employee",
+          permissions: employeeRes.data.user.permissions,
+          name: employeeRes.data.user.name,
+          id: employeeRes.data.user.id
+        })
+      );
 
-        localStorage.setItem(
-          "role",
-          "employee"
-        );
+localStorage.setItem("role", "employee");
 
         onLogin(
           employeeRes.data.access_token

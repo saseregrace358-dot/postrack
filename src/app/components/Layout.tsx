@@ -11,7 +11,7 @@ MessageCircle,
 
 export function Layout() {
 const user = JSON.parse(localStorage.getItem("user") || "{}");
-
+console.log("USER:", user);
 const isOwner =
 user.role === "owner" ||
 user.role === "admin";
