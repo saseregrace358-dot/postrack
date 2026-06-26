@@ -3,17 +3,14 @@ import { Moon, Sun, LogOut } from "lucide-react";
 
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../hooks/useUser";
-import { ProfileSettings } from "./settings/ProfileSettings";
-import { PrivacySettings } from "./settings/PrivacySettings";
+
 import { NotificationSettings } from "./settings/NotificationSettings";
-import { LanguageSettings } from "./settings/LanguageSettings";
 import { SupportSettings } from "./settings/SupportSettings";
 import StaffManagement from "./settings/StaffManagement";
 import { useAuth } from "../context/AuthContext";
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
-  const { user, setUser } = useUser();
-
+  
   const [expanded, setExpanded] = useState<string | null>(null);
 
  const toggleSection = (section: string) => {
@@ -46,28 +43,12 @@ if (showStaffManagement) {
         </button>
       </div>
 
-      {/* ONLY Profile gets user */}
-     <ProfileSettings
-  expanded={expanded}
-  toggleSection={toggleSection}
-  user={user}
-  setUser={setUser}
-/>
-
-<PrivacySettings
-  expanded={expanded}
-  toggleSection={toggleSection}
-/>
-
+ 
 <NotificationSettings
   expanded={expanded}
   toggleSection={toggleSection}
 />
 
-<LanguageSettings
-  expanded={expanded}
-  toggleSection={toggleSection}
-/>
 
 {/* STAFF MANAGEMENT */}
 <div className="bg-white dark:bg-slate-800 rounded-xl border">
