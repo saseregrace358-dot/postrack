@@ -6,16 +6,17 @@ import {
   Receipt,
   BarChart3,
   Settings as SettingsIcon,
-  User,
   MessageCircle,
   LogOut,
-  ChevronDown,
   Bell
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export function Layout() {
   
+  const [showAiModal, setShowAiModal] = useState(false);
+const [message, setMessage] = useState("");
+const [messages, setMessages] = useState<any[]>([]);
 const user = JSON.parse(localStorage.getItem("user") || "{}");
 console.log("USER:", user);
 const isOwner =
@@ -109,10 +110,12 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
 
   {/* AI Assistant */}
   <button
-    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
-    onClick={() => {
-          }}
-  >
+  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
+  onClick={() => {
+    setShowAiModal(true);
+    setShowProfileMenu(false);
+  }}
+>
     <MessageCircle size={18} />
     <span>AI Assistant</span>
   </button>
@@ -280,6 +283,79 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
 
     </div>
   </nav>
+
+  {/* AI CHAT PANEL */}
+{showAiModal && (
+  <div className="fixed inset-0 z-[100]">
+
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/40"
+      onClick={() => setShowAiModal(false)}
+    />
+
+    {/* Chat Window */}
+    <div
+      className="
+        absolute
+        right-0
+        top-0
+        h-full
+        w-full
+        md:w-[450px]
+        bg-white
+        dark:bg-slate-900
+        shadow-2xl
+        flex
+        flex-col
+      "
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <div>
+          <h2 className="font-semibold text-lg">
+            AI Assistant
+          </h2>
+
+          <p className="text-sm text-slate-500">
+            Ask anything about your business
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowAiModal(false)}
+          className="px-3 py-2 rounded-lg bg-red-500 text-white"
+        >
+          End Chat
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl max-w-[85%]">
+          Hello 👋 I'm your AI assistant.
+        </div>
+
+      </div>
+
+      {/* Input */}
+      <div className="border-t p-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Ask something..."
+            className="flex-1 border rounded-xl px-4 py-3 dark:bg-slate-800"
+          />
+
+          <button className="px-4 py-3 bg-blue-600 text-white rounded-xl">
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 </div>
 
 
