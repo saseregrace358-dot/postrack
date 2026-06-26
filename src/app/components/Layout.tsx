@@ -10,9 +10,12 @@ import {
   MessageCircle,
   LogOut,
   ChevronDown,
+  Bell
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export function Layout() {
+  
 const user = JSON.parse(localStorage.getItem("user") || "{}");
 console.log("USER:", user);
 const isOwner =
@@ -35,6 +38,7 @@ const initials = user?.name
       .toUpperCase()
   : "U";
 
+  const { handleLogout } = useAuth();
 return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 {/* Header */} <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10"> <div className="px-4 py-3"> <div className="flex items-center justify-between">
 
@@ -56,6 +60,12 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 
         {/* Right Side Icons */}
         <div className="flex items-center gap-3">
+
+          <button className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+            <Bell className="size-5 text-slate-700 dark:text-slate-300" />
+
+            <span className="absolute top-1 right-1 size-2 bg-red-500 rounded-full"></span>
+          </button>
 
           <div className="relative">
 
@@ -116,12 +126,8 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
       {/* Logout */}
       <button
         className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50"
-        onClick={() => {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-          window.location.href = "/login";
-        }}
-      >
+        onClick={handleLogout}
+             >
         <LogOut size={18} />
         <span>Logout</span>
       </button>
