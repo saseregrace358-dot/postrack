@@ -69,77 +69,74 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 
           <div className="relative">
 
-  <button
-    onClick={() => setShowProfileMenu(!showProfileMenu)}
-    className="flex items-center gap-2"
-  >
-    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">
-      {initials}
-    </div>
+  
 
-    <ChevronDown size={18} />
+<button
+onClick={() => setShowProfileMenu(!showProfileMenu)}
+className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold hover:bg-blue-700 transition"
+
+>
+
+
+{initials}
+
+
   </button>
 
-  {showProfileMenu && (
-    <div className="absolute right-0 top-12 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border z-50">
+{showProfileMenu && ( <div className="absolute right-0 top-14 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden">
 
-      {/* User Info */}
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-3">
 
-          <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
-            {initials}
-          </div>
+  {/* User Info */}
+  <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+    <div className="flex items-center gap-3">
 
-          <div>
-            <h3 className="font-semibold">
-              {user.name}
-            </h3>
-
-            <p className="text-sm text-gray-500">
-              {user.email}
-            </p>
-          </div>
-
-        </div>
+      <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+        {initials}
       </div>
 
-      {/* AI Chat */}
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800"
-        onClick={() => {
-          // open AI modal
-        }}
-      >
-        <MessageCircle size={18} />
-        <span>AI Assistant</span>
-      </button>
+      <div>
+        <h3 className="font-semibold text-slate-900 dark:text-white">
+          {user.name}
+        </h3>
 
-      {/* Profile */}
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800"
-      >
-        <User size={18} />
-        <span>Profile</span>
-      </button>
-
-      {/* Logout */}
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50"
-        onClick={handleLogout}
-             >
-        <LogOut size={18} />
-        <span>Logout</span>
-      </button>
+        <p className="text-sm text-slate-500">
+          {user.email}
+        </p>
+      </div>
 
     </div>
-  )}
+  </div>
+
+  {/* AI Assistant */}
+  <button
+    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 text-left"
+    onClick={() => {
+          }}
+  >
+    <MessageCircle size={18} />
+    <span>AI Assistant</span>
+  </button>
+
+  {/* Logout */}
+  <button
+    className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 text-left"
+    onClick={handleLogout}
+  >
+    <LogOut size={18} />
+    <span>Logout</span>
+  </button>
+
+</div>
+
+)}
+
+</div>
+
 </div>
         </div>
 
       </div>
-    </div>
-  </header>
+</header>
 
   {/* Main Content */}
   <main className="px-4 py-6 max-w-7xl mx-auto">
