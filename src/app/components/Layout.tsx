@@ -1,12 +1,15 @@
 import { Outlet, NavLink } from "react-router";
+import { useState } from "react";
 import {
-ShoppingCart,
-Package,
-Receipt,
-BarChart3,
-Settings as SettingsIcon,
-Bell,
-MessageCircle,
+  ShoppingCart,
+  Package,
+  Receipt,
+  BarChart3,
+  Settings as SettingsIcon,
+  User,
+  MessageCircle,
+  LogOut,
+  ChevronDown,
 } from "lucide-react";
 
 export function Layout() {
@@ -21,6 +24,16 @@ user.permissions || [];
 
 const canView = (permission: string) =>
 isOwner || permissions.includes(permission);
+
+const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+const initials = user?.name
+  ? user.name
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+  : "U";
 
 return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 {/* Header */} <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10"> <div className="px-4 py-3"> <div className="flex items-center justify-between">
@@ -44,21 +57,78 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
         {/* Right Side Icons */}
         <div className="flex items-center gap-3">
 
-          <button className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-            <Bell className="size-5 text-slate-700 dark:text-slate-300" />
+          <div className="relative">
 
-            <span className="absolute top-1 right-1 size-2 bg-red-500 rounded-full"></span>
-          </button>
+  <button
+    onClick={() => setShowProfileMenu(!showProfileMenu)}
+    className="flex items-center gap-2"
+  >
+    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">
+      {initials}
+    </div>
 
-          <button
-            className="p-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition"
-            onClick={() => {
-              // open AI chat modal later
-            }}
-          >
-            <MessageCircle className="size-5" />
-          </button>
+    <ChevronDown size={18} />
+  </button>
 
+  {showProfileMenu && (
+    <div className="absolute right-0 top-12 w-72 bg-white dark:bg-slate-900 rounded-xl shadow-xl border z-50">
+
+      {/* User Info */}
+      <div className="p-4 border-b">
+        <div className="flex items-center gap-3">
+
+          <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+            {initials}
+          </div>
+
+          <div>
+            <h3 className="font-semibold">
+              {user.name}
+            </h3>
+
+            <p className="text-sm text-gray-500">
+              {user.email}
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* AI Chat */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800"
+        onClick={() => {
+          // open AI modal
+        }}
+      >
+        <MessageCircle size={18} />
+        <span>AI Assistant</span>
+      </button>
+
+      {/* Profile */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800"
+      >
+        <User size={18} />
+        <span>Profile</span>
+      </button>
+
+      {/* Logout */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50"
+        onClick={() => {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+        }}
+      >
+        <LogOut size={18} />
+        <span>Logout</span>
+      </button>
+
+    </div>
+  )}
+</div>
         </div>
 
       </div>
