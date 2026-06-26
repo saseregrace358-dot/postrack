@@ -18,10 +18,7 @@ export function LanguageSettings({
         onClick={() => toggleSection("language")}
         className="w-full p-4 flex justify-between"
       >
-        <div className="flex items-center gap-3">
-          <Globe size={20} />
-          Language
-        </div>
+        
 
         <span>{isOpen ? "−" : "›"}</span>
       </button>
