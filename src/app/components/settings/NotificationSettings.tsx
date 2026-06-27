@@ -1,4 +1,5 @@
 import { Bell } from "lucide-react";
+import { useNotifications } from "../../context/NotificationContext";
 import { useState} from "react";
 interface Props {
   expanded: string | null;
@@ -10,20 +11,10 @@ export function NotificationSettings({
   toggleSection,
 }: Props) {
   const isOpen = expanded === "notifications";
-const [notifications, setNotifications] = useState({
-  soundAlerts: true,
-  emailNotifications: true,
-  browserNotifications: true,
-  smsAlerts: false,
-  lowStockAlerts: true,
-  dailyReports: true,
-  weeklyReports: false,
-  paymentAlerts: true,
-  debtReminders: true,
-  newEmployeeAlerts: true,
-  systemUpdates: true,
-  hideNotifications: false,
-});
+const {
+  settings,
+  setSettings,
+} = useNotifications();
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl border">
 
@@ -108,9 +99,16 @@ const [notifications, setNotifications] = useState({
 
         <label className="relative inline-flex items-center cursor-pointer">
           <input
-            type="checkbox"
-            className="sr-only peer"
-          />
+                  type="checkbox"
+                  checked={settings.soundAlerts}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      soundAlerts: e.target.checked,
+                    })
+                  }
+                  className="sr-only peer"
+                />
 
           <div className="w-11 h-6 bg-slate-300 peer-checked:bg-blue-600 rounded-full transition">
             <div className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition peer-checked:translate-x-5"></div>

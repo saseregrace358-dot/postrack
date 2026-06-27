@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router";
-import { useState } from "react";
+import { useState, useEffect} from "react";
 import {
   ShoppingCart,
   Package,
@@ -11,12 +11,80 @@ import {
   Bell
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
+import { markNotificationReadApi, getNotificationsApi } from "../../api/notifications";
 
 export function Layout() {
   
   const [showAiModal, setShowAiModal] = useState(false);
 const [message, setMessage] = useState("");
 const [messages, setMessages] = useState<any[]>([]);
+
+const { notifications, setNotifications, settings } =
+  useNotifications();
+
+useEffect(() => {
+  loadNotifications();
+}, []);
+
+const loadNotifications = async () => {
+  try {
+    const res = await getNotificationsApi();
+    setNotifications(res.data);
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const markRead = async (id: number) => {
+  try {
+    await markNotificationReadApi(id);
+
+    setNotifications((prev: any[]) =>
+      prev.map((n) =>
+        n.id === id
+          ? { ...n, read: true }
+          : n
+      )
+    );
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const [showNotifications, setShowNotifications] =
+  useState(false);
+
+
+const unreadCount = notifications.filter(
+  (n: any) => !n.read
+).length;
+
+const filteredNotifications =
+  notifications.filter((n: any) => {
+    if (settings.hideNotifications) return false;
+
+    if (
+      n.type === "lowStock" &&
+      !settings.lowStockAlerts
+    )
+      return false;
+
+    if (
+      n.type === "payment" &&
+      !settings.paymentAlerts
+    )
+      return false;
+
+    if (
+      n.type === "debt" &&
+      !settings.debtReminders
+    )
+      return false;
+
+    return true;
+  });
+
 const user = JSON.parse(localStorage.getItem("user") || "{}");
 console.log("USER:", user);
 const isOwner =
@@ -62,11 +130,86 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
         {/* Right Side Icons */}
         <div className="flex items-center gap-3">
 
-          <button className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-            <Bell className="size-5 text-slate-700 dark:text-slate-300" />
+          <div className="relative">
 
-            <span className="absolute top-1 right-1 size-2 bg-red-500 rounded-full"></span>
-          </button>
+  <button
+    onClick={() =>
+      setShowNotifications(!showNotifications)
+    }
+    className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+  >
+    <Bell className="size-5" />
+
+    {unreadCount > 0 && (
+      <span
+        className="
+        absolute
+        -top-1
+        -right-1
+        bg-red-500
+        text-white
+        text-[10px]
+        min-w-[18px]
+        h-[18px]
+        rounded-full
+        flex
+        items-center
+        justify-center
+      "
+      >
+        {unreadCount}
+      </span>
+    )}
+  </button>
+
+  {showNotifications && (
+    <div
+      className="
+      absolute
+      right-0
+      top-12
+      w-80
+      bg-white
+      dark:bg-slate-900
+      border
+      rounded-xl
+      shadow-xl
+      z-50
+      overflow-hidden
+    "
+    >
+      <div className="p-3 border-b font-semibold">
+        Notifications
+      </div>
+      
+
+      {notifications.length === 0 ? (
+        <div className="p-4 text-center text-gray-500">
+          No notifications
+        </div>
+      ) : (
+        filteredNotifications.map((notification: any) => (
+        <div
+          key={notification.id}
+          className="p-4 border-b hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          <h4 className="font-medium">
+            {notification.title}
+          </h4>
+
+          <p className="text-sm text-gray-500">
+            {notification.message}
+          </p>
+
+          
+        </div>
+
+        ))
+      )}
+    </div>
+  )}
+
+</div>
 
           <div className="relative">
 

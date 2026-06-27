@@ -19,12 +19,14 @@ from app.routes import product_routes, sales_routes, ai
 from app.auth.routes import router as auth_router
 from app.routes.employee import router as employee_router
 from app.database import engine, Base
+from app.routes.notification import router as notification_router
 
 app.include_router(auth_router)
 app.include_router(product_routes.router)
 app.include_router(sales_routes.router)
 app.include_router(employee_router)
 app.include_router(ai.router)
+app.include_router(notification_router)
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")

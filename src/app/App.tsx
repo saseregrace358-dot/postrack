@@ -5,7 +5,10 @@ import { Splash } from "./components/Splash";
 import { Auth } from "./components/Auth";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AuthContext } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 
+
+  
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -35,7 +38,9 @@ useEffect(() => {
   return (
     <AuthContext.Provider value={{ handleLogout }}>
     <ThemeProvider>
+      <NotificationProvider>
       <RouterProvider router={router} />
+     </NotificationProvider>
     </ThemeProvider>
   </AuthContext.Provider>
 );

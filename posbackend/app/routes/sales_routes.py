@@ -7,6 +7,7 @@ from app.database import SessionLocal
 from app.models.sale import Sale
 from app.models.product import Product
 from app.schemas.sale import SaleCreate
+from app.models.notification import Notification
 import uuid
 from app.auth.dependencies import get_current_user
 router = APIRouter(
@@ -56,6 +57,15 @@ def create_sale(
             "quantity": item.quantity
         })
 
+        if product.stock <= 5:notification = Notification(
+        business_id=user["business_id"],
+        title="Low Stock Alert",
+        message=f"{product.name} remaining stock: {product.stock}",
+        type="lowStock"
+    )
+
+    db.add(notification)
+
     balance = payload.total - payload.amountPaid
 
     status = (
@@ -91,9 +101,20 @@ def create_sale(
         created_by_name=user.get("name")
     )
 
+
+
     db.add(sale)
+  
     db.commit()
     db.refresh(sale)
+    notification = Notification(
+        business_id=user["business_id"],
+        title="New Sale",
+        message=f"Sale {order_id} created",
+        type="sale"
+    )
+
+    db.add(notification)
 
     return sale
 
@@ -154,5 +175,14 @@ def add_payment(
 
     db.commit()
     db.refresh(sale)
+
+    notification = Notification(
+    business_id=user["business_id"],
+    title="Payment Received",
+    message=f"₦{payment['amount']} received",
+    type="payment"
+)
+
+    db.add(notification)
 
     return sale
