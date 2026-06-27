@@ -56,8 +56,8 @@ def create_sale(
             "price": item.price,
             "quantity": item.quantity
         })
-
-        if product.stock <= 5:notification = Notification(
+        if product.stock <= 5:
+         notification = Notification(
         business_id=user["business_id"],
         title="Low Stock Alert",
         message=f"{product.name} remaining stock: {product.stock}",
@@ -100,89 +100,82 @@ def create_sale(
         created_by=user["id"],
         created_by_name=user.get("name")
     )
-
-
-
     db.add(sale)
-  
-    db.commit()
-    db.refresh(sale)
     notification = Notification(
-        business_id=user["business_id"],
-        title="New Sale",
-        message=f"Sale {order_id} created",
-        type="sale"
-    )
-
+                business_id=user["business_id"],
+                title="New Sale",
+                message=f"Sale {order_id} created",
+                type="sale"
+            )
     db.add(notification)
 
+    db.commit()
+    db.refresh(sale)
     return sale
-
 @router.get("/")
 def get_sales(
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
-):
-    return (
-        db.query(Sale)
-        .filter(Sale.business_id == user["business_id"])
-        .order_by(Sale.date.desc())
-        .all()
-    )
+                db: Session = Depends(get_db),
+                user = Depends(get_current_user)
+            ):
+                return (
+                    db.query(Sale)
+                    .filter(Sale.business_id == user["business_id"])
+                    .order_by(Sale.date.desc())
+                    .all()
+                )
 
 @router.patch("/{sale_id}/payment")
 def add_payment(
-    sale_id: int,
-    payment: dict,
-    db: Session = Depends(get_db),
-    user = Depends(get_current_user)
-):
-    sale = (
-        db.query(Sale)
-        .filter(
-            Sale.id == sale_id,
-            Sale.business_id == user["business_id"]   # 🔥 IMPORTANT
-        )
-        .first()
-    )
+                sale_id: int,
+                payment: dict,
+                db: Session = Depends(get_db),
+                user = Depends(get_current_user)
+            ):
+                sale = (
+                    db.query(Sale)
+                    .filter(
+                        Sale.id == sale_id,
+                        Sale.business_id == user["business_id"]   # 🔥 IMPORTANT
+                    )
+                    .first()
+                )
 
-    if not sale:
-        raise HTTPException(404, "Sale not found")
+                if not sale:
+                    raise HTTPException(404, "Sale not found")
 
-    payments = sale.payments or []
+                payments = sale.payments or []
 
-    payments.append({
-        "amount": payment["amount"],
-        "date": datetime.utcnow().isoformat(),
-        "method": payment.get("method", "Cash"),
+                payments.append({
+                    "amount": payment["amount"],
+                    "date": datetime.utcnow().isoformat(),
+                    "method": payment.get("method", "Cash"),
 
-        # 🔥 AUDIT INFO
-        "added_by": user["id"],
-        "added_by_name": user.get("name")
-    })
+                    # 🔥 AUDIT INFO
+                    "added_by": user["id"],
+                    "added_by_name": user.get("name")
+                })
 
-    total_paid = sum(p["amount"] for p in payments)
+                total_paid = sum(p["amount"] for p in payments)
 
-    sale.payments = payments
-    sale.amountPaid = total_paid
-    sale.balance = sale.total - total_paid
+                sale.payments = payments
+                sale.amountPaid = total_paid
+                sale.balance = sale.total - total_paid
 
-    if sale.balance <= 0:
-        sale.balance = 0
-        sale.status = "PAID"
-    else:
-        sale.status = "DEBT"
+                if sale.balance <= 0:
+                    sale.balance = 0
+                    sale.status = "PAID"
+                else:
+                    sale.status = "DEBT"
 
-    db.commit()
-    db.refresh(sale)
+                notification = Notification(
+                business_id=user["business_id"],
+                title="Payment Received",
+                message=f"₦{payment['amount']} received",
+                type="payment"
+            )
+                db.add(notification)
 
-    notification = Notification(
-    business_id=user["business_id"],
-    title="Payment Received",
-    message=f"₦{payment['amount']} received",
-    type="payment"
-)
+                db.commit()
+                db.refresh(sale)
 
-    db.add(notification)
-
-    return sale
+                return sale
