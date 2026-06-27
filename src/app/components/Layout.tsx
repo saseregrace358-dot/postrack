@@ -27,15 +27,19 @@ useEffect(() => {
   loadNotifications();
 }, []);
 
+
+
 const loadNotifications = async () => {
   try {
     const res = await getNotificationsApi();
+
+    console.log("NOTIFICATIONS:", res.data);
+
     setNotifications(res.data);
   } catch (err) {
-    console.log(err);
+    console.log("NOTIFICATION ERROR:", err);
   }
 };
-
 const markRead = async (id: number) => {
   try {
     await markNotificationReadApi(id);
