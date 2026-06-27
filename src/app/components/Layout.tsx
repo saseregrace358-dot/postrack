@@ -13,7 +13,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import { markNotificationReadApi, getNotificationsApi } from "../../api/notifications";
-
+import { askAiApi } from "../../api/ai";
 export function Layout() {
   
   const [showAiModal, setShowAiModal] = useState(false);
@@ -28,7 +28,42 @@ useEffect(() => {
 }, []);
 
 
+const sendMessage = async () => {
+  if (!message.trim()) return;
 
+  const userMessage = {
+    role: "user",
+    content: message,
+  };
+
+  setMessages((prev) => [...prev, userMessage]);
+
+  const currentMessage = message;
+
+  setMessage("");
+
+  try {
+    const res = await askAiApi(currentMessage);
+
+    const aiMessage = {
+      role: "assistant",
+      content: res.data.reply,
+    };
+
+    setMessages((prev) => [...prev, aiMessage]);
+  } catch (err) {
+    console.log(err);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content:
+          "Sorry, AI service is unavailable.",
+      },
+    ]);
+  }
+};
 const loadNotifications = async () => {
   try {
     const res = await getNotificationsApi();
@@ -476,26 +511,45 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+     <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl max-w-[85%]">
-          Hello 👋 I'm your AI assistant.
-        </div>
+  <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl max-w-[85%]">
+    Hello 👋 I'm your AI assistant.
+  </div>
 
-      </div>
+  {messages.map((msg, index) => (
+    <div
+      key={index}
+      className={`p-3 rounded-xl max-w-[85%] ${
+        msg.role === "user"
+          ? "ml-auto bg-blue-600 text-white"
+          : "bg-slate-100 dark:bg-slate-800"
+      }`}
+    >
+      {msg.content}
+    </div>
+  ))}
+</div>
 
       {/* Input */}
       <div className="border-t p-4">
         <div className="flex gap-2">
           <input
-            type="text"
-            placeholder="Ask something..."
-            className="flex-1 border rounded-xl px-4 py-3 dark:bg-slate-800"
-          />
-
-          <button className="px-4 py-3 bg-blue-600 text-white rounded-xl">
-            Send
-          </button>
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) =>
+            e.key === "Enter" && sendMessage()
+          }
+          type="text"
+          placeholder="Ask something..."
+          className="flex-1 border rounded-xl px-4 py-3 dark:bg-slate-800"
+        />
+          <button
+          onClick={sendMessage}
+          className="px-4 py-3 bg-blue-600 text-white rounded-xl"
+        >
+          Send
+        </button>
         </div>
       </div>
     </div>
