@@ -44,18 +44,11 @@ const markRead = async (id: number) => {
   try {
     await markNotificationReadApi(id);
 
-    setNotifications((prev: any[]) =>
-      prev.map((n) =>
-        n.id === id
-          ? { ...n, read: true }
-          : n
-      )
-    );
+    await loadNotifications();
   } catch (err) {
     console.log(err);
   }
 };
-
 const [showNotifications, setShowNotifications] =
   useState(false);
 
