@@ -189,10 +189,15 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
         </div>
       ) : (
         filteredNotifications.map((notification: any) => (
-        <div
-          key={notification.id}
-          className="p-4 border-b hover:bg-slate-50 dark:hover:bg-slate-800"
-        >
+     <div
+      key={notification.id}
+      onClick={() => markRead(notification.id)}
+      className={`
+        p-4 border-b cursor-pointer
+        hover:bg-slate-50 dark:hover:bg-slate-800
+        ${!notification.read ? "bg-blue-50 dark:bg-slate-800" : ""}
+      `}
+    >
           <h4 className="font-medium">
             {notification.title}
           </h4>

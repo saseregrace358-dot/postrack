@@ -30,7 +30,7 @@ def get_db():
 def create_sale(
     payload: SaleCreate,
     db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
     order_id = f"ORD-{uuid.uuid4().hex[:10]}"
     sale_items = []
@@ -39,14 +39,17 @@ def create_sale(
 
         product = db.query(Product).filter(
             Product.id == item.product_id,
-            Product.business_id == user["business_id"]   # 🔥 IMPORTANT
+            Product.business_id == user["business_id"]
         ).first()
 
         if not product:
             raise HTTPException(404, "Product not found")
 
         if product.stock < item.quantity:
-            raise HTTPException(400, f"Insufficient stock for {product.name}")
+            raise HTTPException(
+                400,
+                f"Insufficient stock for {product.name}"
+            )
 
         product.stock -= item.quantity
 
@@ -56,21 +59,25 @@ def create_sale(
             "price": item.price,
             "quantity": item.quantity
         })
-        if product.stock <= 5:
-         notification = Notification(
-        business_id=user["business_id"],
-        title="Low Stock Alert",
-        message=f"{product.name} remaining stock: {product.stock}",
-        type="lowStock"
-    )
 
-    db.add(notification)
+        # Low stock notification
+        if product.stock <= 5:
+            db.add(
+                Notification(
+                    business_id=user["business_id"],
+                    title="Low Stock Alert",
+                    message=f"{product.name} remaining stock: {product.stock}",
+                    type="lowStock"
+                )
+            )
 
     balance = payload.total - payload.amountPaid
 
     status = (
-        "PAID" if balance <= 0
-        else "PARTIAL" if payload.amountPaid > 0
+        "PAID"
+        if balance <= 0
+        else "PARTIAL"
+        if payload.amountPaid > 0
         else "DEBT"
     )
 
@@ -94,24 +101,27 @@ def create_sale(
         paymentMethod=payload.paymentMethod,
         payments=payments,
         status=status,
-
-        # 🔥 OWNERSHIP
         business_id=user["business_id"],
         created_by=user["id"],
         created_by_name=user.get("name")
     )
+
     db.add(sale)
-    notification = Notification(
-                business_id=user["business_id"],
-                title="New Sale",
-                message=f"Sale {order_id} created",
-                type="sale"
-            )
-    db.add(notification)
+
+    db.add(
+        Notification(
+            business_id=user["business_id"],
+            title="New Sale",
+            message=f"Sale {order_id} created",
+            type="sale"
+        )
+    )
 
     db.commit()
     db.refresh(sale)
+
     return sale
+
 @router.get("/")
 def get_sales(
                 db: Session = Depends(get_db),
