@@ -61,17 +61,44 @@ if (showStaffManagement) {
   </button>
 </div>
 
-<SupportSettings
-  expanded={expanded}
-  toggleSection={toggleSection}
-/>
-      <button
-  onClick={handleLogout}
-  className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 text-white rounded-xl"
->
-  <LogOut size={18} />
-  Logout
-</button>
+<div className="bg-white dark:bg-slate-800 rounded-xl border">
+  <button
+    onClick={() => setExpanded(expanded === "export" ? null : "export")}
+    className="w-full flex justify-between p-4"
+  >
+    <span>Export & Reports</span>
+    <span>{expanded === "export" ? "−" : "+"}</span>
+  </button>
+
+  {expanded === "export" && (
+    <div className="border-t p-4 space-y-3">
+
+      <button className="w-full py-2 bg-blue-600 text-white rounded">
+        Export Products (CSV)
+      </button>
+
+      <button className="w-full py-2 bg-blue-600 text-white rounded">
+        Export Products (PDF)
+      </button>
+
+      <button className="w-full py-2 bg-green-600 text-white rounded">
+        Export Sales (CSV)
+      </button>
+
+      <button className="w-full py-2 bg-green-600 text-white rounded">
+        Export Sales (PDF)
+      </button>
+
+      <button className="w-full py-2 bg-purple-600 text-white rounded">
+        Export Customers
+      </button>
+
+      <button className="w-full py-2 bg-orange-600 text-white rounded">
+        Dashboard Summary (PDF)
+      </button>
+
     </div>
+  )}
+</div>    </div>
   );
 }
