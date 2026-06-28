@@ -10,6 +10,9 @@ from app.schemas.sale import SaleCreate
 from app.models.notification import Notification
 import uuid
 from app.auth.dependencies import get_current_user
+from app.websocket_manager import manager
+
+
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"]
@@ -135,57 +138,66 @@ def get_sales(
                 )
 
 @router.patch("/{sale_id}/payment")
-def add_payment(
-                sale_id: int,
-                payment: dict,
-                db: Session = Depends(get_db),
-                user = Depends(get_current_user)
-            ):
-                sale = (
-                    db.query(Sale)
-                    .filter(
-                        Sale.id == sale_id,
-                        Sale.business_id == user["business_id"]   # 🔥 IMPORTANT
-                    )
-                    .first()
-                )
+async def add_payment(
+    sale_id: int,
+    payment: dict,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    sale = (
+        db.query(Sale)
+        .filter(
+            Sale.id == sale_id,
+            Sale.business_id == user["business_id"]
+        )
+        .first()
+    )
 
-                if not sale:
-                    raise HTTPException(404, "Sale not found")
+    if not sale:
+        raise HTTPException(404, "Sale not found")
 
-                payments = sale.payments or []
+    payments = sale.payments or []
 
-                payments.append({
-                    "amount": payment["amount"],
-                    "date": datetime.utcnow().isoformat(),
-                    "method": payment.get("method", "Cash"),
+    payments.append({
+        "amount": payment["amount"],
+        "date": datetime.utcnow().isoformat(),
+        "method": payment.get("method", "Cash"),
+        "added_by": user["id"],
+        "added_by_name": user.get("name")
+    })
 
-                    # 🔥 AUDIT INFO
-                    "added_by": user["id"],
-                    "added_by_name": user.get("name")
-                })
+    total_paid = sum(p["amount"] for p in payments)
 
-                total_paid = sum(p["amount"] for p in payments)
+    sale.payments = payments
+    sale.amountPaid = total_paid
+    sale.balance = sale.total - total_paid
 
-                sale.payments = payments
-                sale.amountPaid = total_paid
-                sale.balance = sale.total - total_paid
+    if sale.balance <= 0:
+        sale.balance = 0
+        sale.status = "PAID"
+    else:
+        sale.status = "DEBT"
 
-                if sale.balance <= 0:
-                    sale.balance = 0
-                    sale.status = "PAID"
-                else:
-                    sale.status = "DEBT"
+    # Create notification
+    notification = Notification(
+        business_id=user["business_id"],
+        title="Payment Received",
+        message=f"₦{payment['amount']} received",
+        type="payment"
+    )
 
-                notification = Notification(
-                business_id=user["business_id"],
-                title="Payment Received",
-                message=f"₦{payment['amount']} received",
-                type="payment"
-            )
-                db.add(notification)
+    db.add(notification)
+    db.flush()
 
-                db.commit()
-                db.refresh(sale)
+    await manager.broadcast({
+        "id": notification.id,
+        "title": notification.title,
+        "message": notification.message,
+        "type": notification.type,
+        "read": False
+    })
 
-                return sale
+    db.commit()
+    db.refresh(sale)
+
+    return sale

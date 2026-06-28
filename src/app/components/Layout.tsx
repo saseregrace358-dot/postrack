@@ -38,6 +38,40 @@ useEffect(() => {
   loadNotifications();
 }, []);
 
+useEffect(() => {
+  const WS_URL =
+    import.meta.env.VITE_API_URL.replace("https://", "wss://")
+      .replace("http://", "ws://") + "/ws/notifications";
+
+  const socket = new WebSocket(WS_URL);
+
+  socket.onopen = () => {
+    console.log("✅ Connected to notifications");
+  };
+
+  socket.onmessage = (event) => {
+    const notification = JSON.parse(event.data);
+
+    setNotifications((prev: any[]) => [
+      notification,
+      ...prev,
+    ]);
+
+    if (settings.soundAlerts) {
+      playNotificationSound();
+    }
+  };
+
+  socket.onerror = (err) => {
+    console.log("WebSocket error:", err);
+  };
+
+  socket.onclose = () => {
+    console.log("Disconnected");
+  };
+
+  return () => socket.close();
+}, [settings.soundAlerts]);
 
 const sendMessage = async () => {
   if (!message.trim()) return;
