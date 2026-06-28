@@ -228,12 +228,13 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
       </div>
       
 
-      {notifications.length === 0 ? (
+      {filteredNotifications.length === 0 ? (
         <div className="p-4 text-center text-gray-500">
           No notifications
         </div>
       ) : (
         filteredNotifications.map((notification: any) => (
+
      <div
       key={notification.id}
       onClick={() => markRead(notification.id)}
