@@ -52,7 +52,13 @@ export function Dashboard() {
   const [weekDate, setWeekDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
-
+const selectedSales = useMemo(() => {
+  return sales.filter((sale) => {
+    return (
+      new Date(sale.date).toISOString().slice(0, 10) === weekDate
+    );
+  });
+}, [sales, weekDate]);
   useEffect(() => {
     load();
   }, []);
@@ -87,26 +93,28 @@ export function Dashboard() {
   }, [sales, weekStart, weekEnd]);
 
   // ================= CORE METRICS =================
-  const totalRevenue = sales.reduce((a, s) => a + (s.total || 0), 0);
+  const totalRevenue = selectedSales.reduce(
+  (sum, sale) => sum + (sale.total || 0),
+  0
+);
 
-  const todaySales = sales
-    .filter((s) => {
-      const d = new Date(s.date).toISOString().slice(0, 10);
-      return d === new Date().toISOString().slice(0, 10);
-    })
-    .reduce((a, s) => a + s.total, 0);
-
-    const profit = sales.reduce((a, s) => {
-    const cost = s.items?.reduce(
-      (sum, i) => sum + i.price * i.quantity * 0.7,
+  const todaySales = totalRevenue;
+   const profit = selectedSales.reduce((sum, sale) => {
+  const cost =
+    sale.items?.reduce(
+      (c, item) => c + item.price * item.quantity * 0.7,
       0
-    );
-    return a + ((s.total || 0) - (cost || 0));
-  }, 0);
+    ) || 0;
 
-  const totalOrders = sales.length;
-const aov = totalOrders ? totalRevenue / totalOrders : 0;
+  return sum + (sale.total - cost);
+}, 0);
 
+  const totalOrders = selectedSales.length;
+const aov =
+  totalOrders > 0
+    ? totalRevenue / totalOrders
+    : 0;
+    
   // ================= WEEKLY CHART =================
   const weeklyData = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

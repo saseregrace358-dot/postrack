@@ -73,21 +73,28 @@ def create_product(
 def update_product(
     product_id: int,
     updated: ProductUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
 ):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = (
+        db.query(Product)
+        .filter(
+            Product.id == product_id,
+            Product.business_id == user["business_id"]
+        )
+        .first()
+    )
 
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(404, detail="Product not found")
 
-    for key, value in updated.dict(exclude_unset=True).items():
+    for key, value in updated.model_dump(exclude_unset=True).items():
         setattr(product, key, value)
 
     db.commit()
     db.refresh(product)
 
     return product
-
 
 # =========================
 # DELETE PRODUCT
@@ -105,10 +112,10 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     return {"message": "Product deleted successfully"}
 
 # ✅ PATCH endpoint
-@router.patch("/{product_id}/stock")
-def update_stock(
+@router.put("/{product_id}", response_model=ProductOut)
+def update_product(
     product_id: int,
-    payload: StockUpdate,
+    updated: ProductUpdate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -122,9 +129,10 @@ def update_stock(
     )
 
     if not product:
-        raise HTTPException(404, "Product not found")
+        raise HTTPException(404, detail="Product not found")
 
-    product.stock = payload.stock
+    for key, value in updated.model_dump(exclude_unset=True).items():
+        setattr(product, key, value)
 
     db.commit()
     db.refresh(product)

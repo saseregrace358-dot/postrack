@@ -197,19 +197,22 @@ imageUrl = data.publicUrl;
   if (!editProduct) return;
 
   try {
-   const payload = {
-  name: editProduct.name,
-  cost: Number(editProduct.cost),
-  price: Number(editProduct.price),
-  category: editProduct.category,
-  stock: Number(editProduct.stock),
-  image: editProduct.image,
-  barcode: editProduct.barcode,
-};
-await updateProductApi(editProduct.id, payload);
-    
+    await updateProductApi(editProduct.id, {
+      name: editProduct.name,
+      cost: Number(editProduct.cost),
+      price: Number(editProduct.price),
+      category: editProduct.category,
+      stock: Number(editProduct.stock),
+      image: editProduct.image,
+      barcode: editProduct.barcode,
+    });
+
+    // Reload products
+    const res = await getProducts();
+    setProducts(res.data);
+
     setEditProduct(null);
-    setShowEditModal(false); // close modal
+    setShowEditModal(false);
   } catch (err) {
     console.error(err);
   }
@@ -395,17 +398,7 @@ if (loading) {
 
       {/* Barcode Section */}
       <div className="flex flex-col items-center justify-center">
-        <div className="border rounded-lg p-3 bg-white">
-          <img
-            src={`https://barcode.tec-it.com/barcode.ashx?data=${product.barcode || product.id}&code=Code128`}
-            alt="barcode"
-            className="h-16"
-          />
-        </div>
-
-        <p className="mt-2 text-xs text-gray-500">
-          {product.barcode || product.id}
-        </p>
+        
 
         <button
           onClick={() => {
