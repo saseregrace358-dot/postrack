@@ -21,6 +21,10 @@ export function Layout() {
 const [message, setMessage] = useState("");
 const [messages, setMessages] = useState<any[]>([]);
 const previousNotificationCount = useRef(0);
+const [showNotifications, setShowNotifications] =
+  useState(false);
+
+
 const { notifications, setNotifications, settings } =
   useNotifications();
 
@@ -72,6 +76,30 @@ useEffect(() => {
 
   return () => socket.close();
 }, [settings.soundAlerts]);
+
+const notificationRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      notificationRef.current &&
+      !notificationRef.current.contains(event.target as Node)
+    ) {
+      setShowNotifications(false);
+    }
+  };
+
+  if (showNotifications) {
+    document.addEventListener("mousedown", handleClickOutside);
+  }
+
+  return () => {
+    document.removeEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+  };
+}, [showNotifications]);
 
 const sendMessage = async () => {
   if (!message.trim()) return;
@@ -129,9 +157,6 @@ const markRead = async (id: number) => {
     console.log(err);
   }
 };
-const [showNotifications, setShowNotifications] =
-  useState(false);
-
 
 
 const filteredNotifications = notifications.filter((n: any) => {
@@ -208,8 +233,11 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 
         {/* Right Side Icons */}
         <div className="flex items-center gap-3">
-
-          <div className="relative">
+<div
+  ref={notificationRef}
+  className="relative"
+>
+          
 
   <button
     onClick={() =>
@@ -243,24 +271,42 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 
   {showNotifications && (
     <div
-      className="
-      absolute
-      right-0
-      top-12
-      w-80
-      bg-white
-      dark:bg-slate-900
-      border
-      rounded-xl
-      shadow-xl
-      z-50
-      overflow-hidden
-    "
-    >
-      <div className="p-3 border-b font-semibold">
-        Notifications
-      </div>
-      
+  className="
+    fixed
+    inset-0
+    md:absolute
+    md:top-12
+    md:right-0
+    md:inset-auto
+
+    w-full
+    h-full
+    md:w-80
+    md:h-auto
+
+    bg-white
+    dark:bg-slate-900
+
+    md:rounded-xl
+
+    border
+    shadow-xl
+    z-50
+    overflow-y-auto
+  "
+>
+      <div className="flex items-center justify-between p-4 border-b">
+  <h2 className="font-semibold text-lg">
+    Notifications
+  </h2>
+
+  <button
+    onClick={() => setShowNotifications(false)}
+    className="md:hidden text-2xl"
+  >
+    ✕
+  </button>
+</div>
 
       {filteredNotifications.length === 0 ? (
         <div className="p-4 text-center text-gray-500">
@@ -295,8 +341,11 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
   )}
 
 </div>
-
-          <div className="relative">
+<div
+  ref={notificationRef}
+  className="relative"
+>
+          
 
   
 
