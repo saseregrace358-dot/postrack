@@ -50,7 +50,7 @@ document.body.style.overflow = isOpen ? "hidden" : "auto";
 useEffect(() => {
 if (editingEmployee) {
 setName(editingEmployee.name || "");
-setPassword(editingEmployee.password || "");
+setPassword("");
 setPermissions(editingEmployee.permissions || []);
 }
 }, [editingEmployee]);
@@ -75,12 +75,15 @@ e: React.FormEvent<HTMLFormElement>
 e.preventDefault();
 
 
-const employeeData: Employee = {
+const employeeData: any = {
   id: editingEmployee?.id,
   name,
-  password,
   permissions,
 };
+
+if (password.trim() !== "") {
+  employeeData.password = password;
+}
 
 if (isEdit) {
   onUpdateEmployee(employeeData);

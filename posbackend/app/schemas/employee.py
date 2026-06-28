@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class EmployeeCreate(BaseModel):
     name: str
@@ -8,9 +8,9 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeUpdate(BaseModel):
     name: str
-    password: str
+    password: Optional[str] = None
     permissions: List[str]
-
+   
 class EmployeeResponse(BaseModel):
     id: int
     name: str

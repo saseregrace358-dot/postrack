@@ -184,7 +184,7 @@ const handleForgotPassword = async () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Enter your name"
-                    className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg placeholder:text-gray-500 text-gray-900"
                     required={!isLogin}
                   />
                 </div>
@@ -207,7 +207,7 @@ const handleForgotPassword = async () => {
                     })
                   }
                   placeholder="Enter email or staff name"
-                  className="w-full pl-4 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg placeholder:text-gray-500 text-gray-900"
                   required
                 />
                           
@@ -224,7 +224,7 @@ const handleForgotPassword = async () => {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Enter your password"
-                  className="w-full pl-11 pr-12 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg placeholder:text-gray-500 text-gray-900"
                   required
                 />
                 <button
@@ -255,7 +255,7 @@ const handleForgotPassword = async () => {
           setFormData({ ...formData, business_name: e.target.value })
         }
         placeholder="e.g Seun Store"
-        className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg placeholder:text-gray-500 text-gray-900"
         required
       />
     </div>
