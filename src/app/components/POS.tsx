@@ -2,7 +2,7 @@ import { useState, useEffect} from "react";
 import { Search, Plus, Minus, Trash2, ShoppingCart, X } from "lucide-react";
 import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
- 
+ import toast from "react-hot-toast";
 /* ✅ MOVE TYPES TO TOP (IMPORTANT FIX) */
 type Product = {
   id: number;
@@ -111,58 +111,61 @@ const [taxEnabled, setTaxEnabled] = useState(false);
   const handleCheckout = () => setShowCheckout(true);
 
   const completeCheckout = async (paymentMethod: string) => {
-  const balance = paidAmount - total;
+  const loading = toast.loading("Processing payment...");
 
-  const sale = {
-    id: `ORD${Date.now()}`,
-    date: new Date().toISOString(),
-    items: cart,
-    subtotal,
-    tax,
-    total,
-    amountPaid,
-    balance,
-    paymentMethod,
-    status: balance <= 0 ? "PAID" : "DEBT",
-    };
+  try {
+    const saleRes = await createSaleApi({
+      items: cart.map((item) => ({
+        product_id: item.id,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      subtotal,
+      tax,
+      total,
+      amountPaid: paidAmount,
+      balance,
+      paymentMethod,
+    });
 
-  const sales = JSON.parse(localStorage.getItem("sales") || "[]");
-  sales.unshift(sale);
-  
-  // ✅ UPDATE STOCK IN BACKEND
-  
- 
-const saleRes = await createSaleApi({
-  items: cart.map(item => ({
-    product_id: item.id,
-    quantity: item.quantity,
-    price: item.price,
-  })),
-  subtotal,
-  tax,
-  total,
-  amountPaid: paidAmount,
-  balance,
-  paymentMethod,
-});
- 
-  // refresh products
-  const res = await getProducts();
-  setProducts(res.data);
+    toast.dismiss(loading);
 
-  setCart([]);
-  setAmountPaid("");
-  setShowCheckout(false);
-  setShowCart(false);
+    const createdSale = saleRes.data;
 
- 
-const createdSale = saleRes.data;
+    // Refresh products
+    const res = await getProducts();
+    setProducts(res.data);
 
-alert(
-  createdSale.status === "PAID"
-    ? `Payment successful! Order #${createdSale.order_id}`
-    : `DEBT recorded! Owes ₦${Math.abs(createdSale.balance).toLocaleString()}`
-);
+    // Clear cart
+    setCart([]);
+    setAmountPaid("");
+    setShowCheckout(false);
+    setShowCart(false);
+
+    if (createdSale.status === "PAID") {
+      toast.success(
+        `Payment Successful!\nOrder #${createdSale.order_id}`
+      );
+    } else {
+      toast(
+        `Debt Recorded\nCustomer owes ₦${createdSale.balance.toLocaleString()}`,
+        {
+          icon: "⚠️",
+        }
+      );
+    }
+  } catch (err: any) {
+    toast.dismiss(loading);
+
+    if (
+      err.response?.data?.detail?.includes("Insufficient stock")
+    ) {
+      toast.error("Out of Stock");
+      return;
+    }
+
+    toast.error("Payment Failed");
+  }
 };
    return (
     <div className="space-y-4 pb-4">

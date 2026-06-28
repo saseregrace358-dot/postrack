@@ -6,7 +6,7 @@ import { Auth } from "./components/Auth";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AuthContext } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
-
+import { Toaster } from "react-hot-toast";
 
   
 export default function App() {
@@ -37,11 +37,39 @@ useEffect(() => {
 
   return (
     <AuthContext.Provider value={{ handleLogout }}>
-    <ThemeProvider>
-      <NotificationProvider>
-      <RouterProvider router={router} />
-     </NotificationProvider>
-    </ThemeProvider>
-  </AuthContext.Provider>
-);
+      <ThemeProvider>
+        <NotificationProvider>
+
+          {/* ADD THIS */}
+          <Toaster
+            position="top-center"
+            reverseOrder={false}
+            toastOptions={{
+              duration: 2500,
+              style: {
+                borderRadius: "12px",
+                padding: "16px",
+                fontSize: "15px",
+              },
+              success: {
+                style: {
+                  background: "#16a34a",
+                  color: "#fff",
+                },
+              },
+              error: {
+                style: {
+                  background: "#dc2626",
+                  color: "#fff",
+                },
+              },
+            }}
+          />
+
+          <RouterProvider router={router} />
+
+        </NotificationProvider>
+      </ThemeProvider>
+    </AuthContext.Provider>
+  );
 }
