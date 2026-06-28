@@ -106,13 +106,26 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 # ✅ PATCH endpoint
 @router.patch("/{product_id}/stock")
-def update_stock(product_id: int, payload: StockUpdate, db: Session = Depends(get_db)):
-    product = db.query(Product).filter(Product.id == product_id).first()
+def update_stock(
+    product_id: int,
+    payload: StockUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    product = (
+        db.query(Product)
+        .filter(
+            Product.id == product_id,
+            Product.business_id == user["business_id"]
+        )
+        .first()
+    )
 
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(404, "Product not found")
 
     product.stock = payload.stock
+
     db.commit()
     db.refresh(product)
 
