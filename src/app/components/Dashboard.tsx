@@ -52,22 +52,31 @@ export function Dashboard() {
   const [weekDate, setWeekDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
-const selectedSales = useMemo(() => {
-  return sales.filter((sale) => {
-    return (
-      new Date(sale.date).toISOString().slice(0, 10) === weekDate
-    );
-  });
+const selectedDate = new Date(weekDate);
+selectedDate.setHours(23, 59, 59, 999);
+
+const salesUntilDate = useMemo(() => {
+  return sales.filter(
+    (sale) => new Date(sale.date) <= selectedDate
+  );
 }, [sales, weekDate]);
-  useEffect(() => {
-    load();
-  }, []);
+
+const selectedSales = useMemo(() => {
+  return sales.filter(
+    (sale) =>
+      new Date(sale.date).toISOString().slice(0, 10) === weekDate
+  );
+}, [sales, weekDate]);
 
   const load = async () => {
     const [s, p] = await Promise.all([getSalesApi(), getProductsApi()]);
     setSales(s.data);
     setProducts(p.data);
   };
+  // Call load() once when the component mounts
+useEffect(() => {
+  load();
+}, []);
   
   // ================= WEEK HELPERS =================
   const { weekStart, weekEnd } = useMemo(() => {
@@ -93,13 +102,16 @@ const selectedSales = useMemo(() => {
   }, [sales, weekStart, weekEnd]);
 
   // ================= CORE METRICS =================
-  const totalRevenue = selectedSales.reduce(
+ const totalRevenue = salesUntilDate.reduce(
   (sum, sale) => sum + (sale.total || 0),
   0
 );
 
-  const todaySales = totalRevenue;
-   const profit = selectedSales.reduce((sum, sale) => {
+  const daySales = selectedSales.reduce(
+  (sum, sale) => sum + (sale.total || 0),
+  0
+);
+   const profit = salesUntilDate.reduce((sum, sale) => {
   const cost =
     sale.items?.reduce(
       (c, item) => c + item.price * item.quantity * 0.7,
@@ -109,12 +121,13 @@ const selectedSales = useMemo(() => {
   return sum + (sale.total - cost);
 }, 0);
 
-  const totalOrders = selectedSales.length;
+  
+const totalOrders = salesUntilDate.length;
+
 const aov =
   totalOrders > 0
     ? totalRevenue / totalOrders
-    : 0;
-    
+    : 0;    
   // ================= WEEKLY CHART =================
   const weeklyData = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -244,7 +257,7 @@ const busyDay =
       {/* METRICS GRID */}
      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
-        <Metric title="Today Sales" value={`₦${todaySales.toLocaleString()}`} icon={Activity} />
+        <Metric title="Today Sales" value={`₦${daySales.toLocaleString()}`} icon={Activity} />
         <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
         <Metric
           title="Average Order Value"
