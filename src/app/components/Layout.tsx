@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router";
-import { useState, useEffect} from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
   Package,
@@ -14,14 +14,25 @@ import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import { markNotificationReadApi, getNotificationsApi } from "../../api/notifications";
 import { askAiApi } from "../../api/ai";
+import { playNotificationSound } from "../utils/notificationSound";
 export function Layout() {
   
   const [showAiModal, setShowAiModal] = useState(false);
 const [message, setMessage] = useState("");
 const [messages, setMessages] = useState<any[]>([]);
-
+const previousNotificationCount = useRef(0);
 const { notifications, setNotifications, settings } =
   useNotifications();
+
+useEffect(() => {
+  if (!settings.soundAlerts) return;
+
+  if (notifications.length > previousNotificationCount.current) {
+    playNotificationSound();
+  }
+
+  previousNotificationCount.current = notifications.length;
+}, [notifications, settings.soundAlerts]);
 
 useEffect(() => {
   loadNotifications();
@@ -88,34 +99,36 @@ const [showNotifications, setShowNotifications] =
   useState(false);
 
 
-const unreadCount = notifications.filter(
+
+const filteredNotifications = notifications.filter((n: any) => {
+  if (settings.hideNotifications) return false;
+
+  // Only allow these notification types
+  const allowedTypes = [
+    "debt",
+    "lowStock",
+    "export",
+    "update",
+  ];
+
+  if (!allowedTypes.includes(n.type)) {
+    return false;
+  }
+
+  if (n.type === "lowStock" && !settings.lowStockAlerts) {
+    return false;
+  }
+
+  if (n.type === "debt" && !settings.debtReminders) {
+    return false;
+  }
+
+  return true;
+});
+
+const unreadCount = filteredNotifications.filter(
   (n: any) => !n.read
 ).length;
-
-const filteredNotifications =
-  notifications.filter((n: any) => {
-    if (settings.hideNotifications) return false;
-
-    if (
-      n.type === "lowStock" &&
-      !settings.lowStockAlerts
-    )
-      return false;
-
-    if (
-      n.type === "payment" &&
-      !settings.paymentAlerts
-    )
-      return false;
-
-    if (
-      n.type === "debt" &&
-      !settings.debtReminders
-    )
-      return false;
-
-    return true;
-  });
 
 const user = JSON.parse(localStorage.getItem("user") || "{}");
 console.log("USER:", user);
