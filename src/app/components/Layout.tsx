@@ -12,19 +12,25 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
-import { markNotificationReadApi, getNotificationsApi } from "../../api/notifications";
+import { markNotificationReadApi, getNewNotificationsApi, getAllNotificationsApi } from "../../api/notifications";
 import { askAiApi } from "../../api/ai";
 import { playNotificationSound } from "../utils/notificationSound";
+
 export function Layout() {
-  
-  const [showAiModal, setShowAiModal] = useState(false);
+const [showAllNotifications, setShowAllNotifications] = useState(false);
+const [allNotifications, setAllNotifications] = useState<any[]>([]);
+const [showAiModal, setShowAiModal] = useState(false);
 const [message, setMessage] = useState("");
 const [messages, setMessages] = useState<any[]>([]);
 const previousNotificationCount = useRef(0);
+const profileRef = useRef<HTMLDivElement>(null);
+const notificationRef = useRef<HTMLDivElement>(null);
+const [showProfileMenu, setShowProfileMenu] = useState(false);
+
 const [showNotifications, setShowNotifications] =
   useState(false);
 
-
+  
 const { notifications, setNotifications, settings } =
   useNotifications();
 
@@ -37,6 +43,8 @@ useEffect(() => {
 
   previousNotificationCount.current = notifications.length;
 }, [notifications, settings.soundAlerts]);
+
+
 
 useEffect(() => {
   loadNotifications();
@@ -53,18 +61,13 @@ useEffect(() => {
     console.log("✅ Connected to notifications");
   };
 
-  socket.onmessage = (event) => {
-    const notification = JSON.parse(event.data);
+  socket.onmessage = async () => {
+  await loadNotifications();
 
-    setNotifications((prev: any[]) => [
-      notification,
-      ...prev,
-    ]);
-
-    if (settings.soundAlerts) {
-      playNotificationSound();
-    }
-  };
+  if (settings.soundAlerts) {
+    playNotificationSound();
+  }
+};
 
   socket.onerror = (err) => {
     console.log("WebSocket error:", err);
@@ -77,29 +80,25 @@ useEffect(() => {
   return () => socket.close();
 }, [settings.soundAlerts]);
 
-const notificationRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
   const handleClickOutside = (event: MouseEvent) => {
     if (
-      notificationRef.current &&
-      !notificationRef.current.contains(event.target as Node)
+      profileRef.current &&
+      !profileRef.current.contains(event.target as Node)
     ) {
-      setShowNotifications(false);
+      setShowProfileMenu(false);
     }
   };
 
-  if (showNotifications) {
+  if (showProfileMenu) {
     document.addEventListener("mousedown", handleClickOutside);
   }
 
   return () => {
-    document.removeEventListener(
-      "mousedown",
-      handleClickOutside
-    );
+    document.removeEventListener("mousedown", handleClickOutside);
   };
-}, [showNotifications]);
+}, [showProfileMenu]);
 
 const sendMessage = async () => {
   if (!message.trim()) return;
@@ -139,25 +138,35 @@ const sendMessage = async () => {
 };
 const loadNotifications = async () => {
   try {
-    const res = await getNotificationsApi();
-
-    console.log("NOTIFICATIONS:", res.data);
+    const res = await getNewNotificationsApi();
 
     setNotifications(res.data);
-  } catch (err) {
-    console.log("NOTIFICATION ERROR:", err);
-  }
-};
-const markRead = async (id: number) => {
-  try {
-    await markNotificationReadApi(id);
-
-    await loadNotifications();
   } catch (err) {
     console.log(err);
   }
 };
 
+const loadAllNotifications = async () => {
+  try {
+    const res = await getAllNotificationsApi();
+    setAllNotifications(res.data);
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const markRead = async (id: number) => {
+  try {
+    await markNotificationReadApi(id);
+
+    await Promise.all([
+      loadNotifications(),
+      loadAllNotifications(),
+    ]);
+  } catch (err) {
+    console.log(err);
+  }
+};
 
 const filteredNotifications = notifications.filter((n: any) => {
   if (settings.hideNotifications) return false;
@@ -201,7 +210,6 @@ user.permissions || [];
 const canView = (permission: string) =>
 isOwner || permissions.includes(permission);
 
-const [showProfileMenu, setShowProfileMenu] = useState(false);
 
 const initials = user?.name
   ? user.name
@@ -309,45 +317,105 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 </div>
 
       {filteredNotifications.length === 0 ? (
-        <div className="p-4 text-center text-gray-500">
-          No notifications
-        </div>
-      ) : (
-        filteredNotifications.map((notification: any) => (
-
-     <div
+  <div className="p-6 text-center text-slate-500">
+    No new notifications
+  </div>
+) : (
+  filteredNotifications.map((notification: any) => (
+    <div
       key={notification.id}
       onClick={() => markRead(notification.id)}
-      className={`
-        p-4 border-b cursor-pointer
-        hover:bg-slate-50 dark:hover:bg-slate-800
-        ${!notification.read ? "bg-blue-50 dark:bg-slate-800" : ""}
-      `}
+      className={`p-4 border-b cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 ${
+        !notification.read
+          ? "bg-blue-50 dark:bg-slate-800"
+          : ""
+      }`}
     >
-          <h4 className="font-medium">
-            {notification.title}
-          </h4>
+      <h4 className="font-medium">
+        {notification.title}
+      </h4>
 
-          <p className="text-sm text-gray-500">
-            {notification.message}
-          </p>
+      <p className="text-sm text-slate-500">
+        {notification.message}
+      </p>
+    </div>
+  ))
+)}
 
-          
-        </div>
+<div className="p-4 border-t sticky bottom-0 bg-white dark:bg-slate-900">
+  <button
+  onClick={async () => {
+    await loadAllNotifications();
+    setShowNotifications(false);
+    setShowAllNotifications(true);
+  }}
+  className="w-full py-2 rounded-lg bg-blue-600 text-white"
+>
+  All Notifications
+</button>
 
-        ))
-      )}
+</div>
+
+      
     </div>
   )}
 
 </div>
-<div
-  ref={notificationRef}
-  className="relative"
->
-          
 
-  
+{showAllNotifications && (
+  <div className="fixed inset-0 bg-black/40 z-[120] flex justify-center items-center">
+
+    <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+
+      <div className="flex justify-between items-center p-4 border-b">
+        <h2 className="font-semibold text-lg">
+          All Notifications
+        </h2>
+
+        <button
+          onClick={() => setShowAllNotifications(false)}
+          className="text-xl"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="overflow-y-auto max-h-[65vh]">
+
+        {allNotifications.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            No notifications found
+          </div>
+        ) : (
+          allNotifications.map((notification: any) => (
+            <div
+              key={notification.id}
+              className="border-b p-4"
+            >
+              <div className="font-semibold">
+                {notification.title}
+              </div>
+
+              <div className="text-sm text-slate-500">
+                {notification.message}
+              </div>
+
+              <div className="text-xs mt-2 text-slate-400">
+                {new Date(notification.created_at).toLocaleString()}
+              </div>
+            </div>
+          ))
+        )}
+
+      </div>
+
+    </div>
+
+  </div>
+)}
+
+<div ref={profileRef} className="relative">
+
 
 <button
 onClick={() => setShowProfileMenu(!showProfileMenu)}
