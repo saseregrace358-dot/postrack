@@ -17,7 +17,7 @@ export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
- 
+ const [showForgotModal, setShowForgotModal] = useState(false);
   const [formData, setFormData] = useState({
   name: "",
   email: "",
@@ -133,7 +133,7 @@ const [resetEmail, setResetEmail] = useState("");
 const [sendingReset, setSendingReset] = useState(false);
 
 const handleForgotPassword = async () => {
-  if (!resetEmail) {
+  if (!resetEmail.trim()) {
     toast.error("Enter your email");
     return;
   }
@@ -144,10 +144,12 @@ const handleForgotPassword = async () => {
     await forgotPassword(resetEmail);
 
     toast.success(
-      "A password reset link has been sent to your email."
+      "Password reset link has been sent to your email."
     );
 
+    setShowForgotModal(false);
     setResetEmail("");
+
   } catch (err: any) {
     toast.error(
       err.response?.data?.detail ||
@@ -290,7 +292,7 @@ const handleForgotPassword = async () => {
                 </label>
                 <button
                 type="button"
-                onClick={handleForgotPassword}
+                onClick={() => setShowForgotModal(true)}
                 className="text-blue-600 hover:text-blue-700 font-medium"
               >
                 Forgot password?
@@ -345,10 +347,58 @@ const handleForgotPassword = async () => {
         {/* Demo credentials hint */}
         <div className="mt-4 text-center">
           <p className="text-xs text-slate-400">
-            Demo: Use any email and password to continue
+            Use any email and password to continue
           </p>
         </div>
       </motion.div>
+      {showForgotModal && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+
+    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
+
+      <h2 className="text-xl font-bold mb-2">
+        Reset Password
+      </h2>
+
+      <p className="text-gray-500 text-sm mb-5">
+        Enter the email associated with your account.
+      </p>
+
+      <input
+        type="email"
+        value={resetEmail}
+        onChange={(e) => setResetEmail(e.target.value)}
+        placeholder="Enter your email"
+        className="w-full border rounded-lg p-3 mb-5"
+      />
+
+      <div className="flex justify-end gap-3">
+
+        <button
+          onClick={() => {
+            setShowForgotModal(false);
+            setResetEmail("");
+          }}
+          disabled={sendingReset}
+          className="px-5 py-2 rounded-lg border"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handleForgotPassword}
+          disabled={sendingReset}
+          className="px-5 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
+        >
+          {sendingReset ? "Sending..." : "Send Reset Link"}
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
     </div>
   );
 }
