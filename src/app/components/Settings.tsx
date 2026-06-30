@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect} from "react";
 import { Moon, Sun, LogOut } from "lucide-react";
 
 import { useTheme } from "../context/ThemeContext";
 
 import { NotificationSettings } from "./settings/NotificationSettings";
 import StaffManagement from "./settings/StaffManagement";
-import { useAuth } from "../context/AuthContext";
 
 import {
   exportProductsCsv,
@@ -102,8 +101,23 @@ const handleExportDashboardPdf = async () => {
  const toggleSection = (section: string) => {
     setExpanded(expanded === section ? null : section);
   };
-const { handleLogout } = useAuth();
+
  const [showStaffManagement, setShowStaffManagement] = useState(false);
+useEffect(() => {
+  const loadSettings = async () => {
+    try {
+      const res = await getBusinessSettings();
+
+      setTaxEnabled(res.data.tax_enabled);
+      setTaxRate(String(res.data.tax_rate));
+      setDebtThreshold(String(res.data.debt_threshold));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  loadSettings();
+}, []);
 
 if (showStaffManagement) {
   return (
