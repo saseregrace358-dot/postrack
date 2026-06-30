@@ -169,11 +169,20 @@ async def forgot_password(
     user.reset_token = token
     db.commit()
 
-    await send_reset_email(user.email, token)
+    try:
+        await send_reset_email(user.email, token)
 
-    return {
-        "message": "Password reset email sent."
-    }
+        return {
+            "message": "Reset email sent."
+        }
+
+    except Exception as e:
+        print(e)   # Optional: log the real error
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send reset email."
+        )
 
 @router.post("/reset-password")
 def reset_password(
