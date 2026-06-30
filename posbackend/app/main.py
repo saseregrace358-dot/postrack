@@ -22,6 +22,7 @@ from app.database import engine, Base
 from app.routes.notification import router as notification_router
 from app.routes.websocket import router as websocket_router
 from app.routes.export import router as export_router
+from app.routes.settings import router as settings_router
 
 app.include_router(auth_router)
 app.include_router(product_routes.router)
@@ -31,6 +32,8 @@ app.include_router(ai.router)
 app.include_router(notification_router)
 app.include_router(websocket_router)
 app.include_router(export_router)
+app.include_router(settings_router)
+
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
