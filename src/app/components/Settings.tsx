@@ -24,10 +24,11 @@ export function Settings() {
   const [taxEnabled, setTaxEnabled] = useState(false);
 const [taxRate, setTaxRate] = useState("");
 const [debtThreshold, setDebtThreshold] = useState("");
+const [savingTax, setSavingTax] = useState(false);
+const [savingDebt, setSavingDebt] = useState(false);
 
-const toggleTax = () => {
-    setTaxEnabled(!taxEnabled);
-};  
+
+
   const downloadFile = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
 
@@ -45,6 +46,8 @@ const toggleTax = () => {
 
 const saveTaxSettings = async () => {
   try {
+    setSavingTax(true);
+
     await saveBusinessSettings(
       taxEnabled,
       Number(taxRate),
@@ -54,11 +57,15 @@ const saveTaxSettings = async () => {
     toast.success("Tax settings saved");
   } catch {
     toast.error("Failed to save tax settings");
+  } finally {
+    setSavingTax(false);
   }
 };
 
 const saveDebtThreshold = async () => {
   try {
+    setSavingDebt(true);
+
     await saveBusinessSettings(
       taxEnabled,
       Number(taxRate),
@@ -68,6 +75,8 @@ const saveDebtThreshold = async () => {
     toast.success("Debt threshold saved");
   } catch {
     toast.error("Failed to save debt threshold");
+  } finally {
+    setSavingDebt(false);
   }
 };
 
@@ -197,9 +206,10 @@ if (showStaffManagement) {
 
       <button
         onClick={saveTaxSettings}
-        className="w-full py-2 bg-blue-600 text-white rounded-lg"
+        disabled={savingTax}
+        className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:bg-blue-400 disabled:cursor-not-allowed"
       >
-        Save
+        {savingTax ? "Saving..." : "Save"}
       </button>
     </div>
   )}
@@ -231,11 +241,11 @@ if (showStaffManagement) {
 
       <button
         onClick={saveDebtThreshold}
-        className="w-full py-2 bg-red-600 text-white rounded-lg"
+        disabled={savingDebt}
+        className="w-full py-2 bg-red-600 text-white rounded-lg disabled:bg-red-400 disabled:cursor-not-allowed"
       >
-        Save
+        {savingDebt ? "Saving..." : "Save"}
       </button>
-
     </div>
   )}
 </div>
