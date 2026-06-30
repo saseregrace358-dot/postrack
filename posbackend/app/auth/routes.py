@@ -10,6 +10,8 @@ from app.models.user import User
 from app.utils.business_id import generate_business_id
 from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
+from app.utils.mail_sender import send_reset_email
+
 import secrets
 
 router = APIRouter(
@@ -148,7 +150,7 @@ def get_me(
     }
 
 @router.post("/forgot-password")
-def forgot_password(
+async def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db)
 ):
@@ -162,16 +164,15 @@ def forgot_password(
             detail="Email not found"
         )
 
-    reset_token = secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(32)
 
-    # Save token to DB
-    user.reset_token = reset_token
-
+    user.reset_token = token
     db.commit()
 
+    await send_reset_email(user.email, token)
+
     return {
-        "message": "Password reset link generated",
-        "token": reset_token
+        "message": "Password reset email sent."
     }
 
 @router.post("/reset-password")
@@ -179,6 +180,7 @@ def reset_password(
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
+
     user = db.query(User).filter(
         User.reset_token == payload.token
     ).first()
@@ -186,17 +188,17 @@ def reset_password(
     if not user:
         raise HTTPException(
             status_code=400,
-            detail="Invalid token"
+            detail="Invalid or expired token"
         )
 
-    user.password = hash_password(payload.new_password)
+    user.password = hash_password(
+        payload.new_password
+    )
 
     user.reset_token = None
 
     db.commit()
 
     return {
-        "message": "Password updated successfully"
+        "message":"Password successfully updated"
     }
-
-

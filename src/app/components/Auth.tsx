@@ -5,11 +5,14 @@ import { Mail, Lock, User, Eye, EyeOff, Store } from "lucide-react";
 import {
    forgotPassword,
 } from "../../api/auth";
+import toast from "react-hot-toast";
 
 interface AuthProps {
   onLogin: (token: string) => void;
 }
 import { employeeLogin } from "../../api/employee";
+
+
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -54,6 +57,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
         onLogin(res.data.access_token);
       } catch {
+
         const employeeRes = await employeeLogin({
           name: formData.email,
           password: formData.password,
@@ -125,25 +129,34 @@ localStorage.setItem("role", "employee");
     setLoading(false);
   }
 };
+const [resetEmail, setResetEmail] = useState("");
+const [sendingReset, setSendingReset] = useState(false);
+
 const handleForgotPassword = async () => {
-  if (!formData.email) {
-    alert("Enter your email first");
+  if (!resetEmail) {
+    toast.error("Enter your email");
     return;
   }
 
   try {
-    const res = await forgotPassword(formData.email);
+    setSendingReset(true);
 
-    alert(
-      `Reset token generated:\n\n${res.data.token}\n\nUse it on the reset password page.`
+    await forgotPassword(resetEmail);
+
+    toast.success(
+      "A password reset link has been sent to your email."
     );
+
+    setResetEmail("");
   } catch (err: any) {
-    alert(
-      err?.response?.data?.detail || "Unable to generate reset token"
+    toast.error(
+      err.response?.data?.detail ||
+      "Unable to send reset email."
     );
+  } finally {
+    setSendingReset(false);
   }
 };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <motion.div
@@ -158,7 +171,7 @@ const handleForgotPassword = async () => {
           <div className="size-16 mx-auto bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-lg flex items-center justify-center mb-4">
             <Store className="size-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">BizTrack POS</h1>
+          <h1 className="text-3xl font-bold text-slate-900">DGTrack POS</h1>
           <p className="text-slate-500 text-sm mt-1">
             {isLogin ? "Welcome back" : "Start selling today"}
           </p>

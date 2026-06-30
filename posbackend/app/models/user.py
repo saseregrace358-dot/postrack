@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime
 from app.database import Base
-
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -16,3 +16,4 @@ class User(Base):
     business_id = Column(String, unique=True, index=True)
     business_name = Column(String, unique=True, index=True)
     reset_token = Column(String, nullable=True)
+    reset_token_expiry = Column(DateTime, nullable=True)
