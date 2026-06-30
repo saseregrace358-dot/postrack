@@ -14,7 +14,11 @@ import {
   exportSalesPdf,
   exportDashboardPdf,
 } from "../../api/export";
-
+import {
+  getBusinessSettings,
+  saveBusinessSettings,
+} from "../../api/settings";
+import toast from "react-hot-toast";
 export function Settings() {
   
   const { theme, toggleTheme } = useTheme();
@@ -42,30 +46,29 @@ const toggleTax = () => {
 
 const saveTaxSettings = async () => {
   try {
-    // Replace with your API later
-    console.log({
-      tax_enabled: taxEnabled,
-      tax_rate: Number(taxRate),
-    });
+    await saveBusinessSettings(
+      taxEnabled,
+      Number(taxRate),
+      Number(debtThreshold)
+    );
 
-    alert("Tax settings saved.");
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save tax settings.");
+    toast.success("Tax settings saved");
+  } catch {
+    toast.error("Failed to save tax settings");
   }
 };
 
 const saveDebtThreshold = async () => {
   try {
-    // Replace with your API later
-    console.log({
-      debt_threshold: Number(debtThreshold),
-    });
+    await saveBusinessSettings(
+      taxEnabled,
+      Number(taxRate),
+      Number(debtThreshold)
+    );
 
-    alert("Debt threshold saved.");
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save debt threshold.");
+    toast.success("Debt threshold saved");
+  } catch {
+    toast.error("Failed to save debt threshold");
   }
 };
 
