@@ -87,11 +87,16 @@ def export_sales_csv(
 
     for s in sales:
         rows.append({
-            "Order": s.order_id,
-            "Customer": s.customer_name,
+            "Order ID": s.order_id,
+            "Cashier": s.created_by_name,
+            "Subtotal": s.subtotal,
+            "Tax": s.tax,
             "Total": s.total,
-            "Payment": s.payment_method,
-            "Date": s.created_at
+            "Amount Paid": s.amountPaid,
+            "Balance": s.balance,
+            "Payment Method": s.paymentMethod,
+            "Status": s.status,
+            "Date": s.date,
         })
 
     df = pd.DataFrame(rows)
@@ -104,11 +109,9 @@ def export_sales_csv(
         stream,
         media_type="text/csv",
         headers={
-            "Content-Disposition":
-            "attachment; filename=sales.csv"
+            "Content-Disposition": "attachment; filename=sales.csv"
         }
     )
-
 
 # ==========================
 # PRODUCTS PDF
@@ -178,24 +181,34 @@ def export_sales_pdf(
     )
 
     buffer = BytesIO()
-
     doc = SimpleDocTemplate(buffer)
 
-    table_data = [["Order", "Customer", "Total"]]
+    table_data = [[
+        "Order",
+        "Cashier",
+        "Total",
+        "Paid",
+        "Balance",
+        "Status"
+    ]]
 
     for s in sales:
         table_data.append([
             s.order_id,
-            s.customer_name,
-            str(s.total)
+            s.created_by_name,
+            f"₦{s.total:,.2f}",
+            f"₦{s.amountPaid:,.2f}",
+            f"₦{s.balance:,.2f}",
+            s.status
         ])
 
     table = Table(table_data)
 
     table.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.green),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),1,colors.black)
+        ("BACKGROUND", (0, 0), (-1, 0), colors.green),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
     ]))
 
     doc.build([table])
@@ -206,11 +219,9 @@ def export_sales_pdf(
         buffer,
         media_type="application/pdf",
         headers={
-            "Content-Disposition":
-            "attachment; filename=sales.pdf"
+            "Content-Disposition": "attachment; filename=sales.pdf"
         }
     )
-
 
 # ==========================
 # DASHBOARD PDF
@@ -221,10 +232,10 @@ def dashboard_pdf(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    total_products = (
+    products = (
         db.query(Product)
         .filter(Product.business_id == user["business_id"])
-        .count()
+        .all()
     )
 
     sales = (
@@ -233,20 +244,52 @@ def dashboard_pdf(
         .all()
     )
 
+    total_products = len(products)
+    total_sales = len(sales)
+
     revenue = sum(s.total for s in sales)
+    subtotal = sum(s.subtotal for s in sales)
+    tax = sum(s.tax for s in sales)
+    amount_paid = sum(s.amountPaid for s in sales)
+    outstanding = sum(s.balance for s in sales)
+
+    paid_sales = sum(1 for s in sales if s.status == "PAID")
+    unpaid_sales = sum(1 for s in sales if s.status == "UNPAID")
+
+    low_stock = sum(1 for p in products if p.stock <= 5)
+    out_of_stock = sum(1 for p in products if p.stock == 0)
+
+    inventory_value = sum(p.price * p.stock for p in products)
 
     buffer = BytesIO()
-
     doc = SimpleDocTemplate(buffer)
-
     styles = getSampleStyleSheet()
 
-    story = [
-        Paragraph("<b>Dashboard Summary</b>", styles["Title"]),
-        Paragraph(f"Total Products: {total_products}", styles["BodyText"]),
-        Paragraph(f"Total Sales: {len(sales)}", styles["BodyText"]),
-        Paragraph(f"Revenue: ₦{revenue:,.2f}", styles["BodyText"]),
-    ]
+    story = []
+
+    story.append(
+        Paragraph("<b>BizTrack Dashboard Report</b>", styles["Title"])
+    )
+
+    story.append(Paragraph("<br/>", styles["BodyText"]))
+
+    story.append(Paragraph("<b>Sales Metrics</b>", styles["Heading2"]))
+    story.append(Paragraph(f"Total Sales: {total_sales}", styles["BodyText"]))
+    story.append(Paragraph(f"Revenue: ₦{revenue:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Subtotal: ₦{subtotal:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Tax Collected: ₦{tax:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Amount Paid: ₦{amount_paid:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Outstanding Balance: ₦{outstanding:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Paid Sales: {paid_sales}", styles["BodyText"]))
+    story.append(Paragraph(f"Unpaid Sales: {unpaid_sales}", styles["BodyText"]))
+
+    story.append(Paragraph("<br/>", styles["BodyText"]))
+
+    story.append(Paragraph("<b>Inventory Metrics</b>", styles["Heading2"]))
+    story.append(Paragraph(f"Total Products: {total_products}", styles["BodyText"]))
+    story.append(Paragraph(f"Inventory Value: ₦{inventory_value:,.2f}", styles["BodyText"]))
+    story.append(Paragraph(f"Low Stock Products: {low_stock}", styles["BodyText"]))
+    story.append(Paragraph(f"Out of Stock Products: {out_of_stock}", styles["BodyText"]))
 
     doc.build(story)
 
@@ -256,7 +299,6 @@ def dashboard_pdf(
         buffer,
         media_type="application/pdf",
         headers={
-            "Content-Disposition":
-            "attachment; filename=dashboard.pdf"
+            "Content-Disposition": "attachment; filename=dashboard.pdf"
         }
     )

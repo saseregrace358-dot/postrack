@@ -99,6 +99,27 @@ useEffect(() => {
     document.removeEventListener("mousedown", handleClickOutside);
   };
 }, [showProfileMenu]);
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      notificationRef.current &&
+      !notificationRef.current.contains(event.target as Node)
+    ) {
+      setShowNotifications(false);
+    }
+  };
+
+  if (showNotifications) {
+    document.addEventListener("mousedown", handleClickOutside);
+  }
+
+  return () => {
+    document.removeEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+  };
+}, [showNotifications]);
 
 const sendMessage = async () => {
   if (!message.trim()) return;
