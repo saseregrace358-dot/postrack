@@ -3,6 +3,8 @@ import { Search, Plus, Minus, Trash2, ShoppingCart, X } from "lucide-react";
 import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
  import toast from "react-hot-toast";
+ import { getBusinessSettings } from "../../api/settings";
+
 /* ✅ MOVE TYPES TO TOP (IMPORTANT FIX) */
 type Product = {
   id: number;
@@ -32,16 +34,33 @@ export function POS() {
 
 /* PRODUCTS */
 useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const res = await getProducts();
-      setProducts(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
-  fetchData();
+    const fetchData = async () => {
+
+        try {
+
+            const productRes = await getProducts();
+
+            setProducts(productRes.data);
+
+            const settingsRes = await getBusinessSettings();
+
+            setTaxEnabled(settingsRes.data.tax_enabled);
+
+            setTaxRate(settingsRes.data.tax_rate);
+
+            setDebtThreshold(settingsRes.data.debt_threshold);
+
+        } catch (err) {
+
+            console.log(err);
+
+        }
+
+    };
+
+    fetchData();
+
 }, []);
 
 const categories = [
@@ -100,11 +119,13 @@ const categories = [
     0
   );
 const [taxEnabled, setTaxEnabled] = useState(false);
-      const TAX_ENABLED = false; // true = tax on, false = tax off
-    const TAX_RATE = 0.075;
 
-    const tax = TAX_ENABLED ? subtotal * TAX_RATE : 0;
-    const total = subtotal + tax;
+const [taxRate, setTaxRate] = useState(0);
+
+const [debtThreshold, setDebtThreshold] = useState(0);
+
+const tax = taxEnabled ? subtotal * taxRate : 0;
+  const total = subtotal + tax;
  const balance = total - paidAmount;
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -112,6 +133,17 @@ const [taxEnabled, setTaxEnabled] = useState(false);
 
   const completeCheckout = async (paymentMethod: string) => {
   const loading = toast.loading("Processing payment...");
+
+  // Frontend debt check
+  if (balance > debtThreshold) {
+    toast.dismiss(loading);
+
+    toast.error(
+      `Debt limit exceeded.\nMaximum allowed is ₦${debtThreshold.toLocaleString()}`
+    );
+
+    return;
+  }
 
   try {
     const saleRes = await createSaleApi({
@@ -127,9 +159,7 @@ const [taxEnabled, setTaxEnabled] = useState(false);
       balance,
       paymentMethod,
     });
-
-    toast.dismiss(loading);
-
+    
     const createdSale = saleRes.data;
 
     // Refresh products
@@ -155,17 +185,25 @@ const [taxEnabled, setTaxEnabled] = useState(false);
       );
     }
   } catch (err: any) {
-    toast.dismiss(loading);
+  toast.dismiss(loading);
 
-    if (
-      err.response?.data?.detail?.includes("Insufficient stock")
-    ) {
-      toast.error("Out of Stock");
-      return;
-    }
-
-    toast.error("Payment Failed");
+  if (
+    err.response?.data?.detail?.includes("Insufficient stock")
+  ) {
+    toast.error("Out of Stock");
+    return;
   }
+
+  if (
+    err.response?.data?.detail ===
+    "Debt limit exceeded, payment not processed."
+  ) {
+    toast.error("Debt limit exceeded. Payment not processed.");
+    return;
+  }
+
+  toast.error("Payment Failed");
+}
 };
    return (
     <div className="space-y-4 pb-4">
@@ -318,23 +356,40 @@ const [taxEnabled, setTaxEnabled] = useState(false);
               <div className="border-t border-slate-200 dark:border-slate-800 p-4 space-y-3">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Subtotal</span>
-                    <span>₦{subtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                  <span>Apply Tax (7.5%)</span>
+                    
+                      <span>Subtotal</span>
 
-                  <button
-                    onClick={() => setTaxEnabled(!taxEnabled)}
-                    className={`px-3 py-1 rounded ${
-                      taxEnabled
-                        ? "bg-green-600 text-white"
-                        : "bg-gray-300 text-black"
-                    }`}
-                  >
-                    {taxEnabled ? "ON" : "OFF"}
-                  </button>
-                </div>
+                      <span>
+
+                      ₦{subtotal.toLocaleString()}
+
+                      </span>
+
+                      </div>
+
+                      <div className="flex justify-between">
+
+                      <span>Tax</span>
+
+                      <span>
+
+                      ₦{tax.toLocaleString()}
+
+                      </span>
+
+                      </div>
+
+                      <div className="flex justify-between font-bold">
+
+                      <span>Total</span>
+
+                      <span>
+
+                      ₦{total.toLocaleString()}
+
+                      </span>
+
+                      </div>
                   <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span>Total</span>
                     <span>₦{total.toFixed(2)}</span>
