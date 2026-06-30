@@ -130,13 +130,20 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = () => setShowCheckout(true);
+const [processingPayment, setProcessingPayment] = useState(false);
 
   const completeCheckout = async (paymentMethod: string) => {
+  // Prevent double click
+  if (processingPayment) return;
+
+  setProcessingPayment(true);
+
   const loading = toast.loading("Processing payment...");
 
   // Frontend debt check
   if (balance > debtThreshold) {
     toast.dismiss(loading);
+    setProcessingPayment(false);
 
     toast.error(
       `Debt limit exceeded.\nMaximum allowed is ₦${debtThreshold.toLocaleString()}`
@@ -159,7 +166,7 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
       balance,
       paymentMethod,
     });
-    
+
     const createdSale = saleRes.data;
 
     // Refresh products
@@ -171,6 +178,8 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
     setAmountPaid("");
     setShowCheckout(false);
     setShowCart(false);
+
+    toast.dismiss(loading);
 
     if (createdSale.status === "PAID") {
       toast.success(
@@ -185,25 +194,27 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
       );
     }
   } catch (err: any) {
-  toast.dismiss(loading);
+    toast.dismiss(loading);
 
-  if (
-    err.response?.data?.detail?.includes("Insufficient stock")
-  ) {
-    toast.error("Out of Stock");
-    return;
+    if (
+      err.response?.data?.detail?.includes("Insufficient stock")
+    ) {
+      toast.error("Out of Stock");
+      return;
+    }
+
+    if (
+      err.response?.data?.detail?.includes("Debt limit exceeded")
+    ) {
+      toast.error("Debt limit exceeded");
+      return;
+    }
+
+    toast.error("Payment Failed");
+  } finally {
+    // Always re-enable buttons
+    setProcessingPayment(false);
   }
-
-  if (
-    err.response?.data?.detail ===
-    "Debt limit exceeded"
-  ) {
-    toast.error("Debt limit exceeded");
-    return;
-  }
-
-  toast.error("Payment Failed");
-}
 };
    return (
     <div className="space-y-4 pb-4">
@@ -461,39 +472,51 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
 </p>
   </div>
 </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Select payment method:</p>
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button
-                onClick={() => completeCheckout("Cash")}
-                className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
-              >
-                💵 Cash
-              </button>
-              <button
-                onClick={() => completeCheckout("Card")}
-                className="py-4 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-500 dark:border-blue-700 rounded-xl font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-              >
-                💳 Card
-              </button>
-              <button
-                onClick={() => completeCheckout("Transfer")}
-                className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-              >
-                🏦 Transfer
-              </button>
-              <button
-                onClick={() => completeCheckout("Mobile Money")}
-                className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors"
-              >
-                📱 Mobile
-              </button>
-            </div>
-            <button
-              onClick={() => setShowCheckout(false)}
-              className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              Cancel
-            </button>
+           <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+  Select payment method:
+</p>
+
+<div className="grid grid-cols-2 gap-3 mb-6">
+  <button
+    disabled={processingPayment}
+    onClick={() => completeCheckout("Cash")}
+    className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {processingPayment ? "Processing..." : "💵 Cash"}
+  </button>
+
+  <button
+    disabled={processingPayment}
+    onClick={() => completeCheckout("Card")}
+    className="py-4 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-500 dark:border-blue-700 rounded-xl font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {processingPayment ? "Processing..." : "💳 Card"}
+  </button>
+
+  <button
+    disabled={processingPayment}
+    onClick={() => completeCheckout("Transfer")}
+    className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {processingPayment ? "Processing..." : "🏦 Transfer"}
+  </button>
+
+  <button
+    disabled={processingPayment}
+    onClick={() => completeCheckout("Mobile Money")}
+    className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {processingPayment ? "Processing..." : "📱 Mobile"}
+  </button>
+</div>
+
+<button
+  disabled={processingPayment}
+  onClick={() => setShowCheckout(false)}
+  className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {processingPayment ? "Processing Payment..." : "Cancel"}
+</button>
           </div>
         </div>
       )}
