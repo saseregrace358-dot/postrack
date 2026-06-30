@@ -170,11 +170,12 @@ if (showStaffManagement) {
 
     <label className="relative inline-flex items-center cursor-pointer">
       <input
-        type="checkbox"
-        checked={taxEnabled}
-        onChange={toggleTax}
-        className="sr-only peer"
-      />
+          type="checkbox"
+          checked={taxEnabled}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setTaxEnabled(e.target.checked)}
+          className="sr-only peer"
+        />
       <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-600"></div>
       <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
     </label>

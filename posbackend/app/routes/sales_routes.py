@@ -12,6 +12,7 @@ import uuid
 from app.auth.dependencies import get_current_user
 from app.websocket_manager import manager
 from app.models.business_settings import BusinessSettings
+from sqlalchemy import func
 
 
 
@@ -42,7 +43,6 @@ async def create_sale(
     order_id = f"ORD-{uuid.uuid4().hex[:10]}"
     sale_items = []
 
-    # Load business settings
     settings = (
         db.query(BusinessSettings)
         .filter(BusinessSettings.business_id == business_id)
@@ -89,7 +89,6 @@ async def create_sale(
             "quantity": item.quantity
         })
 
-        # Low stock notification
         if product.stock <= 5:
 
             notification = Notification(
@@ -130,19 +129,40 @@ async def create_sale(
     balance = total - amount_paid
 
     # ===============================
-    # Debt Threshold
+    # TOTAL BUSINESS DEBT
+    # ===============================
+
+    current_total_debt = (
+        db.query(
+            func.coalesce(func.sum(Sale.balance), 0)
+        )
+        .filter(
+            Sale.business_id == business_id,
+            Sale.balance > 0
+        )
+        .scalar()
+    )
+
+    new_total_debt = current_total_debt + balance
+
+    # ===============================
+    # Debt Threshold Check
     # ===============================
 
     if (
         settings
         and settings.debt_threshold > 0
-        and balance >= settings.debt_threshold
+        and new_total_debt > settings.debt_threshold
     ):
 
         notification = Notification(
             business_id=business_id,
             title="Debt Limit Exceeded",
-            message="Debt limit exceeded, payment not processed.",
+            message=(
+                f"Debt limit exceeded.\n"
+                f"Current Debt: ₦{new_total_debt:,.2f}\n"
+                f"Threshold: ₦{settings.debt_threshold:,.2f}"
+            ),
             type="debt"
         )
 
@@ -206,31 +226,11 @@ async def create_sale(
 
     db.add(sale)
 
-    # ===============================
-    # Sale Notification
-    # ===============================
-
-    sale_notification = Notification(
-        business_id=business_id,
-        title="New Sale",
-        message=f"Sale {order_id} created",
-        type="sale"
-    )
-
-    db.add(sale_notification)
-
+    
     db.commit()
 
     db.refresh(sale)
-    db.refresh(sale_notification)
-
-    await manager.broadcast({
-        "id": sale_notification.id,
-        "title": sale_notification.title,
-        "message": sale_notification.message,
-        "type": sale_notification.type,
-        "read": False
-    })
+    
 
     return sale
 

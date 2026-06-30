@@ -196,9 +196,9 @@ const tax = taxEnabled ? subtotal * taxRate : 0;
 
   if (
     err.response?.data?.detail ===
-    "Debt limit exceeded, payment not processed."
+    "Debt limit exceeded"
   ) {
-    toast.error("Debt limit exceeded. Payment not processed.");
+    toast.error("Debt limit exceeded");
     return;
   }
 
