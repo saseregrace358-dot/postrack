@@ -11,6 +11,8 @@ from app.models.notification import Notification
 import uuid
 from app.auth.dependencies import get_current_user
 from app.websocket_manager import manager
+from app.models.business_settings import BusinessSettings
+
 
 
 router = APIRouter(
@@ -30,31 +32,55 @@ def get_db():
 
 
 @router.post("/")
-def create_sale(
+async def create_sale(
     payload: SaleCreate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = user["business_id"]
+
     order_id = f"ORD-{uuid.uuid4().hex[:10]}"
     sale_items = []
 
+    # Load business settings
+    settings = (
+        db.query(BusinessSettings)
+        .filter(BusinessSettings.business_id == business_id)
+        .first()
+    )
+
+    subtotal = 0
+
+    # ===============================
+    # Validate products & reduce stock
+    # ===============================
     for item in payload.items:
 
-        product = db.query(Product).filter(
-            Product.id == item.product_id,
-            Product.business_id == user["business_id"]
-        ).first()
+        product = (
+            db.query(Product)
+            .filter(
+                Product.id == item.product_id,
+                Product.business_id == business_id
+            )
+            .first()
+        )
 
         if not product:
-            raise HTTPException(404, "Product not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Product not found"
+            )
 
         if product.stock < item.quantity:
             raise HTTPException(
-                400,
-                f"Insufficient stock for {product.name}"
+                status_code=400,
+                detail=f"Insufficient stock for {product.name}"
             )
 
         product.stock -= item.quantity
+
+        line_total = item.price * item.quantity
+        subtotal += line_total
 
         sale_items.append({
             "product_id": product.id,
@@ -65,63 +91,146 @@ def create_sale(
 
         # Low stock notification
         if product.stock <= 5:
-            db.add(
-                Notification(
-                    business_id=user["business_id"],
-                    title="Low Stock Alert",
-                    message=f"{product.name} remaining stock: {product.stock}",
-                    type="lowStock"
-                )
+
+            notification = Notification(
+                business_id=business_id,
+                title="Low Stock Alert",
+                message=f"{product.name} remaining stock: {product.stock}",
+                type="lowStock"
             )
 
-    balance = payload.total - payload.amountPaid
+            db.add(notification)
+            db.flush()
 
-    status = (
-        "PAID"
-        if balance <= 0
-        else "PARTIAL"
-        if payload.amountPaid > 0
-        else "DEBT"
-    )
+            await manager.broadcast({
+                "id": notification.id,
+                "title": notification.title,
+                "message": notification.message,
+                "type": notification.type,
+                "read": False
+            })
+
+    # ===============================
+    # TAX
+    # ===============================
+
+    tax = 0
+
+    if (
+        settings
+        and settings.tax_enabled
+        and settings.tax_rate > 0
+    ):
+        tax = subtotal * (settings.tax_rate / 100)
+
+    total = subtotal + tax
+
+    amount_paid = payload.amountPaid or 0
+
+    balance = total - amount_paid
+
+    # ===============================
+    # Debt Threshold
+    # ===============================
+
+    if (
+        settings
+        and settings.debt_threshold > 0
+        and balance >= settings.debt_threshold
+    ):
+
+        notification = Notification(
+            business_id=business_id,
+            title="Debt Limit Exceeded",
+            message="Debt limit exceeded, payment not processed.",
+            type="debt"
+        )
+
+        db.add(notification)
+        db.flush()
+
+        await manager.broadcast({
+            "id": notification.id,
+            "title": notification.title,
+            "message": notification.message,
+            "type": notification.type,
+            "read": False
+        })
+
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Debt limit exceeded, payment not processed."
+        )
+
+    # ===============================
+    # Payment Status
+    # ===============================
+
+    if balance <= 0:
+        status = "PAID"
+    elif amount_paid > 0:
+        status = "PARTIAL"
+    else:
+        status = "DEBT"
 
     payments = []
 
-    if payload.amountPaid > 0:
+    if amount_paid > 0:
         payments.append({
-            "amount": payload.amountPaid,
+            "amount": amount_paid,
             "date": datetime.utcnow().isoformat(),
             "method": payload.paymentMethod
         })
 
+    # ===============================
+    # Save Sale
+    # ===============================
+
     sale = Sale(
         order_id=order_id,
         items=sale_items,
-        subtotal=payload.subtotal,
-        tax=payload.tax,
-        total=payload.total,
-        amountPaid=payload.amountPaid,
+        subtotal=subtotal,
+        tax=tax,
+        total=total,
+        amountPaid=amount_paid,
         balance=balance,
         paymentMethod=payload.paymentMethod,
         payments=payments,
         status=status,
-        business_id=user["business_id"],
+        business_id=business_id,
         created_by=user["id"],
         created_by_name=user.get("name")
     )
 
     db.add(sale)
 
-    db.add(
-        Notification(
-            business_id=user["business_id"],
-            title="New Sale",
-            message=f"Sale {order_id} created",
-            type="sale"
-        )
+    # ===============================
+    # Sale Notification
+    # ===============================
+
+    sale_notification = Notification(
+        business_id=business_id,
+        title="New Sale",
+        message=f"Sale {order_id} created",
+        type="sale"
     )
 
+    db.add(sale_notification)
+
     db.commit()
+
     db.refresh(sale)
+    db.refresh(sale_notification)
+
+    await manager.broadcast({
+        "id": sale_notification.id,
+        "title": sale_notification.title,
+        "message": sale_notification.message,
+        "type": sale_notification.type,
+        "read": False
+    })
 
     return sale
 

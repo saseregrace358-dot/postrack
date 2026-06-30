@@ -14,9 +14,17 @@ import {
   exportSalesPdf,
   exportDashboardPdf,
 } from "../../api/export";
+
 export function Settings() {
-  const { theme, toggleTheme } = useTheme();
   
+  const { theme, toggleTheme } = useTheme();
+  const [taxEnabled, setTaxEnabled] = useState(false);
+const [taxRate, setTaxRate] = useState("");
+const [debtThreshold, setDebtThreshold] = useState("");
+
+const toggleTax = () => {
+    setTaxEnabled(!taxEnabled);
+};  
   const downloadFile = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
 
@@ -30,6 +38,35 @@ export function Settings() {
   a.remove();
 
   window.URL.revokeObjectURL(url);
+};
+
+const saveTaxSettings = async () => {
+  try {
+    // Replace with your API later
+    console.log({
+      tax_enabled: taxEnabled,
+      tax_rate: Number(taxRate),
+    });
+
+    alert("Tax settings saved.");
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save tax settings.");
+  }
+};
+
+const saveDebtThreshold = async () => {
+  try {
+    // Replace with your API later
+    console.log({
+      debt_threshold: Number(debtThreshold),
+    });
+
+    alert("Debt threshold saved.");
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save debt threshold.");
+  }
 };
 
 const handleExportProductsCsv = async () => {
@@ -105,6 +142,84 @@ if (showStaffManagement) {
     <span>Staff Management</span>
     <span>→</span>
   </button>
+</div>
+
+<div className="bg-white dark:bg-slate-800 rounded-xl border">
+  <button
+    onClick={() => toggleSection("tax")}
+    className="w-full flex justify-between items-center p-4"
+  >
+    <span>Tax Settings</span>
+
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input
+        type="checkbox"
+        checked={taxEnabled}
+        onChange={toggleTax}
+        className="sr-only peer"
+      />
+      <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-600"></div>
+      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+    </label>
+  </button>
+
+  {expanded === "tax" && (
+    <div className="border-t p-4 space-y-3">
+      <label className="text-sm font-medium">
+        Tax Percentage (%)
+      </label>
+
+      <input
+        type="number"
+        value={taxRate}
+        onChange={(e) => setTaxRate(e.target.value)}
+        className="w-full border rounded-lg p-2"
+        placeholder="7.5"
+      />
+
+      <button
+        onClick={saveTaxSettings}
+        className="w-full py-2 bg-blue-600 text-white rounded-lg"
+      >
+        Save
+      </button>
+    </div>
+  )}
+</div>  
+
+<div className="bg-white dark:bg-slate-800 rounded-xl border">
+  <button
+    onClick={() => toggleSection("debt")}
+    className="w-full flex justify-between p-4"
+  >
+    <span>Debt Threshold</span>
+    <span>{expanded === "debt" ? "−" : "+"}</span>
+  </button>
+
+  {expanded === "debt" && (
+    <div className="border-t p-4 space-y-3">
+
+      <label className="text-sm font-medium">
+        Debt Threshold
+      </label>
+
+      <input
+        type="number"
+        value={debtThreshold}
+        onChange={(e)=>setDebtThreshold(e.target.value)}
+        className="w-full border rounded-lg p-2"
+        placeholder="50000"
+      />
+
+      <button
+        onClick={saveDebtThreshold}
+        className="w-full py-2 bg-red-600 text-white rounded-lg"
+      >
+        Save
+      </button>
+
+    </div>
+  )}
 </div>
 
 <div className="bg-white dark:bg-slate-800 rounded-xl border">
