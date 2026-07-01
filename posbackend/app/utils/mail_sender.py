@@ -2,7 +2,7 @@ from fastapi_mail import FastMail, MessageSchema
 from app.utils.email import conf
 
 async def send_reset_email(email: str, token: str):
-    link = f"https://yourfrontend.com/reset-password/{token}"
+    link = f"https://postrack.vercel.app/reset-password/{token}"
 
     message = MessageSchema(
         subject="Reset your BizTrack POS Password",
