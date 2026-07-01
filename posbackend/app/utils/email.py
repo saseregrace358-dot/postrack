@@ -16,3 +16,6 @@ conf = ConnectionConfig(
     MAIL_SSL_TLS=False,
     USE_CREDENTIALS=True,
 )
+print("MAIL_USERNAME:", os.getenv("MAIL_USERNAME"))
+print("MAIL_FROM:", os.getenv("MAIL_FROM"))
+print("MAIL_PASSWORD exists:", os.getenv("MAIL_PASSWORD") is not None)
