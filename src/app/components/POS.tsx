@@ -220,8 +220,8 @@ const [processingPayment, setProcessingPayment] = useState(false);
     <div className="space-y-4 pb-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
+        <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
         <input
           type="text"
           placeholder="Search products..."
@@ -229,7 +229,8 @@ const [processingPayment, setProcessingPayment] = useState(false);
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full pl-11 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        </div>
+      </div>
+
         <button
           onClick={() => setShowCart(true)}
           className="relative bg-blue-600 text-white p-3 rounded-xl shadow-lg"
@@ -243,8 +244,8 @@ const [processingPayment, setProcessingPayment] = useState(false);
         </button>
       </div>
 
-     
-
+      {/* Search */}
+      
       {/* Categories */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         {categories.map((category) => (
