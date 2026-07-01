@@ -139,7 +139,7 @@ if (showStaffManagement) {
   return (
     <div className="space-y-6 pb-20">
 
-      <h2 className="text-2xl font-semibold">Settings</h2>
+
 
       {/* Theme */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border">

@@ -24,24 +24,7 @@ export function NotificationProvider({
     hideNotifications: false,
   });
 
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "Low Stock Alert",
-      message: "Coca Cola remaining stock is 3",
-      read: false,
-      type: "lowStock",
-      createdAt: new Date(),
-    },
-    {
-      id: 2,
-      title: "Payment Received",
-      message: "₦5,000 payment received",
-      read: false,
-      type: "payment",
-      createdAt: new Date(),
-    },
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   return (
     <NotificationContext.Provider

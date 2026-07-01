@@ -94,6 +94,7 @@ localStorage.setItem("role", "employee");
       password: formData.password,
       business_name: formData.business_name,
     });
+    
 
     const res = await loginUser({
       email: formData.email,
@@ -116,6 +117,14 @@ localStorage.setItem("role", "employee");
       "role",
       res.data.user?.role || "owner"
     );
+localStorage.setItem(
+  "user",
+   JSON.stringify({
+    ...res.data.user,
+    role: "owner",
+    permissions: ["all"],
+  })
+);
 
     onLogin(res.data.access_token);
   } catch (err: any) {
