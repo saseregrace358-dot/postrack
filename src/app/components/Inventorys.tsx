@@ -68,7 +68,22 @@ const openViewer = (image: string, images: string[]) => {
      image: null,
     barcode: "",
   });
-
+const categories = [
+  "Beverages",
+  "Food",
+  "Snacks",
+  "Dairy",
+  "Electronics",
+  "Stationery",
+  "Clothing",
+  "Health & Beauty",
+  "Household",
+  "Frozen Foods",
+  "Bakery",
+  "Pharmacy",
+  "Drinks",
+  "Accessories",
+];
   // =========================
   // INIT LOAD
   // =========================
@@ -249,8 +264,7 @@ if (loading) {
 
       {/* HEADER */}
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-        <h2 className="text-xl sm:text-2xl font-bold">Inventory</h2>
-
+        
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2"
@@ -465,16 +479,27 @@ if (loading) {
           />
         </div>
 
-        <div>
-          <label className="text-xs text-gray-500">Category</label>
-          <input
-            className="w-full p-2 border rounded"
-            value={newProduct.category}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, category: e.target.value })
-            }
-          />
-        </div>
+       <div>
+  <label className="text-xs text-gray-500">Category</label>
+
+  <input
+    list="add-category-list"
+    className="w-full p-2 border rounded"
+    value={newProduct.category}
+    onChange={(e) =>
+      setNewProduct({
+        ...newProduct,
+        category: e.target.value,
+      })
+    }
+  />
+
+  <datalist id="add-category-list">
+    {categories.map((category) => (
+      <option key={category} value={category} />
+    ))}
+  </datalist>
+</div>
 
         <div>
           <label className="text-xs text-gray-500">Cost Price</label>
@@ -512,28 +537,7 @@ if (loading) {
           />
         </div>
 
-        <div>
-          <label className="text-xs text-gray-500">Barcode</label>
-          <input
-            className="w-full p-2 border rounded"
-            value={newProduct.barcode}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, barcode: e.target.value })
-            }
-          />
-          <button
-            onClick={startScanner}
-            className="px-3 py-2 bg-black text-white rounded"
-          >
-            Scan Barcode
-          </button>
-            {scanning && (
-          <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
-            <div id="reader" className="w-full max-w-sm bg-white rounded" />
-          </div>
-
-        )}
-        </div>
+        
       </div>
 
            {/* ACTIONS */}
@@ -586,15 +590,26 @@ if (loading) {
         </div>
 
         <div>
-          <label className="text-xs text-gray-500">Category</label>
-          <input
-            className="w-full p-2 border rounded"
-            value={editProduct.category}
-            onChange={(e) =>
-              setEditProduct({ ...editProduct, category: e.target.value })
-            }
-          />
-        </div>
+  <label className="text-xs text-gray-500">Category</label>
+
+  <input
+    list="edit-category-list"
+    className="w-full p-2 border rounded"
+    value={editProduct.category}
+    onChange={(e) =>
+      setEditProduct({
+        ...editProduct,
+        category: e.target.value,
+      })
+    }
+  />
+
+  <datalist id="edit-category-list">
+    {categories.map((category) => (
+      <option key={category} value={category} />
+    ))}
+  </datalist>
+</div>
 
         <div>
           <label className="text-xs text-gray-500">Cost Price</label>

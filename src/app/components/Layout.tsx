@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from "react-router";
+import { Outlet, NavLink, useLocation } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
@@ -17,6 +17,57 @@ import { askAiApi } from "../../api/ai";
 import { playNotificationSound } from "../utils/notificationSound";
 
 export function Layout() {
+const pageInfo = {
+  dashboard: {
+    title: "Dashboard",
+    description: "Business overview and analytics",
+  },
+  pos: {
+    title: "DGTrack POS",
+    description: "Point of Sale System",
+  },
+  inventory: {
+    title: "Inventory",
+    description: "Manage products and stock",
+  },
+  sales: {
+    title: "Sales History",
+    description: "Sales transactions and receipts",
+  },
+  customers: {
+    title: "Customers",
+    description: "Customer management",
+  },
+  employees: {
+    title: "Employees",
+    description: "Staff management",
+  },
+  reports: {
+    title: "Reports",
+    description: "Business reports and insights",
+  },
+  settings: {
+    title: "Settings",
+    description: "System configuration",
+  },
+};
+
+const location = useLocation();
+
+const currentPage = (() => {
+  const path = location.pathname.toLowerCase();
+
+  if (path === "/") return "pos";
+  if (path.startsWith("/dashboard")) return "dashboard";
+  if (path.startsWith("/inventory")) return "inventory";
+  if (path.startsWith("/sales")) return "sales";
+  if (path.startsWith("/customers")) return "customers";
+  if (path.startsWith("/employees")) return "employees";
+  if (path.startsWith("/reports")) return "reports";
+  if (path.startsWith("/settings")) return "settings";
+
+  return "pos";
+})() as keyof typeof pageInfo;
 const [showAllNotifications, setShowAllNotifications] = useState(false);
 const [allNotifications, setAllNotifications] = useState<any[]>([]);
 const [showAiModal, setShowAiModal] = useState(false);
@@ -251,12 +302,12 @@ return ( <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
 
           <div>
             <h1 className="font-semibold text-slate-900 dark:text-white text-base">
-              DGTrack POS
-            </h1>
+            {pageInfo[currentPage].title}
+          </h1>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Point of Sale System
-            </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {pageInfo[currentPage].description}
+          </p>
           </div>
         </div>
 

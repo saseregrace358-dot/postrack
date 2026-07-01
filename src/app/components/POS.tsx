@@ -221,8 +221,14 @@ const [processingPayment, setProcessingPayment] = useState(false);
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Point of Sale</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Scan or select products</p>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search products..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-11 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
         </div>
         <button
           onClick={() => setShowCart(true)}
@@ -239,15 +245,8 @@ const [processingPayment, setProcessingPayment] = useState(false);
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search products..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+        
+      
 
       {/* Categories */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
@@ -265,7 +264,7 @@ const [processingPayment, setProcessingPayment] = useState(false);
           </button>
         ))}
       </div>
-
+      </div>
       {/* Products Grid */}
 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
   {filteredProducts.map((product) => (
