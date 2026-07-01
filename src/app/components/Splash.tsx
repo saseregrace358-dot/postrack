@@ -49,7 +49,7 @@ export function Splash({ onComplete }: SplashProps) {
           transition={{ delay: 0.3, duration: 0.5 }}
           className="text-4xl font-bold text-white mb-2"
         >
-          BizTrack POS
+          DGTrack POS
         </motion.h1>
 
         <motion.p
