@@ -121,6 +121,22 @@ const cancelInstall = () => {
 };
 
 useEffect(() => {
+  const handler = (e: any) => {
+    console.log("beforeinstallprompt fired");
+
+    e.preventDefault();
+
+    setDeferredPrompt(e);
+    setShowInstallModal(true);
+  };
+
+  window.addEventListener("beforeinstallprompt", handler);
+
+  return () =>
+    window.removeEventListener("beforeinstallprompt", handler);
+}, []);
+
+useEffect(() => {
   if (!settings.soundAlerts) return;
 
   if (notifications.length > previousNotificationCount.current) {
