@@ -182,7 +182,7 @@ const handleForgotPassword = async () => {
           <div className="size-16 mx-auto bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-lg flex items-center justify-center mb-4">
             <Store className="size-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">DGTrack POS</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Point of sale Tracker </h1>
           <p className="text-slate-500 text-sm mt-1">
             {isLogin ? "Welcome back" : "Start selling today"}
           </p>

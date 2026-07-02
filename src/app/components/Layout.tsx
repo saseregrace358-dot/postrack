@@ -913,11 +913,11 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
     <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-[90%] max-w-sm">
 
       <h2 className="text-xl font-bold">
-        Install DGTrack
+        Install POSTracker
       </h2>
 
       <p className="mt-3 text-gray-500">
-        Install DGTrack on your iPhone.
+        Install POSTracker on your iPhone.
       </p>
 
       <div className="mt-4 rounded-lg bg-slate-100 dark:bg-slate-800 p-4">

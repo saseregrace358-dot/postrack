@@ -42,29 +42,34 @@ useEffect(() => {
 
           {/* ADD THIS */}
           <Toaster
-            position="top-center"
-            reverseOrder={false}
-            toastOptions={{
-              duration: 2500,
-              style: {
-                borderRadius: "12px",
-                padding: "16px",
-                fontSize: "15px",
-              },
-              success: {
-                style: {
-                  background: "#16a34a",
-                  color: "#fff",
-                },
-              },
-              error: {
-                style: {
-                  background: "#dc2626",
-                  color: "#fff",
-                },
-              },
-            }}
-          />
+  position="top-center"
+  reverseOrder={false}
+  containerStyle={{
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+  }}
+  toastOptions={{
+    duration: 2500,
+    style: {
+      borderRadius: "12px",
+      padding: "16px",
+      fontSize: "15px",
+    },
+    success: {
+      style: {
+        background: "#16a34a",
+        color: "#fff",
+      },
+    },
+    error: {
+      style: {
+        background: "#dc2626",
+        color: "#fff",
+      },
+    },
+  }}
+/>
 
           <RouterProvider router={router} />
 
