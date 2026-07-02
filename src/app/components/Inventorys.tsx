@@ -42,7 +42,7 @@ export function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-
+const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
 
@@ -52,11 +52,6 @@ export function Inventory() {
  const [viewerOpen, setViewerOpen] = useState(false);
 const [activeImage, setActiveImage] = useState<string>("");
 const [gallery, setGallery] = useState<string[]>([]);
-const openViewer = (image: string, images: string[]) => {
-  setActiveImage(image);
-  setGallery(images);
-  setViewerOpen(true);
-};
  // ✅ STATES INSIDE COMPONENT
   
    const [newProduct, setNewProduct] = useState<NewProduct>({
@@ -163,20 +158,23 @@ useEffect(() => {
   // ADD PRODUCT
   // =========================
  const addProduct = async () => {
+  if (saving) return;
+
+  setSaving(true);
+
   try {
     let imageUrl = "";
 
-    // Upload image to Supabase
-   if (newProduct.image) {
-  const fileName = `${Date.now()}-${newProduct.image.name}`;
+    if (newProduct.image) {
+      const fileName = `${Date.now()}-${newProduct.image.name}`;
 
- const { data } = supabase.storage
-  .from("products")
-  .getPublicUrl(fileName);
+      const { data } = supabase.storage
+        .from("products")
+        .getPublicUrl(fileName);
 
-imageUrl = data.publicUrl;
-}
-    // Save product in FastAPI database
+      imageUrl = data.publicUrl;
+    }
+
     const res = await createProduct({
       name: newProduct.name,
       cost: Number(newProduct.cost),
@@ -203,6 +201,8 @@ imageUrl = data.publicUrl;
     setShowAddModal(false);
   } catch (err) {
     console.error(err);
+  } finally {
+    setSaving(false);
   }
 };
  // =========================
@@ -551,11 +551,16 @@ if (loading) {
         </button>
 
         <button
-          onClick={addProduct}
-          className="px-6 py-2 bg-blue-600 text-white rounded"
-        >
-          Save Product
-        </button>
+        onClick={addProduct}
+        disabled={saving}
+        className={`px-6 py-2 rounded text-white ${
+          saving
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700"
+        }`}
+      >
+        {saving ? "Saving..." : "Save Product"}
+      </button>
       </div>
 
     </div>

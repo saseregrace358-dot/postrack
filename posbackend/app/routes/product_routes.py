@@ -44,8 +44,34 @@ def get_products(
 def create_product(
     product: ProductCreate,
     db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
+
+    # Check if product already exists (case insensitive)
+    existing = (
+        db.query(Product)
+        .filter(
+            Product.business_id == user["business_id"],
+            func.lower(Product.name) == product.name.lower()
+        )
+        .first()
+    )
+
+    if existing:
+        # Update existing product
+        existing.stock += product.stock
+        existing.cost = product.cost
+        existing.price = product.price
+        existing.category = product.category
+        existing.barcode = product.barcode
+        existing.image = product.image
+
+        db.commit()
+        db.refresh(existing)
+
+        return existing
+
+    # Otherwise create a new product
     new_product = Product(
         name=product.name,
         cost=product.cost,
@@ -54,8 +80,6 @@ def create_product(
         stock=product.stock,
         barcode=product.barcode,
         image=product.image,
-
-        # 🔥 ownership
         business_id=user["business_id"],
         created_by=user["id"],
         created_by_name=user.get("name")
@@ -66,6 +90,7 @@ def create_product(
     db.refresh(new_product)
 
     return new_product
+
 # =========================
 # UPDATE PRODUCT
 # =========================
