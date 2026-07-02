@@ -7,7 +7,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { AuthContext } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { Toaster } from "react-hot-toast";
-
+import { InstallPrompt } from "./components/InstallPrompt";
   
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -70,6 +70,8 @@ useEffect(() => {
     },
   }}
 />
+
+<InstallPrompt />
 
           <RouterProvider router={router} />
 

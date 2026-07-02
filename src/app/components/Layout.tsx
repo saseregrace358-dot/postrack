@@ -68,7 +68,7 @@ const currentPage = (() => {
 
   return "pos";
 })() as keyof typeof pageInfo;
-const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
 const [showAllNotifications, setShowAllNotifications] = useState(false);
 const [allNotifications, setAllNotifications] = useState<any[]>([]);
 const [showAiModal, setShowAiModal] = useState(false);
@@ -78,8 +78,6 @@ const previousNotificationCount = useRef(0);
 const profileRef = useRef<HTMLDivElement>(null);
 const notificationRef = useRef<HTMLDivElement>(null);
 const [showProfileMenu, setShowProfileMenu] = useState(false);
-const [showInstallModal, setShowInstallModal] = useState(false);
-const [showIOSInstall, setShowIOSInstall] = useState(false);
 const [showNotifications, setShowNotifications] =
   useState(false);
 
@@ -87,88 +85,8 @@ const [showNotifications, setShowNotifications] =
 const { notifications, setNotifications, settings } =
   useNotifications();
 
-  useEffect(() => {
-  const handler = (e: any) => {
-    e.preventDefault();
-
-    setDeferredPrompt(e);
-
-    // Show YOUR popup
-    setShowInstallModal(true);
-  };
-
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () =>
-    window.removeEventListener("beforeinstallprompt", handler);
-}, []);
-
-const installApp = async () => {
-  if (!deferredPrompt) return;
-
-  deferredPrompt.prompt();
-
-  const { outcome } = await deferredPrompt.userChoice;
-
-  console.log(outcome);
-
-  setDeferredPrompt(null);
-  setShowInstallModal(false);
-};
-
-const cancelInstall = () => {
-  setShowInstallModal(false);
-};
-
-useEffect(() => {
-  const isIOS =
-    /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-  const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as any).standalone;
-
-  if (isIOS && !isStandalone) {
-    setShowIOSInstall(true);
-  }
-
-  const handler = (e: any) => {
-    e.preventDefault();
-
-    setDeferredPrompt(e);
-
-    if (!isIOS) {
-      setShowInstallModal(true);
-    }
-  };
-
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () => {
-    window.removeEventListener(
-      "beforeinstallprompt",
-      handler
-    );
-  };
-}, []);
-
-
-useEffect(() => {
-  const handler = (e: any) => {
-    console.log("beforeinstallprompt fired");
-
-    e.preventDefault();
-
-    setDeferredPrompt(e);
-    setShowInstallModal(true);
-  };
-
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () =>
-    window.removeEventListener("beforeinstallprompt", handler);
-}, []);
-
+  
+    
 useEffect(() => {
   if (!settings.soundAlerts) return;
 
@@ -877,97 +795,6 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
   </div>
 )}
 
-{showInstallModal && (
-  <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center">
-
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-[90%] max-w-sm">
-
-      <h2 className="text-xl font-bold">
-        Install DGTrack
-      </h2>
-
-      <p className="mt-2 text-gray-500">
-        Install DGTrack for a faster experience with offline support.
-      </p>
-
-      <div className="flex justify-end gap-3 mt-6">
-
-        <button
-          onClick={cancelInstall}
-          className="px-4 py-2 rounded-lg border"
-        >
-          Cancel
-        </button>
-
-        <button
-          onClick={installApp}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white"
-        >
-          Install
-        </button>
-
-      </div>
-{showIOSInstall && (
-  <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center">
-
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-[90%] max-w-sm">
-
-      <h2 className="text-xl font-bold">
-        Install POSTracker
-      </h2>
-
-      <p className="mt-3 text-gray-500">
-        Install POSTracker on your iPhone.
-      </p>
-
-      <div className="mt-4 rounded-lg bg-slate-100 dark:bg-slate-800 p-4">
-
-        <p className="text-sm">
-          1. Tap the
-          <strong> Share </strong>
-          button
-          <span className="mx-1">⬆️</span>
-
-          in Safari.
-        </p>
-
-        <p className="text-sm mt-2">
-          2. Tap
-          <strong> Add to Home Screen.</strong>
-        </p>
-
-      </div>
-
-      <div className="flex justify-end gap-3 mt-6">
-
-        <button
-          onClick={() => setShowIOSInstall(false)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          Cancel
-        </button>
-
-        <button
-          onClick={() => {
-            alert(
-              "Tap the Share button in Safari, then choose 'Add to Home Screen'."
-            );
-          }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-        >
-          Install
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
-)}
-    </div>
-
-  </div>
-)}
 </div>
 
 
