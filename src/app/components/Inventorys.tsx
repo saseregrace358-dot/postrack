@@ -185,7 +185,17 @@ useEffect(() => {
       image: imageUrl,
     });
 
-    setProducts((prev) => [...prev, res.data]);
+    setProducts(prev => {
+    const index = prev.findIndex(p => p.id === res.data.id);
+
+    if (index >= 0) {
+        const updated = [...prev];
+        updated[index] = res.data;
+        return updated;
+    }
+
+    return [...prev, res.data];
+});
 
     setNewProduct({
       name: "",

@@ -93,32 +93,6 @@ def create_product(
 # =========================
 # UPDATE PRODUCT
 # =========================
-@router.put("/{product_id}", response_model=ProductOut)
-def update_product(
-    product_id: int,
-    updated: ProductUpdate,
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)
-):
-    product = (
-        db.query(Product)
-        .filter(
-            Product.id == product_id,
-            Product.business_id == user["business_id"]
-        )
-        .first()
-    )
-
-    if not product:
-        raise HTTPException(404, detail="Product not found")
-
-    for key, value in updated.model_dump(exclude_unset=True).items():
-        setattr(product, key, value)
-
-    db.commit()
-    db.refresh(product)
-
-    return product
 
 # =========================
 # DELETE PRODUCT
