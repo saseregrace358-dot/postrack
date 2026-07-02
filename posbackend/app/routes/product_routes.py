@@ -10,7 +10,7 @@ from app.schemas.product import (
 from app.auth.dependencies import get_current_user
 from pydantic import BaseModel
 import os
-
+from sqlalchemy import func
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -44,10 +44,9 @@ def get_products(
 def create_product(
     product: ProductCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user = Depends(get_current_user)
 ):
-
-    # Check if product already exists (case insensitive)
+    
     existing = (
         db.query(Product)
         .filter(
@@ -71,7 +70,6 @@ def create_product(
 
         return existing
 
-    # Otherwise create a new product
     new_product = Product(
         name=product.name,
         cost=product.cost,
@@ -80,6 +78,8 @@ def create_product(
         stock=product.stock,
         barcode=product.barcode,
         image=product.image,
+
+        # 🔥 ownership
         business_id=user["business_id"],
         created_by=user["id"],
         created_by_name=user.get("name")
@@ -90,7 +90,6 @@ def create_product(
     db.refresh(new_product)
 
     return new_product
-
 # =========================
 # UPDATE PRODUCT
 # =========================
