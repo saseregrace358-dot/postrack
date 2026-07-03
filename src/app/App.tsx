@@ -34,7 +34,7 @@ useEffect(() => {
   if (!token) {
   return (
     <>
-      <InstallPrompt />
+      
       <Auth onLogin={handleLogin} />
     </>
   );
@@ -44,7 +44,7 @@ useEffect(() => {
     <AuthContext.Provider value={{ handleLogout }}>
       <ThemeProvider>
         <NotificationProvider>
-
+<InstallPrompt />
           {/* ADD THIS */}
           <Toaster
   position="top-center"
