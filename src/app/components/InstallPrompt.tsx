@@ -55,16 +55,29 @@ useEffect(() => {
   }, []);
 
   const install = async () => {
-    if (!deferredPrompt) return;
+  console.log("Install clicked");
+  console.log("Deferred Prompt:", deferredPrompt);
 
-    deferredPrompt.prompt();
+  if (!deferredPrompt) {
+    alert("No install prompt available.");
+    return;
+  }
 
-    await deferredPrompt.userChoice;
+  deferredPrompt.prompt();
 
-    setDeferredPrompt(null);
+  const choice = await deferredPrompt.userChoice;
 
-    setShow(false);
-  };
+  console.log(choice);
+
+  if (choice.outcome === "accepted") {
+    console.log("User accepted install");
+  } else {
+    console.log("User dismissed install");
+  }
+
+  setDeferredPrompt(null);
+  setShow(false);
+};
 
   if (!show) return null;
 
