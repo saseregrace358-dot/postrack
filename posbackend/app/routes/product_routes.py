@@ -47,16 +47,17 @@ def create_product(
     user = Depends(get_current_user)
 ):
     
-    existing = (
-        db.query(Product)
-        .filter(
-            Product.business_id == user["business_id"],
-            func.lower(Product.name) == product.name.lower()
-        )
-        .first()
-    )
+   normalized_name = product.name.strip().lower()
 
-    if existing:
+   existing = (
+            db.query(Product)
+            .filter(
+                Product.business_id == user["business_id"],
+                func.lower(func.trim(Product.name)) == normalized_name
+            )
+            .first()
+        )
+   if existing:
         # Update existing product
         existing.stock += product.stock
         existing.cost = product.cost
@@ -69,8 +70,8 @@ def create_product(
         db.refresh(existing)
 
         return existing
-
-    new_product = Product(
+   
+   new_product = Product(
         name=product.name,
         cost=product.cost,
         price=product.price,
@@ -84,12 +85,11 @@ def create_product(
         created_by=user["id"],
         created_by_name=user.get("name")
     )
+   db.add(new_product)
+   db.commit()
+   db.refresh(new_product)
 
-    db.add(new_product)
-    db.commit()
-    db.refresh(new_product)
-
-    return new_product
+   return new_product
 # =========================
 # UPDATE PRODUCT
 # =========================

@@ -1,14 +1,11 @@
-import axios from "axios";
-
-const BASE_URL = "https://postrack.onrender.com";
-
+import api from "./api";
 const getAuthHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
 // Get business settings
 export const getBusinessSettings = () =>
-  axios.get(`${BASE_URL}/settings`, {
+  api.get(`/settings`, {
     headers: getAuthHeaders(),
   });
 
@@ -18,8 +15,8 @@ export const saveBusinessSettings = (
   tax_rate: number,
   debt_threshold: number
 ) =>
-  axios.post(
-    `${BASE_URL}/settings`,
+  api.post(
+    `/settings`,
     {
       tax_enabled,
       tax_rate,

@@ -1,27 +1,24 @@
-import axios from "axios";
-
-const BASE_URL = "https://postrack.onrender.com";
-
+import api from "./api";
 const getHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
 // Unread notifications (for bell)
 export const getNewNotificationsApi = () =>
-  axios.get(`${BASE_URL}/notifications/new`, {
+  api.get(`/notifications/new`, {
     headers: getHeaders(),
   });
 
 // All notifications (history page)
 export const getAllNotificationsApi = () =>
-  axios.get(`${BASE_URL}/notifications/all`, {
+  api.get(`/notifications/all`, {
     headers: getHeaders(),
   });
 
 // Mark one notification as read
 export const markNotificationReadApi = (id: number) =>
-  axios.patch(
-    `${BASE_URL}/notifications/${id}/read`,
+  api.patch(
+    `/notifications/${id}/read`,
     {},
     {
       headers: getHeaders(),
@@ -30,8 +27,8 @@ export const markNotificationReadApi = (id: number) =>
 
 // Mark every notification as read
 export const markAllNotificationsReadApi = () =>
-  axios.patch(
-    `${BASE_URL}/notifications/read-all`,
+  api.patch(
+    `/notifications/read-all`,
     {},
     {
       headers: getHeaders(),
