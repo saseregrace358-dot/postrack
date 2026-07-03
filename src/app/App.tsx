@@ -32,8 +32,13 @@ useEffect(() => {
   }
 
   if (!token) {
-    return <Auth onLogin={handleLogin} />;
-  }
+  return (
+    <>
+      <InstallPrompt />
+      <Auth onLogin={handleLogin} />
+    </>
+  );
+}
 
   return (
     <AuthContext.Provider value={{ handleLogout }}>
@@ -71,7 +76,7 @@ useEffect(() => {
   }}
 />
 
-<InstallPrompt />
+
 
           <RouterProvider router={router} />
 
