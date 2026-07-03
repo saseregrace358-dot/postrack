@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
 export function InstallPrompt() {
+ console.log("InstallPrompt rendered");
+ 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [show, setShow] = useState(false);
-
+  const [show, setShow] = useState(true);
   const isIOS =
     /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 
@@ -11,7 +12,23 @@ export function InstallPrompt() {
     window.matchMedia("(display-mode: standalone)").matches ||
     (window.navigator as any).standalone;
 
-  useEffect(() => {
+useEffect(() => {
+  console.log("InstallPrompt mounted");
+
+  const handler = (e: any) => {
+    console.log("beforeinstallprompt fired");
+    e.preventDefault();
+    setDeferredPrompt(e);
+    setShow(true);
+  };
+
+  window.addEventListener("beforeinstallprompt", handler);
+
+  return () =>
+    window.removeEventListener("beforeinstallprompt", handler);
+}, []);
+
+    useEffect(() => {
     if (isStandalone) return;
 
     const handler = (e: any) => {

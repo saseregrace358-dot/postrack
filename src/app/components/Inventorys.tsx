@@ -341,7 +341,7 @@ if (loading) {
           <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
             Out of Stock
           </span>
-        ) : product.stock <= 10 ? (
+        ) : product.stock <= 4 ? (
           <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
             Low Stock
           </span>
@@ -407,7 +407,7 @@ if (loading) {
           <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
             Out of Stock
           </span>
-        ) : product.stock <= 10 ? (
+        ) : product.stock <= 4 ? (
           <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
             Low Stock
           </span>

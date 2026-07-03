@@ -89,7 +89,7 @@ async def create_sale(
             "quantity": item.quantity
         })
 
-        if product.stock <= 5:
+        if product.stock <= 4:
 
             notification = Notification(
                 business_id=business_id,
