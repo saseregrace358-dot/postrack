@@ -34,14 +34,13 @@ useEffect(() => {
   if (!token) {
   return (
     <>
-      
+      <InstallPrompt />
       <Auth onLogin={handleLogin} />
     </>
   );
 }
 
   return (
-    <InstallPrompt />
     <AuthContext.Provider value={{ handleLogout }}>
       <ThemeProvider>
         <NotificationProvider>

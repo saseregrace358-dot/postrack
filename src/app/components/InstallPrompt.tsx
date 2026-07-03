@@ -1,48 +1,32 @@
 import { useEffect, useState } from "react";
 
 export function InstallPrompt() {
- console.log("InstallPrompt rendered");
- 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [show, setShow] = useState(true);
-  const isIOS =
-    /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  const [promptEvent, setPromptEvent] = useState<any>(null);
+  const [show, setShow] = useState(false);
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as any).standalone;
+    (navigator as any).standalone;
 
-useEffect(() => {
-  console.log("InstallPrompt mounted");
-
-  const handler = (e: any) => {
-    console.log("beforeinstallprompt fired");
-    e.preventDefault();
-    setDeferredPrompt(e);
-    setShow(true);
-  };
-
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () =>
-    window.removeEventListener("beforeinstallprompt", handler);
-}, []);
-
-    useEffect(() => {
-    if (isStandalone) return;
+  useEffect(() => {
+    // Already installed
+    if (isStandalone) {
+      setShow(false);
+      return;
+    }
 
     const handler = (e: any) => {
       e.preventDefault();
-
-      setDeferredPrompt(e);
-
+      setPromptEvent(e);
       setShow(true);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
 
-    // iPhone
-    if (isIOS && !isStandalone) {
+    // iPhone never fires beforeinstallprompt
+    if (isIOS) {
       setShow(true);
     }
 
@@ -55,89 +39,76 @@ useEffect(() => {
   }, []);
 
   const install = async () => {
-  console.log("Install clicked");
-  console.log("Deferred Prompt:", deferredPrompt);
+    if (promptEvent) {
+      promptEvent.prompt();
 
-  if (!deferredPrompt) {
-    alert("No install prompt available.");
-    return;
-  }
+      const result = await promptEvent.userChoice;
 
-  deferredPrompt.prompt();
+      if (result.outcome === "accepted") {
+        setShow(false);
+      }
 
-  const choice = await deferredPrompt.userChoice;
-
-  console.log(choice);
-
-  if (choice.outcome === "accepted") {
-    console.log("User accepted install");
-  } else {
-    console.log("User dismissed install");
-  }
-
-  setDeferredPrompt(null);
-  setShow(false);
-};
+      setPromptEvent(null);
+    } else {
+      alert(
+        "Your browser isn't currently offering the install prompt.\n\nYou can still install DGTrack from your browser menu."
+      );
+    }
+  };
 
   if (!show) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[9999]">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-6 max-w-sm w-[90%]">
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl w-[90%] max-w-sm p-6 shadow-xl">
-
-        <h2 className="text-xl font-bold mb-2">
+        <h2 className="text-xl font-bold mb-3">
           Install DGTrack
         </h2>
 
         {isIOS ? (
           <>
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="mb-4">
               Install DGTrack on your iPhone.
             </p>
 
-            <div className="mt-4 space-y-2 text-sm">
-
-              <p>1. Tap the <b>Share</b> button.</p>
-
-              <p>2. Tap <b>Add to Home Screen</b>.</p>
-
-            </div>
+            <ol className="space-y-2 text-sm">
+              <li>1. Tap the Share button.</li>
+              <li>2. Tap Add to Home Screen.</li>
+            </ol>
 
             <button
               onClick={() => setShow(false)}
-              className="mt-6 w-full bg-blue-600 text-white py-2 rounded-lg"
+              className="mt-6 w-full bg-blue-600 text-white py-2 rounded"
             >
               Got it
             </button>
           </>
         ) : (
           <>
-            <p className="text-gray-600 dark:text-gray-300">
-              Install DGTrack for faster access and offline support.
+            <p className="mb-5">
+              Install DGTrack for faster access and offline use.
             </p>
 
-            <div className="flex gap-3 mt-6">
-
+            <div className="flex gap-3">
               <button
                 onClick={() => setShow(false)}
-                className="flex-1 border rounded-lg py-2"
+                className="flex-1 border py-2 rounded"
               >
                 Later
               </button>
 
               <button
                 onClick={install}
-                className="flex-1 bg-blue-600 text-white rounded-lg py-2"
+                className="flex-1 bg-blue-600 text-white py-2 rounded"
               >
                 Install
               </button>
-
             </div>
           </>
         )}
-      </div>
 
+      </div>
     </div>
   );
 }
