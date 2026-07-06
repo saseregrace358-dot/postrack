@@ -11,6 +11,10 @@ from app.utils.business_id import generate_business_id
 from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
 from app.utils.mail_sender import send_reset_email
+from datetime import datetime, timedelta
+
+from app.models.subscription_plan import SubscriptionPlan
+from app.models.business_subscription import BusinessSubscription
 
 import secrets
 
@@ -55,8 +59,12 @@ class ResetPasswordRequest(BaseModel):
 def register(user: UserRegister, db: Session = Depends(get_db)):
 
     existing = db.query(User).filter(User.email == user.email).first()
+
     if existing:
-        raise HTTPException(status_code=400, detail="User already exists")
+        raise HTTPException(
+            status_code=400,
+            detail="User already exists"
+        )
 
     hashed = hash_password(user.password)
 
@@ -68,18 +76,41 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         password=hashed,
         business_name=user.business_name,
         business_id=business_id,
-        role="owner"   # default role assigned server-side
+        role="owner"
     )
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
+    # Find the Free subscription plan
+    free_plan = (
+        db.query(SubscriptionPlan)
+        .filter(SubscriptionPlan.name == "Free")
+        .first()
+    )
+
+    if not free_plan:
+        raise HTTPException(
+            status_code=500,
+            detail="Default subscription plan missing."
+        )
+
+    subscription = BusinessSubscription(
+        business_id=new_user.business_id,
+        plan_id=free_plan.id,
+        status="active",
+        started_at=datetime.utcnow(),
+        expires_at=datetime.utcnow() + timedelta(days=36500)
+    )
+
+    db.add(subscription)
+    db.commit()
+
     return {
         "message": "User created successfully",
         "business_id": business_id
     }
-
 
 # =====================
 # LOGIN
