@@ -16,3 +16,4 @@ reportlab
 openpyxl
 xlsxwriter
 fastapi-mail
+requests==2.32.3
