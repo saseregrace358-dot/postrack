@@ -79,22 +79,21 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         role="owner"
     )
 
+    print("========== REGISTER ==========")
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    # Find the Free subscription plan
+    print("User saved:", new_user.business_id)
+
     free_plan = (
         db.query(SubscriptionPlan)
         .filter(SubscriptionPlan.name == "Free")
         .first()
     )
 
-    if not free_plan:
-        raise HTTPException(
-            status_code=500,
-            detail="Default subscription plan missing."
-        )
+    print("Free plan found:", free_plan)
 
     subscription = BusinessSubscription(
         business_id=new_user.business_id,
@@ -104,9 +103,15 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
         expires_at=datetime.utcnow() + timedelta(days=36500)
     )
 
+    print("Subscription object created")
+
     db.add(subscription)
+
+    print("About to commit subscription")
+
     db.commit()
 
+    print("Subscription committed!")
     return {
         "message": "User created successfully",
         "business_id": business_id
