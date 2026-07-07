@@ -18,6 +18,8 @@ import {
   saveBusinessSettings,
 } from "../../api/settings";
 import toast from "react-hot-toast";
+import BillingSettings from "./settings/BillingSettings";
+
 export function Settings() {
   
   const { theme, toggleTheme } = useTheme();
@@ -27,7 +29,7 @@ const [debtThreshold, setDebtThreshold] = useState("");
 const [savingTax, setSavingTax] = useState(false);
 const [savingDebt, setSavingDebt] = useState(false);
 
-
+const [showBilling, setShowBilling] = useState(false);
 
   const downloadFile = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
@@ -105,6 +107,8 @@ const handleExportDashboardPdf = async () => {
   downloadFile(res.data, "dashboard-summary.pdf");
 };
 
+
+
   const [expanded, setExpanded] = useState<string | null>(null);
 
  const toggleSection = (section: string) => {
@@ -133,6 +137,13 @@ if (showStaffManagement) {
     <StaffManagement
       onBack={() => setShowStaffManagement(false)}
     />
+  );
+}
+if (showBilling) {
+  return (
+   <BillingSettings
+  onBack={() => setShowBilling(false)}
+/>
   );
 }
 
@@ -169,6 +180,7 @@ if (showStaffManagement) {
     <span>→</span>
   </button>
 </div>
+
 
 <div className="bg-white dark:bg-slate-800 rounded-xl border">
   <button
@@ -301,7 +313,17 @@ if (showStaffManagement) {
 
     </div>
   )}
-</div>   
+</div> 
+  <div className="bg-white dark:bg-slate-800 rounded-xl border">
+  <button
+    onClick={() => setShowBilling(true)}
+    className="w-full flex justify-between items-center p-4"
+  >
+    <span>Billing & Subscription</span>
+
+    <span>→</span>
+  </button>
+</div>
  </div>
   );
 }
