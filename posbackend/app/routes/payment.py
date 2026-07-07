@@ -46,40 +46,29 @@ def initialize_subscription_payment(
     user=Depends(get_current_user),
 ):
 
+    print("Received plan:", payload.plan)
+
+    plans = db.query(SubscriptionPlan).all()
+
+    print("Plans in database:")
+
+    for p in plans:
+        print(p.id, p.name)
+
     plan = (
         db.query(SubscriptionPlan)
         .filter(SubscriptionPlan.name == payload.plan)
         .first()
     )
 
+    print("Matched plan:", plan)
+
     if not plan:
         raise HTTPException(
             status_code=404,
             detail="Subscription plan not found",
         )
-
-    reference = str(uuid4())
-
-    response = initialize_payment(
-        email=user["sub"],
-        amount=int(plan.price),
-        reference=reference,
-        callback_url=f"{os.getenv('FRONTEND_URL')}/payment-success",
-        business_id=user["business_id"],
-        plan=plan.name,
-    )
-
-    if not response["status"]:
-        raise HTTPException(
-            status_code=400,
-            detail=response["message"],
-        )
-
-    return {
-        "authorization_url": response["data"]["authorization_url"],
-        "reference": reference,
-    }
-
+    
 
 # ==========================================
 # VERIFY PAYMENT
