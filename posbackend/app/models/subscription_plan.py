@@ -13,6 +13,8 @@ class SubscriptionPlan(Base):
 
     duration_days = Column(Integer, default=30)
 
+    description = Column(String)
+
     max_products = Column(Integer)
 
     max_employees = Column(Integer)
@@ -22,6 +24,7 @@ class SubscriptionPlan(Base):
     ai_enabled = Column(Boolean, default=False)
 
     reports_enabled = Column(Boolean, default=False)
+    Export_enable = Column(Boolean, default=False)
 
     notifications_enabled = Column(Boolean, default=True)
 

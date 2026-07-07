@@ -11,14 +11,16 @@ class PlanBase(BaseModel):
     price: float
     duration_days: int = 30
 
+    description: str
+
     max_products: int
     max_employees: int
     max_customers: int
 
     ai_enabled: bool = False
     reports_enabled: bool = False
+    export_enabled: bool = False
     notifications_enabled: bool = True
-
 
 class SubscriptionPlanCreate(PlanBase):
     pass
