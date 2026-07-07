@@ -24,12 +24,17 @@ def initialize_payment(
         "amount": int(amount * 100),   # Kobo
         "reference": reference,
         "callback_url": callback_url,
-
         "metadata": {
             "business_id": business_id,
             "plan": plan,
         },
     }
+
+    print("EMAIL:", email)
+    print("PLAN:", plan)
+    print("AMOUNT:", amount)
+    print("REFERENCE:", reference)
+    print("CALLBACK:", callback_url)
 
     response = requests.post(
         url,
@@ -39,19 +44,11 @@ def initialize_payment(
 
     print("PAYSTACK RESPONSE:")
     print(response.json())
-    print("USER")
-    
 
-    
-    print("AMOUNT:", plan.price)
-    print("CALLBACK:", f"{os.getenv('FRONTEND_URL')}/payment-success")
-    print("SECRET EXISTS:", PAYSTACK_SECRET is not None)
-    
     return response.json()
 
 
 def verify_payment(reference: str):
-
     url = f"https://api.paystack.co/transaction/verify/{reference}"
 
     response = requests.get(
