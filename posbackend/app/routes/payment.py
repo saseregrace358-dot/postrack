@@ -74,13 +74,13 @@ def initialize_subscription_payment(
     reference = str(uuid4())
 
     response = initialize_payment(
-        email=user["sub"],
-        amount=plan.price,
-        reference=reference,
-        callback_url=f"{os.getenv('FRONTEND_URL')}/payment-success",
-        business_id=user["business_id"],
-        plan=plan.name,
-    )
+    email=user["email"],
+    amount=plan.price,
+    reference=reference,
+    callback_url=f"{os.getenv('FRONTEND_URL')}/payment-success",
+    business_id=user["business_id"],
+    plan=plan.name,
+)
 
     print("PAYSTACK RESPONSE:")
     print(response)
