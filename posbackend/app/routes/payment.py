@@ -12,7 +12,7 @@ from app.auth.dependencies import get_current_user
 from app.models.payment import Payment
 from app.models.business_subscription import BusinessSubscription
 from app.models.subscription_plan import SubscriptionPlan
-
+from sqlalchemy import func
 from app.services.paystack import (
     initialize_payment,
     verify_payment,
@@ -56,10 +56,13 @@ def initialize_subscription_payment(
         print(p.id, p.name)
 
     plan = (
-        db.query(SubscriptionPlan)
-        .filter(SubscriptionPlan.name == payload.plan)
-        .first()
+    db.query(SubscriptionPlan)
+    .filter(
+        func.lower(SubscriptionPlan.name)
+        == payload.plan.lower()
     )
+    .first()
+)
 
     print("Matched plan:", plan)
 
