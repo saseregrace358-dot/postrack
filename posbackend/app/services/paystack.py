@@ -39,7 +39,14 @@ def initialize_payment(
 
     print("PAYSTACK RESPONSE:")
     print(response.json())
+    print("USER")
+    
 
+    
+    print("AMOUNT:", plan.price)
+    print("CALLBACK:", f"{os.getenv('FRONTEND_URL')}/payment-success")
+    print("SECRET EXISTS:", PAYSTACK_SECRET is not None)
+    
     return response.json()
 
 
