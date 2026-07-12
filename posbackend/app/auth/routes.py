@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.business_subscription import BusinessSubscription
-
+import socket
 import random
 import traceback
 import secrets
@@ -328,3 +328,15 @@ def reset_password(
     return {
         "message": "Password successfully updated"
     }
+
+
+@router.get("/smtp-test")
+def smtp_test():
+    try:
+        socket.create_connection(("smtp-relay.brevo.com", 587), timeout=10)
+        return {"status": "connected"}
+    except Exception as e:
+        return {
+            "status": "failed",
+            "error": repr(e)
+        }
