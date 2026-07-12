@@ -43,7 +43,7 @@ BizTrack POS Team
 
     print("MAIL STEP 3: Connected")
 
-    smtp.starttls()
+    
 
     print("MAIL STEP 4: TLS started")
 
