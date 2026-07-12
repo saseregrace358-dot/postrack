@@ -17,7 +17,7 @@ from app.models.subscription_plan import SubscriptionPlan
 from app.models.business_subscription import BusinessSubscription
 
 import random
-
+import traceback
 import secrets
 
 router = APIRouter(
@@ -231,14 +231,15 @@ async def forgot_password(
             "message": "Verification code sent successfully."
         }
 
+    
+
     except Exception as e:
-        print(e)
+        traceback.print_exc()
 
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to send verification code."
-        )
-
+    raise HTTPException(
+        status_code=500,
+        detail=str(e)
+    )
 
 # ==========================================
 # VERIFY RESET CODE
