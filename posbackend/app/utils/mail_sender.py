@@ -33,7 +33,13 @@ BizTrack POS Team
 
     print("MAIL STEP 2: Connecting to Brevo")
 
-    smtp = smtplib.SMTP("smtp-relay.brevo.com", 465, timeout=30)
+    
+
+    smtp = smtplib.SMTP_SSL(
+    "smtp-relay.brevo.com",
+    465,
+    timeout=10
+)
 
     print("MAIL STEP 3: Connected")
 
