@@ -15,6 +15,8 @@ class SubscriptionPlan(Base):
 
     description = Column(String)
 
+    max_sales = Column(Integer)
+
     max_products = Column(Integer)
 
     max_employees = Column(Integer)
