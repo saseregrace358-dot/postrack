@@ -1,8 +1,7 @@
-from fastapi_mail import FastMail, MessageSchema
+from fastapi_mail import FastMail, MessageSchema, MessageType
 from app.utils.email import conf
 
 async def send_reset_email(email: str, code: str):
-
     message = MessageSchema(
         subject="Reset your BizTrack POS Password",
         recipients=[email],
@@ -17,15 +16,13 @@ Your verification code is:
 
 This code will expire in 10 minutes.
 
-Enter this code in the BizTrack POS app to continue resetting your password.
-
-If you did not request this password reset, you can safely ignore this email.
-
 Regards,
 BizTrack POS Team
 """,
-        subtype="plain"
+        subtype=MessageType.plain,
     )
 
     fm = FastMail(conf)
     await fm.send_message(message)
+
+    print("Email sent successfully!")

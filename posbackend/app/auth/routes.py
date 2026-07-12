@@ -211,8 +211,11 @@ async def forgot_password(
             detail="Email not found"
         )
 
-    # Generate 6-digit verification code
+    print("Step 1: User found")
+
+    # Generate verification code
     code = str(random.randint(100000, 999999))
+    print("Step 2: Code generated:", code)
 
     user.reset_code = code
     user.reset_code_expires = (
@@ -220,27 +223,25 @@ async def forgot_password(
     )
 
     db.commit()
+    print("Step 3: Database committed")
 
     try:
-        await send_reset_email(
-            user.email,
-            code
-        )
+        print("Step 4: Sending email...")
+        await send_reset_email(user.email, code)
+        print("Step 5: Email sent")
 
         return {
             "message": "Verification code sent successfully."
         }
 
-    
-
     except Exception as e:
+        print("Step 6: Error sending email")
         traceback.print_exc()
 
         raise HTTPException(
-           status_code=500,
-        detail=f"Failed to send verification code: {str(e)}"
-    )
-
+            status_code=500,
+            detail=f"Failed to send verification code: {str(e)}"
+        )
 # ==========================================
 # VERIFY RESET CODE
 # ==========================================
