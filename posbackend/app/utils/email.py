@@ -16,7 +16,7 @@ conf = ConnectionConfig(
     MAIL_PORT=587,
 
     MAIL_SSL_TLS=True,
-    MAIL_STARTTLS=False,
+    MAIL_STARTTLS=True,
 
     USE_CREDENTIALS=True,
 )
