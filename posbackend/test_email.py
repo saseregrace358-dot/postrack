@@ -6,5 +6,6 @@ async def main():
         "sseun3568@gmail.com",
         "123456"
     )
+    print("Email sent successfully!")
 
 asyncio.run(main())
