@@ -238,7 +238,7 @@ async def forgot_password(
 
     raise HTTPException(
         status_code=500,
-        detail=str(e)
+        detail=f"Failed to send verification code: {str(e)}"
     )
 
 # ==========================================
