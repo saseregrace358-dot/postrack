@@ -2,6 +2,7 @@ import os
 import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
+import ssl
 
 load_dotenv()
 
@@ -12,6 +13,20 @@ MAIL_FROM = os.getenv("MAIL_FROM")
 
 async def send_reset_email(email: str, code: str):
     print("MAIL STEP 1: Building message")
+    print("MAIL_USERNAME:", MAIL_USERNAME)
+    print("MAIL_PASSWORD exists:", MAIL_PASSWORD is not None)
+    print("MAIL_FROM:", MAIL_FROM)
+    print("Connecting...")
+
+    with smtplib.SMTP_SSL(
+    "smtp-relay.brevo.com",
+    465,
+    context=ssl.create_default_context(),
+    timeout=10,
+   ) as smtp:
+     print("Connected")
+    smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+    print("Logged in")
 
     msg = EmailMessage()
     msg["Subject"] = "Reset your BizTrack POS Password"
