@@ -34,3 +34,5 @@ class Sale(Base):
     business_id = Column(String, index=True)
     created_by = Column(Integer)
     created_by_name = Column(String)
+
+    

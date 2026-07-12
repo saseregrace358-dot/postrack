@@ -20,6 +20,7 @@ class Product(Base):
     business_id = Column(String, index=True)
     created_by = Column(Integer)        # user_id
     created_by_name = Column(String)
+    
 
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)

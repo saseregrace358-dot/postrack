@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, JSON
 from app.database import Base
+from datetime import datetime
+from sqlalchemy import Column, DateTime
 
 class Employee(Base):
     __tablename__ = "employees"
@@ -12,3 +14,16 @@ class Employee(Base):
     permissions = Column(JSON, default=[])
 
     business_id = Column(String, nullable=False)
+
+    created_at = Column(
+    DateTime,
+    default=datetime.utcnow,
+    nullable=False
+)
+
+updated_at = Column(
+    DateTime,
+    default=datetime.utcnow,
+    onupdate=datetime.utcnow,
+    nullable=False
+)

@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.business_subscription import BusinessSubscription
 
+import random
+
 import secrets
 
 router = APIRouter(
@@ -48,8 +50,14 @@ class UserLogin(BaseModel):
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
+class VerifyResetCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
 class ResetPasswordRequest(BaseModel):
-    token: str
+    email: str
+    code: str
     new_password: str
 
 # =====================
@@ -185,6 +193,9 @@ def get_me(
         "role": user.role
     }
 
+# ==========================================
+# FORGOT PASSWORD
+# ==========================================
 @router.post("/forgot-password")
 async def forgot_password(
     payload: ForgotPasswordRequest,
@@ -200,26 +211,77 @@ async def forgot_password(
             detail="Email not found"
         )
 
-    token = secrets.token_urlsafe(32)
+    # Generate 6-digit verification code
+    code = str(random.randint(100000, 999999))
 
-    user.reset_token = token
+    user.reset_code = code
+    user.reset_code_expires = (
+        datetime.utcnow() + timedelta(minutes=10)
+    )
+
     db.commit()
 
     try:
-        await send_reset_email(user.email, token)
+        await send_reset_email(
+            user.email,
+            code
+        )
 
         return {
-            "message": "Reset email sent."
+            "message": "Verification code sent successfully."
         }
 
     except Exception as e:
-        print(e)   # Optional: log the real error
+        print(e)
 
         raise HTTPException(
             status_code=500,
-            detail="Failed to send reset email."
+            detail="Failed to send verification code."
         )
 
+
+# ==========================================
+# VERIFY RESET CODE
+# ==========================================
+@router.post("/verify-reset-code")
+def verify_reset_code(
+    payload: VerifyResetCodeRequest,
+    db: Session = Depends(get_db)
+):
+
+    user = db.query(User).filter(
+        User.email == payload.email
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Email not found"
+        )
+
+    if user.reset_code != payload.code:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification code"
+        )
+
+    if (
+        user.reset_code_expires is None
+        or datetime.utcnow() > user.reset_code_expires
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code has expired"
+        )
+
+    return {
+        "message": "Verification successful"
+    }
+
+
+# ==========================================
+# RESET PASSWORD
+# ==========================================
 @router.post("/reset-password")
 def reset_password(
     payload: ResetPasswordRequest,
@@ -227,23 +289,40 @@ def reset_password(
 ):
 
     user = db.query(User).filter(
-        User.reset_token == payload.token
+        User.email == payload.email
     ).first()
 
     if not user:
         raise HTTPException(
+            status_code=404,
+            detail="Email not found"
+        )
+
+    if user.reset_code != payload.code:
+        raise HTTPException(
             status_code=400,
-            detail="Invalid or expired token"
+            detail="Invalid verification code"
+        )
+
+    if (
+        user.reset_code_expires is None
+        or datetime.utcnow() > user.reset_code_expires
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code has expired"
         )
 
     user.password = hash_password(
         payload.new_password
     )
 
-    user.reset_token = None
+    # Clear verification code after successful reset
+    user.reset_code = None
+    user.reset_code_expires = None
 
     db.commit()
 
     return {
-        "message":"Password successfully updated"
+        "message": "Password successfully updated"
     }

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime
 from app.database import Base
 from datetime import datetime
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -15,5 +16,17 @@ class User(Base):
 
     business_id = Column(String, unique=True, index=True)
     business_name = Column(String, unique=True, index=True)
-    reset_token = Column(String, nullable=True)
-    reset_token_expiry = Column(DateTime, nullable=True)
+
+    reset_code = Column(String, nullable=True)
+    reset_code_expires = Column(DateTime, nullable=True)
+
+    # Automatically set when the user is created
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Automatically updated whenever the record changes
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )

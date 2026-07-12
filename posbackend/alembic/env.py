@@ -11,10 +11,18 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.database import Base
+from app.models.user import User
 from app.models.product import Product
 from app.models.sale import Sale
 from app.models.inventory_log import InventoryLog
+from app.models.subscription_plan import SubscriptionPlan
+from app.models.business_subscription import BusinessSubscription
+from app.models.payment import Payment
+from app.models.employee import Employee
+from app.models.business_settings import BusinessSettings
+from app.models.notification import Notification
 
+target_metadata = Base.metadata
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

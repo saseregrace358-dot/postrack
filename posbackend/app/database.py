@@ -8,7 +8,10 @@ load_dotenv()
 
         
 
-DATABASE_URL = "postgresql://postgres.mpnqpffykrhfwuzhndgw:Gace1212%23%23Gr@aws-0-eu-west-1.pooler.supabase.com:6543/postgres"
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
