@@ -21,16 +21,16 @@ api.interceptors.request.use((config) => {
 // Automatically handle expired tokens
 api.interceptors.response.use(
   (response) => response,
+
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
-      window.location.href = "/";
+      window.location.reload();
     }
 
     return Promise.reject(error);
   }
 );
-
 export default api;

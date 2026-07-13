@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
-from jose import jwt, JWTError
-from fastapi import HTTPException
-
+from jose import jwt, JWTError, ExpiredSignatureError
+from fastapi import HTTPException, status
 import os
 from dotenv import load_dotenv
 
@@ -39,6 +38,23 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 def decode_token(token: str):
     try:
         secret = get_secret()
-        return jwt.decode(token, secret, algorithms=[ALGORITHM])
+
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[ALGORITHM]
+        )
+
+        return payload
+
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired"
+        )
+
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
