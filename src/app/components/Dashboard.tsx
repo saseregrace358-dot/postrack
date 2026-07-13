@@ -222,7 +222,7 @@ const busyDay =
 
       {/* HEADER */}
      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
+ <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
   
 
   <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-sm">
@@ -250,27 +250,6 @@ const busyDay =
     />
   </div>
 
-</div>
-      {/* METRICS GRID */}
-     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
-        <Metric title="Today Sales" value={`₦${daySales.toLocaleString()}`} icon={Activity} />
-        <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
-        <Metric
-          title="Average Order Value"
-          value={`₦${aov.toFixed(2)}`}
-          icon={DollarSign}
-        />
-        <Metric
-          title="Inventory Value"
-          value={` ₦${inventoryValue.toLocaleString()}`}
-          icon={Package}
-        />
-          <p className="text-sm text-gray-500">Inventory Value</p>
-          <p className="text-xl font-bold text-blue-600">
-            ₦{inventoryValue.toLocaleString()}
-          </p>
-        
        
       <div className="
   bg-white
@@ -310,6 +289,26 @@ const busyDay =
 
   </div>
 </div>
+</div>
+
+</div>
+      {/* METRICS GRID */}
+     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <Metric title="Total Revenue" value={`₦${totalRevenue.toLocaleString()}`} icon={DollarSign} />
+        <Metric title="Today Sales" value={`₦${daySales.toLocaleString()}`} icon={Activity} />
+        <Metric title="Total Profit" value={`₦${profit.toFixed(2)}`} icon={CreditCard} />
+        <Metric
+          title="Average Order Value"
+          value={`₦${aov.toFixed(2)}`}
+          icon={DollarSign}
+        />
+        <Metric
+          title="Inventory Value"
+          value={` ₦${inventoryValue.toLocaleString()}`}
+          icon={Package}
+        />
+          
+        
       </div>
 
 
