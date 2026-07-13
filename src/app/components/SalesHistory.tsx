@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
-import { Calendar, Filter, Receipt, X } from "lucide-react";
+import { 
+  ShoppingCart,
+  Package,
+  AlertTriangle,
+ Receipt, X } from "lucide-react";
 import {
   getSalesApi,
   addPaymentApi,
 } from "../../api/sales";
+
+import { Metric } from "./ui/Metric";
 
 type CartItem = {
   id: number;
@@ -173,24 +179,29 @@ const filteredSales = sales.filter((sale: Sale) => {
       
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
-          <p className="text-sm opacity-90 mb-1">Total Sales</p>
-          <p className="text-2xl font-bold">{filteredSales.length}</p>
-        </div>
-        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white">
-          <p className="text-sm opacity-90 mb-1">Total Items Sold</p>
-          <p className="text-2xl font-bold">{totalItems}</p>
-        </div>
-        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-4 text-white">
-          <p className="text-sm opacity-90 mb-1">Total Debt</p>
-          <p className="text-2xl font-bold">
-            ₦{totalDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
+<div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
+  <Metric
+    title="Total Sales"
+    value={filteredSales.length}
+    icon={ShoppingCart}
+  />
+
+  <Metric
+    title="Total Items Sold"
+    value={totalItems}
+    icon={Package}
+  />
+
+  <Metric
+    title="Total Debt"
+    value={`₦${totalDebt.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+    })}`}
+    icon={AlertTriangle}
+  />
+
+</div>
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         <button

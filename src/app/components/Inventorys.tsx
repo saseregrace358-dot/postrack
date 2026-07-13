@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, Package, X } from "lucide-react";
+import { Search, Plus, Package, X, Boxes, AlertTriangle } from "lucide-react";
 import {
   getProducts,
   createProduct,
   updateProductApi
 } from "../../api/products";
 import { Html5QrcodeScanner } from "html5-qrcode";
-
+import { Metric } from "./ui/Metric";
 import { supabase } from "../../lib/supabase";
 
 
@@ -280,24 +280,24 @@ if (loading) {
 
       {/* STATS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl">
-          <p className="text-sm text-gray-500">Products</p>
-          <p className="text-xl font-bold">{totalProducts}</p>
-        </div>
+  <Metric
+    title="Products"
+    value={totalProducts}
+    icon={Package}
+  />
 
-        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl">
-          <p className="text-sm text-gray-500">Stock Units</p>
-          <p className="text-xl font-bold text-green-600">{totalStock}</p>
-        </div>
+  <Metric
+    title="Stock Units"
+    value={totalStock}
+    icon={Boxes}
+  />
 
-        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl">
-          <p className="text-sm text-gray-500">Low Stock</p>
-          <p className="text-xl font-bold text-red-600">{lowStock}</p>
-        </div>
-
-        
-      </div>
-
+  <Metric
+    title="Low Stock"
+    value={lowStock}
+    icon={AlertTriangle}
+  />
+</div>
       {/* SEARCH */}
       <div className="relative">
         <Search className="absolute left-3 top-3 text-gray-400" />
