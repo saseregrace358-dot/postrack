@@ -254,12 +254,7 @@ useEffect(() => {
 
   const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
 
-  const inventoryValue = products.reduce((sum, p) => {
-  const cost = Number(p.cost || 0);
-  const stock = Number(p.stock || 0);
-
-  return sum + cost * stock;
-}, 0);
+  
 
   const lowStock = products.filter((p) => p.stock <= 20).length;
 if (loading) {
@@ -300,12 +295,7 @@ if (loading) {
           <p className="text-xl font-bold text-red-600">{lowStock}</p>
         </div>
 
-        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl">
-          <p className="text-sm text-gray-500">Inventory Value</p>
-          <p className="text-xl font-bold text-blue-600">
-            ₦{inventoryValue.toLocaleString()}
-          </p>
-        </div>
+        
       </div>
 
       {/* SEARCH */}

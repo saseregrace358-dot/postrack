@@ -43,6 +43,7 @@ type Product = {
   id: number;
   name: string;
   price: number;
+  cost: number;
   stock: number;
 };
 
@@ -121,7 +122,13 @@ useEffect(() => {
   return sum + (sale.total - cost);
 }, 0);
 
-  
+  const inventoryValue = products.reduce((sum, p) => {
+  const cost = Number(p.cost || 0);
+  const stock = Number(p.stock || 0);
+
+  return sum + cost * stock;
+}, 0);
+
 const totalOrders = salesUntilDate.length;
 
 const aov =
@@ -256,6 +263,12 @@ const busyDay =
           value={`₦${aov.toFixed(2)}`}
           icon={DollarSign}
         />
+        <div className="p-4 bg-white dark:bg-slate-800 rounded-xl">
+          <p className="text-sm text-gray-500">Inventory Value</p>
+          <p className="text-xl font-bold text-blue-600">
+            ₦{inventoryValue.toLocaleString()}
+          </p>
+        </div>
        
       <div className="
   bg-white

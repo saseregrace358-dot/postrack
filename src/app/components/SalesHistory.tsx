@@ -45,7 +45,7 @@ export function SalesHistory() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [filterPeriod, setFilterPeriod] = useState("all");
  const [payAmount, setPayAmount] = useState("");
-
+const [searchTerm, setSearchTerm] = useState("");
   const loadSales = async () => {
   try {
     const res = await getSalesApi();
@@ -103,32 +103,49 @@ const balance = selectedSale
  
  
 const filteredSales = sales.filter((sale: Sale) => {
-  if (filterPeriod === "all") return true;
+  // Existing date filter
+  if (filterPeriod !== "all") {
+    const saleDate = new Date(sale.date);
+    const now = new Date();
 
-  const saleDate = new Date(sale.date);
-  const now = new Date();
+    if (filterPeriod === "today") {
+      if (saleDate.toDateString() !== now.toDateString()) return false;
+    }
 
-  if (filterPeriod === "today") {
-    return saleDate.toDateString() === now.toDateString();
+    if (filterPeriod === "week") {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      if (saleDate < weekAgo) return false;
+    }
+
+    if (filterPeriod === "month") {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      if (saleDate < monthAgo) return false;
+    }
   }
 
-  if (filterPeriod === "week") {
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    return saleDate >= weekAgo;
-  }
+  if (!searchTerm.trim()) return true;
 
-  if (filterPeriod === "month") {
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    return saleDate >= monthAgo;
-  }
+  const search = searchTerm.toLowerCase();
 
-  return true;
+  return (
+    sale.order_id.toLowerCase().includes(search) ||
+
+    sale.status.toLowerCase().includes(search) ||
+
+    sale.paymentMethod.toLowerCase().includes(search) ||
+
+    (sale.created_by_name ?? "").toLowerCase().includes(search) ||
+
+    sale.total.toString().includes(search) ||
+
+    sale.balance.toString().includes(search) ||
+
+    sale.items.some(item =>
+      item.name.toLowerCase().includes(search)
+    )
+  );
 });
 
-const totalRevenue = filteredSales.reduce(
-  (sum: number, sale: Sale) => sum + sale.total,
-  0
-);
  const totalItems = filteredSales.reduce(
   (sum: number, sale: Sale) =>
     sum +
@@ -157,10 +174,7 @@ const totalRevenue = filteredSales.reduce(
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
-          <p className="text-sm opacity-90 mb-1">Total Revenue</p>
-          <p className="text-2xl font-bold">₦{totalRevenue.toFixed(2)}</p>
-        </div>
+        
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
           <p className="text-sm opacity-90 mb-1">Total Sales</p>
           <p className="text-2xl font-bold">{filteredSales.length}</p>
@@ -220,7 +234,15 @@ const totalRevenue = filteredSales.reduce(
           This Month
         </button>
       </div>
-
+ <div className="mb-4">
+  <input
+    type="text"
+    placeholder="Search Order ID, Status, Customer, Product..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+  />
+</div>
       {/* Sales List */}
       <div className="space-y-3">
         {filteredSales.length === 0 ? (
