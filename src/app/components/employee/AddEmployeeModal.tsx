@@ -235,46 +235,50 @@ return (
             ))}
 
           </div>
+<form
+  onSubmit={handleSubmit}
+  className="flex flex-col flex-1 overflow-hidden"
+>
 
-        </div>
+  <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
-      </form>
+    {/* Inputs */}
 
-      {/* Sticky Footer */}
-      <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 p-5">
+  </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+  <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t p-5">
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto rounded-xl border border-slate-300 dark:border-slate-700 px-6 py-3"
-          >
-            Cancel
-          </button>
+    <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
 
-          <button
-            type="submit"
-            onClick={(e) =>
-              (e.currentTarget.closest("form") as HTMLFormElement)?.requestSubmit()
-            }
-            disabled={loading}
-            className="w-full sm:w-auto rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-6 py-3"
-          >
-            {loading
-              ? "Saving..."
-              : isEdit
-              ? "Update Employee"
-              : "Create Employee"}
-          </button>
+      <button
+        type="button"
+        onClick={onClose}
+      >
+        Cancel
+      </button>
 
-        </div>
-
-      </div>
+      <button
+        type="submit"
+        disabled={loading}
+      >
+        {loading ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
+      </button>
 
     </div>
 
   </div>
+
+</form>
+        </div>
+
+      </form>
+
+      
+      </div>
+
+    </div>
+
+
 );
 }
 function Input({
