@@ -8,21 +8,11 @@ import { AuthContext } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { Toaster } from "react-hot-toast";
 import { InstallPrompt } from "./components/InstallPrompt";
-import Landing from "./components/Landing";
+  
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [token, setToken] = useState<string | null>(null);
-  const [showLanding, setShowLanding] = useState(false);
-  useEffect(() => {
-  const savedToken = localStorage.getItem("token");
-  const hasVisited = localStorage.getItem("visited");
 
-  setToken(savedToken);
-
-  if (!savedToken && !hasVisited) {
-    setShowLanding(true);
-  }
-}, []);
 useEffect(() => {
   setToken(localStorage.getItem("token"));
 }, []);
@@ -42,16 +32,6 @@ useEffect(() => {
   }
 
   if (!token) {
-    if (showLanding) {
-    return (
-      <Landing
-        onGetStarted={() => {
-          localStorage.setItem("visited", "true");
-          setShowLanding(false);
-        }}
-      />
-    );
-  }
   return (
     <>
       <InstallPrompt />
