@@ -107,7 +107,24 @@ onClose();
 
 if (!isOpen) return null;
 
-return ( <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"> <div className="bg-slate-900 w-full max-w-2xl rounded-3xl border border-slate-800 p-6 relative">
+return ( <div className="
+w-full
+rounded-xl
+border
+border-slate-300
+dark:border-slate-700
+bg-white
+dark:bg-slate-800
+px-4
+py-3
+text-slate-900
+dark:text-white
+focus:ring-2
+focus:ring-green-500
+focus:border-green-500
+transition
+">
+   <div className="bg-slate-900 w-full max-w-2xl rounded-3xl border border-slate-800 p-6 relative">
 
 
     <button
