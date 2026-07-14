@@ -128,7 +128,6 @@ const handleSubmit = async (
 };
 
 return (
-  
   <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
 
     <div
@@ -174,111 +173,109 @@ return (
 
       </div>
 
-      {/* Scrollable Body */}
+      {/* ONE FORM ONLY */}
       <form
         onSubmit={handleSubmit}
-        className="flex-1 overflow-y-auto p-5 space-y-6"
+        className="flex flex-col flex-1 overflow-hidden"
       >
 
-        <Input
-          label="Full Name"
-          value={fullName}
-          setValue={setFullName}
-        />
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
-        <Input
-          label="Email Address"
-          value={email}
-          setValue={setEmail}
-          type="email"
-        />
+          <Input
+            label="Full Name"
+            value={fullName}
+            setValue={setFullName}
+          />
 
-        <Input
-          label={isEdit ? "New Password (Optional)" : "Password"}
-          value={password}
-          setValue={setPassword}
-          type="password"
-        />
+          <Input
+            label="Email Address"
+            value={email}
+            setValue={setEmail}
+            type="email"
+          />
 
-        <div>
+          <Input
+            label={isEdit ? "New Password (Optional)" : "Password"}
+            value={password}
+            setValue={setPassword}
+            type="password"
+          />
 
-          <label className="block font-medium text-slate-700 dark:text-slate-300 mb-3">
-            Permissions
-          </label>
+          <div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-3">
+              Permissions
+            </label>
 
-            {permissionOptions.map((permission) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-              <label
-                key={permission}
-                className={`flex items-center gap-3 rounded-xl border p-4 cursor-pointer transition ${
-                  permissions.includes(permission)
-                    ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                    : "border-slate-200 dark:border-slate-700 hover:border-green-400"
-                }`}
-              >
+              {permissionOptions.map((permission) => (
 
-                <input
-                  type="checkbox"
-                  checked={permissions.includes(permission)}
-                  onChange={() => togglePermission(permission)}
-                  className="h-5 w-5 accent-green-600"
-                />
+                <label
+                  key={permission}
+                  className={`flex items-center gap-3 rounded-xl border p-4 cursor-pointer transition ${
+                    permissions.includes(permission)
+                      ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                      : "border-slate-200 dark:border-slate-700 hover:border-green-400"
+                  }`}
+                >
 
-                <span className="capitalize text-slate-700 dark:text-white">
-                  {permission}
-                </span>
+                  <input
+                    type="checkbox"
+                    checked={permissions.includes(permission)}
+                    onChange={() => togglePermission(permission)}
+                    className="h-5 w-5 accent-green-600"
+                  />
 
-              </label>
+                  <span className="capitalize text-slate-700 dark:text-white">
+                    {permission}
+                  </span>
 
-            ))}
+                </label>
+
+              ))}
+
+            </div>
 
           </div>
-<form
-  onSubmit={handleSubmit}
-  className="flex flex-col flex-1 overflow-hidden"
->
 
-  <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        </div>
 
-    {/* Inputs */}
+        {/* Footer */}
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
 
-  </div>
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
 
-  <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t p-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-auto rounded-xl border border-slate-300 dark:border-slate-700 px-6 py-3"
+            >
+              Cancel
+            </button>
 
-    <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:w-auto rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-6 py-3"
+            >
+              {loading
+                ? "Saving..."
+                : isEdit
+                ? "Update Employee"
+                : "Create Employee"}
+            </button>
 
-      <button
-        type="button"
-        onClick={onClose}
-      >
-        Cancel
-      </button>
+          </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-      >
-        {loading ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
-      </button>
-
-    </div>
-
-  </div>
-
-</form>
         </div>
 
       </form>
 
-      
-      </div>
-
     </div>
 
-
+  </div>
 );
 }
 function Input({
