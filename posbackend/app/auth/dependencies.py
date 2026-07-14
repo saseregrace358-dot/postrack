@@ -84,12 +84,11 @@ def get_current_user(
 
         return {
             "id": employee.id,
-            "name": employee.name,
+            "name": employee.full_name,
             "business_id": employee.business_id,
             "role": "employee",
-            "permissions": employee.permissions
+            "permissions": employee.permissions,
         }
-
 
     raise HTTPException(
         status_code=401,
