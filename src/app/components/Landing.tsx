@@ -10,7 +10,10 @@ import {
   CheckCircle,
 } from "lucide-react";
 
-export default function LandingPage() {
+interface LandingProps {
+  onGetStarted: () => void;
+}
+export default function Landing({ onGetStarted }: LandingProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
