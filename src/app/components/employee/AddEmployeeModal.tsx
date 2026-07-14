@@ -120,12 +120,15 @@ return ( <div className="fixed inset-0 bg-black/60 flex items-center justify-cen
       onSubmit={handleSubmit}
       className="space-y-5"
     >
-      <Input
-        label="Staff Name"
-        value={name}
-        setValue={setName}
-      />
+      <input
+  type="text"
+  placeholder="Full Name"
+/>
 
+<input
+  type="email"
+  placeholder="Email Address"
+/>
       <Input
         label="Password"
         value={password}

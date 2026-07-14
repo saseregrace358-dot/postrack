@@ -8,7 +8,8 @@ class Employee(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    name = Column(String, nullable=False)
+    full_name = Column(String)
+    email = Column(String, unique=True, index=True)
     password = Column(String, nullable=False)
 
     permissions = Column(JSON, default=[])
