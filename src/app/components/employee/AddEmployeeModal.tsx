@@ -250,3 +250,4 @@ function Input({
     </div>
   );
 }
+export default AddEmployeeModal;
