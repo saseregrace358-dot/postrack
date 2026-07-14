@@ -279,7 +279,7 @@ if (loading) {
       </div>
 
       {/* STATS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-3 gap-3">
   <Metric
     title="Products"
     value={totalProducts}

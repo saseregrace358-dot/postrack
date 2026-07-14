@@ -301,17 +301,16 @@ const busyDay =
           title="Average Order Value"
           value={`₦${aov.toFixed(2)}`}
           icon={DollarSign}
-        />
-        <Metric
+        />   
+        
+      </div>
+ <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+<Metric
           title="Inventory Value"
           value={` ₦${inventoryValue.toLocaleString()}`}
           icon={Package}
         />
-          
-        
-      </div>
-
-
+</div>
       {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
 

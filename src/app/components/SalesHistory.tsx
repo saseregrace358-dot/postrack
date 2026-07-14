@@ -192,6 +192,8 @@ const filteredSales = sales.filter((sale: Sale) => {
     value={totalItems}
     icon={Package}
   />
+  </div>
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
   <Metric
     title="Total Debt"
