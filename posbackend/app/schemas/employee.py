@@ -20,7 +20,7 @@ class EmployeeResponse(BaseModel):
     permissions: List[str]
 
 class EmployeeLogin(BaseModel):
-    full_name: str
+    
     email: str
     password: str
 

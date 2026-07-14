@@ -126,9 +126,9 @@ const handleSubmit = async (e: React.FormEvent) => {
       } catch {
 
         const employeeRes = await employeeLogin({
-          name: formData.email,
+          email: formData.email,
           password: formData.password,
-        });
+      });
 
         localStorage.setItem(
           "token",
