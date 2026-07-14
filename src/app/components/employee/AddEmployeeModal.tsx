@@ -96,7 +96,7 @@ const handleSubmit = async (
     alert("Password is required");
     return;
   }
-
+if (!isOpen) return null;
   setLoading(true);
 
   try {
