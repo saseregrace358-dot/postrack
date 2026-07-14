@@ -98,9 +98,7 @@ const handleSubmit = async (
   }
 
   setLoading(true);
-if (!isOpen) {
-  return null;
-}
+  
 
   try {
     const employeeData: Partial<Employee> = {
@@ -129,7 +127,7 @@ if (!isOpen) {
     setLoading(false);
   }
 };
-
+if (!isOpen) return null;
 return (
   <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
 
@@ -167,14 +165,12 @@ return (
         </div>
 
         <button
-  type="button"
-  onClick={() => {
-    console.log("Close clicked");
-    onClose();
-  }}
->
-  ✕
-</button>
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        >
+          ✕
+        </button>
 
       </div>
 
