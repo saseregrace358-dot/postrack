@@ -96,8 +96,11 @@ const handleSubmit = async (
     alert("Password is required");
     return;
   }
-if (!isOpen) return null;
+
   setLoading(true);
+if (!isOpen) {
+  return null;
+}
 
   try {
     const employeeData: Partial<Employee> = {
@@ -164,12 +167,14 @@ return (
         </div>
 
         <button
-          type="button"
-          onClick={onClose}
-          className="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-        >
-          ✕
-        </button>
+  type="button"
+  onClick={() => {
+    console.log("Close clicked");
+    onClose();
+  }}
+>
+  ✕
+</button>
 
       </div>
 
