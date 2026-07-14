@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 interface Employee {
 id?: string;
-name: string;
+full_name: string;
+email: string;
 password: string;
 permissions: string[];
 }
@@ -31,7 +32,9 @@ editingEmployee,
 }: AddEmployeeModalProps) {
 const isEdit = !!editingEmployee;
 
-const [name, setName] = useState("");
+const [fullName, setFullName] = useState("");
+const [email, setEmail] = useState("");
+
 const [password, setPassword] = useState("");
 const [permissions, setPermissions] = useState<string[]>([]);
 
@@ -49,7 +52,8 @@ document.body.style.overflow = isOpen ? "hidden" : "auto";
 
 useEffect(() => {
 if (editingEmployee) {
-setName(editingEmployee.name || "");
+setFullName(editingEmployee.full_name || "");
+setEmail(editingEmployee.email || "");
 setPassword("");
 setPermissions(editingEmployee.permissions || []);
 }
@@ -64,11 +68,11 @@ prev.includes(permission)
 };
 
 const resetForm = () => {
-setName("");
-setPassword("");
-setPermissions([]);
+  setFullName("");
+  setEmail("");
+  setPassword("");
+  setPermissions([]);
 };
-
 const handleSubmit = (
 e: React.FormEvent<HTMLFormElement>
 ) => {
@@ -77,7 +81,8 @@ e.preventDefault();
 
 const employeeData: any = {
   id: editingEmployee?.id,
-  name,
+  full_name: fullName,
+  email,
   permissions,
 };
 
@@ -120,21 +125,25 @@ return ( <div className="fixed inset-0 bg-black/60 flex items-center justify-cen
       onSubmit={handleSubmit}
       className="space-y-5"
     >
-      <input
-  type="text"
-  placeholder="Full Name"
+      <Input
+  label="Full Name"
+  value={fullName}
+  setValue={setFullName}
 />
 
-<input
+<Input
+  label="Email Address"
+  value={email}
+  setValue={setEmail}
   type="email"
-  placeholder="Email Address"
 />
-      <Input
-        label="Password"
-        value={password}
-        setValue={setPassword}
-        type="password"
-      />
+
+<Input
+  label="Password"
+  value={password}
+  setValue={setPassword}
+  type="password"
+/>
 
       <div>
         <label className="block text-slate-300 mb-3">
