@@ -21,16 +21,14 @@ api.interceptors.request.use((config) => {
 // Automatically handle expired tokens
 api.interceptors.response.use(
   (response) => response,
-
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+    console.log(
+      "401:",
+      error.config?.url,
+      error.response?.status
+    );
 
-      window.location.reload();
-    }
-
+    // Don't logout yet
     return Promise.reject(error);
   }
 );
-export default api;

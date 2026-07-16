@@ -22,11 +22,11 @@ useEffect(() => {
     setToken(token);
   };
 
-  const handleLogout = () => {
+ const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setToken(null);
-  };
-
+};
   if (showSplash) {
     return <Splash onComplete={() => setShowSplash(false)} />;
   }
