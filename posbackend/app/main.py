@@ -21,6 +21,7 @@ app.add_middleware(
 )
 
 # Imports AFTER app creation
+from app.routes.landing_payment import router as landing_payment_router
 from app.routes import product_routes, sales_routes, ai
 from app.auth.routes import router as auth_router
 from app.routes.employee import router as employee_router
@@ -47,7 +48,7 @@ app.include_router(export_router)
 app.include_router(settings_router)
 app.include_router(subscription_router)
 app.include_router(payment_router)
-
+app.include_router(landing_payment_router)
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
