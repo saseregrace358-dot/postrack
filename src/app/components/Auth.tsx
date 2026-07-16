@@ -174,7 +174,7 @@ localStorage.setItem("role", "employee");
         res.data.access_token
       );
     } else {
-      sessionStorage.setItem(
+      localStorage.setItem(
         "token",
         res.data.access_token
       );
