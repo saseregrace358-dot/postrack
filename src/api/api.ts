@@ -23,12 +23,20 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.log(
-      "401:",
       error.config?.url,
       error.response?.status
     );
 
-    // Don't logout yet
+    if (
+      error.response?.status === 401 &&
+      error.config?.url?.includes("/auth")
+    ) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.reload();
+    }
+
     return Promise.reject(error);
   }
 );
+export default api;

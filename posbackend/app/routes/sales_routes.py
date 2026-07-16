@@ -234,7 +234,7 @@ async def create_sale(
 
     return sale
 
-@router.get("/")
+@router.get("")
 def get_sales(
                 db: Session = Depends(get_db),
                 user = Depends(get_current_user)

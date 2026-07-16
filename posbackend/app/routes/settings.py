@@ -20,7 +20,7 @@ def get_db():
         db.close()
 
 
-@router.get("/")
+@router.get("")
 def get_settings(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)

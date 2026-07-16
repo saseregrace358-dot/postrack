@@ -48,7 +48,7 @@ def create_employee(
 # ===========================
 # Get Employees
 # ===========================
-@router.get("/")
+@router.get("")
 def get_employees(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
