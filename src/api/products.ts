@@ -15,10 +15,10 @@ api.interceptors.request.use(
 
 export default api;
 
-export const getProducts = () => api.get("/products");
+export const getProducts = () => api.get("/products/");
 
 export const createProduct = (data: any) =>
-  api.post("/products", data);
+  api.post("/products/", data);
 
 export const updateProductApi = (id: number, data: any) =>
   api.put(`/products/${id}`, data);
@@ -27,10 +27,10 @@ export const updateProductStockApi = (id: number, stock: number) =>
   api.patch(`/products/${id}/stock`, { stock });
 
 export const createSaleApi = (data: any) =>
-  api.post("/sales", data);
+  api.post("/sales/", data);
 
 export const getSalesApi = () =>
-  api.get("/sales");
+  api.get("/sales/");
 
 export const addPaymentApi = (saleId: string, payment: any) =>
   api.patch(`/sales/${saleId}/payment`, payment);
