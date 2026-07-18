@@ -17,6 +17,6 @@ export const getSalesApi = () =>
   api.get("/sales");
 
 export const addPaymentApi = (saleId: string, payment: any) =>
-  api.patch(`/sales${saleId}/payment`, payment);
+  api.patch(`/sales/${saleId}/payment`, payment);
 
 export default api;
