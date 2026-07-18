@@ -21,10 +21,10 @@ export const createProduct = (data: any) =>
   api.post("/products", data);
 
 export const updateProductApi = (id: number, data: any) =>
-  api.put(`/products${id}`, data);
+  api.put(`/products/${id}`, data);
 
 export const updateProductStockApi = (id: number, stock: number) =>
-  api.patch(`/products${id}/stock`, { stock });
+  api.patch(`/products/${id}/stock`, { stock });
 
 export const createSaleApi = (data: any) =>
   api.post("/sales", data);
