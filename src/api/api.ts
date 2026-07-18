@@ -22,21 +22,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.log(
-      error.config?.url,
-      error.response?.status
-    );
-
-    if (
-      error.response?.status === 401 &&
-      error.config?.url?.includes("/auth")
-    ) {
+    if (error.response?.status === 401) {
+      // Clear auth data
       localStorage.removeItem("token");
       localStorage.removeItem("user");
-      window.location.reload();
+
+      // Redirect to login
+      window.location.href = "/";
     }
 
     return Promise.reject(error);
   }
 );
+
 export default api;

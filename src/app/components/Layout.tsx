@@ -108,12 +108,40 @@ useEffect(() => {
     import.meta.env.VITE_API_URL.replace("https://", "wss://")
       .replace("http://", "ws://") + "/ws/notifications";
 
-  const socket = new WebSocket(WS_URL);
+  const token = localStorage.getItem("token");
+const connectWebSocket = () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) return;
+
+    const socket = new WebSocket(`${WS_URL}?token=${token}`);
+
+    socket.onmessage = async () => {
+        await loadNotifications();
+    };
+
+    socket.onclose = () => {
+        if (!localStorage.getItem("token")) return;
+
+        setTimeout(connectWebSocket, 5000);
+    };
+};
+const socket = new WebSocket(
+  `${WS_URL}?token=${token}`
+);
 
   socket.onopen = () => {
     console.log("✅ Connected to notifications");
   };
+socket.onclose = () => {
+    if (!localStorage.getItem("token")) {
+        return;
+    }
 
+    setTimeout(() => {
+        connectWebSocket();
+    }, 5000);
+};
   socket.onmessage = async () => {
   await loadNotifications();
 
