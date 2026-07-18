@@ -101,14 +101,16 @@ async def create_sale(
             db.add(notification)
             db.flush()
 
-            await manager.broadcast({
-                "id": notification.id,
-                "title": notification.title,
-                "message": notification.message,
-                "type": notification.type,
-                "read": False
-            })
-
+            await manager.broadcast(
+                user["business_id"],
+                {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "message": notification.message,
+                    "type": notification.type,
+                    "read": False
+                }
+)
     # ===============================
     # TAX
     # ===============================
@@ -169,14 +171,16 @@ async def create_sale(
         db.add(notification)
         db.flush()
 
-        await manager.broadcast({
-            "id": notification.id,
-            "title": notification.title,
-            "message": notification.message,
-            "type": notification.type,
-            "read": False
-        })
-
+        await manager.broadcast(
+            user["business_id"],
+            {
+                "id": notification.id,
+                "title": notification.title,
+                "message": notification.message,
+                "type": notification.type,
+                "read": False
+            }
+)
         db.commit()
 
         raise HTTPException(
@@ -298,14 +302,16 @@ async def add_payment(
     db.add(notification)
     db.flush()
 
-    await manager.broadcast({
-        "id": notification.id,
-        "title": notification.title,
-        "message": notification.message,
-        "type": notification.type,
-        "read": False
-    })
-
+    await manager.broadcast(
+        user["business_id"],
+        {
+            "id": notification.id,
+            "title": notification.title,
+            "message": notification.message,
+            "type": notification.type,
+            "read": False
+        }
+)
     db.commit()
     db.refresh(sale)
 
