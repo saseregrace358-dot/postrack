@@ -18,7 +18,7 @@ type CartItem = {
   quantity: number;
 };
 
-type SaleStatus = "PAID" | "DEBT";
+type SaleStatus = "PAID" |"PARTIAL" |  "DEBT";
 
 type Sale = {
   id: string;
@@ -471,7 +471,10 @@ const filteredSales = sales.filter((sale: Sale) => {
 </div>
 
 {/* ADD PAYMENT */}
-{selectedSale.status === "DEBT" && (
+{(selectedSale.status === "DEBT" ||
+  selectedSale.status === "PARTIAL") && (
+  // Your JSX here
+
   <div className="border-t mt-3 pt-3">
     <input
       type="number"
