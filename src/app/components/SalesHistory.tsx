@@ -163,8 +163,11 @@ const filteredSales = sales.filter((sale: Sale) => {
   0
 );
   const totalDebt = filteredSales.reduce(
-  (sum: number, sale: Sale) =>
-    sum + (sale.status === "DEBT" ? sale.balance : 0),
+  (sum, sale) =>
+    sum +
+    (sale.status === "DEBT" || sale.status === "PARTIAL"
+      ? sale.balance
+      : 0),
   0
 );
 
@@ -179,7 +182,7 @@ const filteredSales = sales.filter((sale: Sale) => {
       
 
       {/* Summary Cards */}
-<div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
 
   <Metric
     title="Total Sales"
