@@ -15,7 +15,7 @@ api.interceptors.request.use(
 
 export default api;
 
-export const getProducts = () => api.get("/products/");
+export const getProducts = () => api.get("/products");
 
 export const createProduct = (data: any) =>
   api.post("/products", data);
