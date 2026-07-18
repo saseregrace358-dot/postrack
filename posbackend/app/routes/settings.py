@@ -44,7 +44,7 @@ def get_settings(
     return settings
 
 
-@router.post("/")
+@router.post("")
 def save_settings(
     payload: BusinessSettingsSchema,
     db: Session = Depends(get_db),

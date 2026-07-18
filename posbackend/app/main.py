@@ -56,7 +56,7 @@ if not os.path.exists("uploads"):
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
-@app.get("/")
+@app.get("")
 def home():
     return {"message": "POS Backend Running"}
 

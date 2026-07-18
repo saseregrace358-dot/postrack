@@ -10,7 +10,7 @@ export const saveBusinessSettings = (
   tax_rate: number,
   debt_threshold: number
 ) =>
-  api.post("/settings/", {
+  api.post("/settings", {
     tax_enabled,
     tax_rate,
     debt_threshold,

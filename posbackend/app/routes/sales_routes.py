@@ -32,7 +32,7 @@ def get_db():
 # CREATE SALE
 
 
-@router.post("/")
+@router.post("")
 async def create_sale(
     payload: SaleCreate,
     db: Session = Depends(get_db),

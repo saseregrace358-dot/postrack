@@ -4,11 +4,11 @@ const getAuthHeaders = () => ({
 });
 
 export const getSalesApi = () =>
-  api.get(`/sales/`, {
+  api.get(`/sales`, {
     headers: getAuthHeaders(),
   });
 
 export const getProductsApi = () =>
-  api.get(`/products/`, {
+  api.get(`/products`, {
     headers: getAuthHeaders(),
   });
