@@ -13,8 +13,7 @@ conf = ConnectionConfig(
     MAIL_FROM=os.getenv("MAIL_FROM"),
 
     MAIL_SERVER="smtp-relay.brevo.com",
-    MAIL_PORT=465,
-
+    MAIL_PORT=587,
     MAIL_STARTTLS=True,
     MAIL_SSL_TLS=False,
 
