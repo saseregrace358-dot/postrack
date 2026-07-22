@@ -13,7 +13,7 @@ interface AuthProps {
   onLogin: (token: string) => void;
 }
 import { employeeLogin } from "../../api/employee";
-
+import { ArrowLeft, X } from "lucide-react";
 
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
@@ -27,6 +27,14 @@ const [verifyingCode, setVerifyingCode] = useState(false);
 const [savingPassword, setSavingPassword] = useState(false);
 
  const [showForgotModal, setShowForgotModal] = useState(false);
+ const closeForgotPassword = () => {
+  setShowForgotModal(false);
+  setResetStep("email");
+  setResetEmail("");
+  setResetCode("");
+  setNewPassword("");
+  setConfirmPassword("");
+};
  const [resetStep, setResetStep] = useState<
   "email" | "code" | "password"
 >("email");
@@ -434,115 +442,154 @@ const handleForgotPassword = async () => {
         </div>
       </motion.div>
       {showForgotModal && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 z-50">
 
     <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
 
-     {resetStep === "email" && (
-<>
-    <h2 className="text-2xl font-bold text-slate-800 mb-2">
-        Forgot Password
-    </h2>
+      {/* EMAIL STEP */}
+      {resetStep === "email" && (
+        <>
+          <div className="flex justify-between items-center mb-6">
+            <div />
+            <button
+              onClick={closeForgotPassword}
+              className="text-gray-500 hover:text-red-600"
+            >
+              <X size={22} />
+            </button>
+          </div>
 
-    <p className="text-gray-500 mb-5">
-        Enter the email address linked to your account.
-        We'll send you a 6-digit verification code.
-    </p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">
+            Forgot Password
+          </h2>
 
-    <input
-        type="email"
-        value={resetEmail}
-        onChange={(e) => setResetEmail(e.target.value)}
-        placeholder="Enter your email"
-        className="w-full border rounded-lg p-3 mb-5"
-    />
+          <p className="text-gray-500 mb-5">
+            Enter the email linked to your account.
+            We'll send you a 6-digit verification code.
+          </p>
 
-    <div className="flex justify-end gap-3">
-        <button
-            onClick={() => {
-                setShowForgotModal(false);
-                setResetEmail("");
-                setResetStep("email");
-            }}
-            className="px-5 py-2 rounded-lg border"
-        >
-            Cancel
-        </button>
+          <input
+            type="email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            placeholder="Enter your email"
+            className="w-full border rounded-lg p-3 mb-5"
+          />
 
-        <button
+          <button
             onClick={handleForgotPassword}
             disabled={sendingReset}
-            className="px-5 py-2 bg-blue-600 text-white rounded-lg"
-        >
+            className="w-full bg-blue-600 text-white py-3 rounded-lg disabled:opacity-50"
+          >
             {sendingReset ? "Sending..." : "Send Code"}
-        </button>
-    </div>
-</>
-)}
+          </button>
+        </>
+      )}
 
-{resetStep === "code" && (
-<>
-    <h2 className="text-2xl font-bold text-slate-800 mb-2">
-        Verify Code
-    </h2>
+      {/* VERIFY STEP */}
+      {resetStep === "code" && (
+        <>
+          <div className="flex justify-between items-center mb-6">
 
-    <p className="text-gray-500 mb-5">
-        Enter the 6-digit verification code sent to your email.
-    </p>
+            <button
+              onClick={() => setResetStep("email")}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+            >
+              <ArrowLeft size={18} />
+              Back
+            </button>
 
-    <input
-        type="text"
-        value={resetCode}
-        onChange={(e) => setResetCode(e.target.value)}
-        maxLength={6}
-        placeholder="123456"
-        className="w-full border rounded-lg p-3 text-center tracking-[8px] text-xl"
-    />
+            <button
+              onClick={closeForgotPassword}
+              className="text-gray-500 hover:text-red-600"
+            >
+              <X size={22} />
+            </button>
 
-    <button
-  onClick={handleVerifyCode}
-  disabled={verifyingCode}
-  className="w-full mt-5 bg-blue-600 text-white py-3 rounded-lg disabled:opacity-50"
->
-  {verifyingCode ? "Verifying..." : "Verify Code"}
-</button>
-</>
-)}
-{resetStep === "password" && (
-<>
-    <h2 className="text-2xl font-bold text-slate-800 mb-2">
-        Create New Password
-    </h2>
+          </div>
 
-    <p className="text-gray-500 mb-5">
-        Your verification code has been confirmed.
-    </p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">
+            Verify Code
+          </h2>
 
-    <input
-        type="password"
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-        placeholder="New Password"
-        className="w-full border rounded-lg p-3 mb-4"
-    />
+          <p className="text-gray-500 mb-5">
+            Enter the 6-digit verification code sent to your email.
+          </p>
 
-    <input
-        type="password"
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-        placeholder="Confirm Password"
-        className="w-full border rounded-lg p-3"
-    />
+          <input
+            type="text"
+            value={resetCode}
+            onChange={(e) => setResetCode(e.target.value)}
+            maxLength={6}
+            placeholder="123456"
+            className="w-full border rounded-lg p-3 text-center tracking-[8px] text-xl"
+          />
 
-    <button
-  onClick={handleResetPassword}
-  disabled={savingPassword}
-  className="w-full mt-5 bg-green-600 text-white py-3 rounded-lg disabled:opacity-50"
->
-  {savingPassword ? "Saving..." : "Save Password"}
-</button>
-</>
-)}
+          <button
+            onClick={handleVerifyCode}
+            disabled={verifyingCode}
+            className="w-full mt-5 bg-blue-600 text-white py-3 rounded-lg disabled:opacity-50"
+          >
+            {verifyingCode ? "Verifying..." : "Verify Code"}
+          </button>
+        </>
+      )}
+
+      {/* PASSWORD STEP */}
+      {resetStep === "password" && (
+        <>
+          <div className="flex justify-between items-center mb-6">
+
+            <button
+              onClick={() => setResetStep("code")}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+            >
+              <ArrowLeft size={18} />
+              Back
+            </button>
+
+            <button
+              onClick={closeForgotPassword}
+              className="text-gray-500 hover:text-red-600"
+            >
+              <X size={22} />
+            </button>
+
+          </div>
+
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">
+            Create New Password
+          </h2>
+
+          <p className="text-gray-500 mb-5">
+            Your verification code has been confirmed.
+          </p>
+
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New Password"
+            className="w-full border rounded-lg p-3 mb-4"
+          />
+
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm Password"
+            className="w-full border rounded-lg p-3"
+          />
+
+          <button
+            onClick={handleResetPassword}
+            disabled={savingPassword}
+            className="w-full mt-5 bg-green-600 text-white py-3 rounded-lg disabled:opacity-50"
+          >
+            {savingPassword ? "Saving..." : "Save Password"}
+          </button>
+        </>
+      )}
 
     </div>
 
