@@ -1,64 +1,42 @@
-import smtplib
 import os
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from dotenv import load_dotenv
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
-load_dotenv()
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key["api-key"] = os.getenv("BREVO_API_KEY")
 
-MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-MAIL_FROM = os.getenv("MAIL_FROM")
+api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+    sib_api_v3_sdk.ApiClient(configuration)
+)
 
 
 async def send_reset_email(email: str, code: str):
-    msg = MIMEMultipart()
+    email_data = sib_api_v3_sdk.SendSmtpEmail(
+        sender={
+            "name": "DGTrack POS",
+            "email": os.getenv("MAIL_FROM")
+        },
+        to=[
+            {
+                "email": email
+            }
+        ],
+        subject="Reset your DGTrack POS Password",
+        html_content=f"""
+        <h2>Reset Password</h2>
 
-    msg["From"] = MAIL_FROM
-    msg["To"] = email
-    msg["Subject"] = "Reset your BizTrack POS Password"
+        <p>Your verification code is:</p>
 
-    msg.attach(
-        MIMEText(
-            f"Your verification code is: {code}",
-            "plain"
-        )
+        <h1>{code}</h1>
+
+        <p>This code expires in 10 minutes.</p>
+        """
     )
 
     try:
-        print("Connecting...")
-
-        server = smtplib.SMTP(
-            "smtp-relay.brevo.com",
-            587,
-            timeout=30
-        )
-
-        server.ehlo()
-
-        server.starttls()
-
-        server.ehlo()
-
-        print("Connected")
-
-        server.login(
-            MAIL_USERNAME,
-            MAIL_PASSWORD
-        )
-
-        print("Logged in")
-
-        server.sendmail(
-            MAIL_FROM,
-            email,
-            msg.as_string()
-        )
-
+        api_instance.send_transac_email(email_data)
         print("Email sent successfully")
 
-        server.quit()
-
-    except Exception as e:
-        print("EMAIL ERROR:", e)
+    except ApiException as e:
+        print("Brevo Error:", e)
         raise

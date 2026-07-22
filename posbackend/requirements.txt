@@ -17,3 +17,4 @@ openpyxl
 xlsxwriter
 fastapi-mail
 requests==2.32.3
+sib-api-v3-sdk
