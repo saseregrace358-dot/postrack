@@ -17,7 +17,7 @@ api.interceptors.request.use(
 export default api;
 
 export const getEmployees = () =>
-  api.get("/employees/");
+  api.get("/employees");
 
 export const createEmployee = (data: any) =>
   api.post("/employees/", data);
