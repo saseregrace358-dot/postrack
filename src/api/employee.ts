@@ -17,10 +17,10 @@ api.interceptors.request.use(
 export default api;
 
 export const getEmployees = () =>
-  api.get("/employees");
+  api.get("/employees/");
 
 export const createEmployee = (data: any) =>
-  api.post("/employees", data);
+  api.post("/employees/", data);
 
 export const updateEmployee = (
   id: string | number,
