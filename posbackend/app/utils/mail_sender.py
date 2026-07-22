@@ -11,6 +11,12 @@ api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
 
 
 async def send_reset_email(email: str, code: str):
+
+    reset_link = (
+        f"https://postrack.vercel.app/reset-password"
+        f"?email={email}&code={code}"
+    )
+
     email_data = sib_api_v3_sdk.SendSmtpEmail(
         sender={
             "name": "DGTrack POS",
@@ -23,13 +29,50 @@ async def send_reset_email(email: str, code: str):
         ],
         subject="Reset your DGTrack POS Password",
         html_content=f"""
-        <h2>Reset Password</h2>
+        <div style="font-family:Arial,sans-serif;padding:20px">
 
-        <p>Your verification code is:</p>
+            <h2>Reset Your Password</h2>
 
-        <h1>{code}</h1>
+            <p>We received a request to reset your DGTrack POS password.</p>
 
-        <p>This code expires in 10 minutes.</p>
+            <p>
+                Click the button below to continue.
+            </p>
+
+            <a
+                href="{reset_link}"
+                style="
+                    background:#2563eb;
+                    color:white;
+                    padding:12px 25px;
+                    text-decoration:none;
+                    border-radius:6px;
+                    display:inline-block;
+                    font-weight:bold;
+                "
+            >
+                Reset Password
+            </a>
+
+            <br><br>
+
+            <p>
+                Or enter this verification code manually:
+            </p>
+
+            <h1 style="letter-spacing:6px;">
+                {code}
+            </h1>
+
+            <p>
+                This link and code expire in 10 minutes.
+            </p>
+
+            <p>
+                If you didn't request this change, you can safely ignore this email.
+            </p>
+
+        </div>
         """
     )
 

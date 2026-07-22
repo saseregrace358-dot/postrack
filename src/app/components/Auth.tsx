@@ -40,7 +40,10 @@ const [savingPassword, setSavingPassword] = useState(false);
 
     setResetStep("password");
     
+console.log("Email:", resetEmail);
+console.log("Code:", resetCode);
 
+await verifyResetCode(resetEmail, resetCode);
   } catch (err: any) {
     alert(
       err.response?.data?.detail ||
