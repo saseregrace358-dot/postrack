@@ -8,13 +8,14 @@ from app.schemas.employee import (
     EmployeeUpdate,
     EmployeeLogin,
 )
+from app.utils.email_service import send_employee_login_email
 from app.auth.dependencies import get_current_user
 from app.auth.password import (
     hash_password,
     verify_password,
 )
 from app.auth.jwt import create_access_token
-
+from app.models.user import User
 router = APIRouter(
     prefix="/employees",
     tags=["Employees"],
@@ -136,7 +137,7 @@ def delete_employee(
 # Employee Login
 # ===========================
 @router.post("/login")
-def employee_login(
+async def employee_login(
     payload: EmployeeLogin,
     db: Session = Depends(get_db),
 ):
@@ -171,6 +172,21 @@ def employee_login(
             "name": employee.full_name,
         }
     )
+
+    # Send login notification to owner
+    owner = (
+        db.query(User)
+        .filter(User.business_id == employee.business_id)
+        .filter(User.role == "owner")
+        .first()
+    )
+
+    if owner:
+        await send_employee_login_email(
+            owner_email=owner.email,
+            employee_name=employee.full_name,
+            business_name=owner.business_name,
+        )
 
     return {
         "access_token": token,
