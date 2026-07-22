@@ -180,6 +180,7 @@ async def employee_login(
         .filter(User.role == "owner")
         .first()
     )
+    print("Owner found:", owner)
 
     if owner:
         await send_employee_login_email(
@@ -187,6 +188,8 @@ async def employee_login(
             employee_name=employee.full_name,
             business_name=owner.business_name,
         )
+    else:
+         print("No owner found for this business.")
 
     return {
         "access_token": token,
