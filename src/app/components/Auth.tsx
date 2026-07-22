@@ -34,19 +34,18 @@ const [savingPassword, setSavingPassword] = useState(false);
   try {
     setVerifyingCode(true);
 
-    await verifyResetCode(resetEmail, resetCode);
+    await verifyResetCode(
+      resetEmail,
+      resetCode
+    );
 
-    toast.success("Code verified.");
+    toast.success("Code verified successfully!");
 
     setResetStep("password");
-    
-console.log("Email:", resetEmail);
-console.log("Code:", resetCode);
 
-await verifyResetCode(resetEmail, resetCode);
   } catch (err: any) {
-    alert(
-      err.response?.data?.detail ||
+    toast.error(
+      err.response?.data?.detail ??
       "Invalid verification code."
     );
   } finally {
@@ -54,8 +53,9 @@ await verifyResetCode(resetEmail, resetCode);
   }
 };
 const handleResetPassword = async () => {
+
   if (newPassword !== confirmPassword) {
-    toast("Passwords do not match.");
+    toast.error("Passwords do not match");
     return;
   }
 
@@ -68,20 +68,20 @@ const handleResetPassword = async () => {
       newPassword
     );
 
-    toast.success("Password changed successfully.");
+    toast.success("Password updated successfully!");
 
-setShowForgotModal(false);
+    setShowForgotModal(false);
 
-setResetStep("email");
+    setResetStep("email");
 
-setResetEmail("");
-setResetCode("");
-setNewPassword("");
-setConfirmPassword("");
+    setResetEmail("");
+    setResetCode("");
+    setNewPassword("");
+    setConfirmPassword("");
 
   } catch (err: any) {
     toast.error(
-      err.response?.data?.detail ||
+      err.response?.data?.detail ??
       "Unable to reset password."
     );
   } finally {
@@ -225,16 +225,16 @@ const handleForgotPassword = async () => {
 
     await forgotPassword(resetEmail);
 
-toast.success("Verification code sent.");
+    toast.success("Verification code sent successfully!");
 
-setResetStep("code");
+    // DON'T close the modal
+    // DON'T clear the email
 
-    setShowForgotModal(false);
-    setResetEmail("");
+    setResetStep("code");
 
   } catch (err: any) {
     toast.error(
-      err.response?.data?.detail ||
+      err.response?.data?.detail ??
       "Unable to send reset email."
     );
   } finally {
