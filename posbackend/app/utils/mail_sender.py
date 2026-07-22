@@ -1,8 +1,8 @@
-import os
 import smtplib
-from dotenv import load_dotenv
-from email.mime.text import MIMEText
+import os
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -12,29 +12,15 @@ MAIL_FROM = os.getenv("MAIL_FROM")
 
 
 async def send_reset_email(email: str, code: str):
-
     msg = MIMEMultipart()
 
-    msg["From"] = f"No Reply <{MAIL_FROM}>"
+    msg["From"] = MAIL_FROM
     msg["To"] = email
     msg["Subject"] = "Reset your BizTrack POS Password"
 
     msg.attach(
         MIMEText(
-            f"""
-Hello,
-
-We received a request to reset your BizTrack POS password.
-
-Your verification code is:
-
-{code}
-
-If you did not request this password reset, please ignore this email.
-
-Regards,
-BizTrack POS
-            """,
+            f"Your verification code is: {code}",
             "plain"
         )
     )
@@ -44,10 +30,15 @@ BizTrack POS
 
         server = smtplib.SMTP(
             "smtp-relay.brevo.com",
-            587
+            587,
+            timeout=30
         )
 
+        server.ehlo()
+
         server.starttls()
+
+        server.ehlo()
 
         print("Connected")
 
@@ -69,5 +60,5 @@ BizTrack POS
         server.quit()
 
     except Exception as e:
-        print("EMAIL ERROR:", str(e))
+        print("EMAIL ERROR:", e)
         raise
