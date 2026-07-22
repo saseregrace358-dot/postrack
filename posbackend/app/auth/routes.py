@@ -10,7 +10,7 @@ from app.models.user import User
 from app.utils.business_id import generate_business_id
 from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
-from app.utils.mail_sender import send_reset_email
+from app.utils.email_service import send_reset_email
 from datetime import datetime, timedelta
 
 from app.models.subscription_plan import SubscriptionPlan

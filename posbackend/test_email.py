@@ -1,5 +1,5 @@
 import asyncio
-from app.utils.mail_sender import send_reset_email
+from app.utils.email_service import send_reset_email
 
 async def main():
     await send_reset_email(
