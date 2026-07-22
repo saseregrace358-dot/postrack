@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
+from app.utils.email_service import send_welcome_email
 from app.auth.jwt import decode_token, create_access_token
 from app.auth.password import hash_password, verify_password
 from app.database import get_db
@@ -64,7 +64,7 @@ class ResetPasswordRequest(BaseModel):
 # REGISTER
 # =====================
 @router.post("/register")
-def register(user: UserRegister, db: Session = Depends(get_db)):
+async def register(user: UserRegister, db: Session = Depends(get_db)):
 
     existing = db.query(User).filter(User.email == user.email).first()
 
@@ -92,7 +92,11 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-
+    await send_welcome_email(
+    user.email,
+    user.name,
+    user.business_name
+)
     print("User saved:", new_user.business_id)
 
     free_plan = (
@@ -330,13 +334,3 @@ def reset_password(
     }
 
 
-@router.get("/smtp-test")
-def smtp_test():
-    try:
-        socket.create_connection(("smtp-relay.brevo.com", 587), timeout=10)
-        return {"status": "connected"}
-    except Exception as e:
-        return {
-            "status": "failed",
-            "error": repr(e)
-        }
