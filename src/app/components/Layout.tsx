@@ -15,7 +15,7 @@ import { useNotifications } from "../context/NotificationContext";
 import { markNotificationReadApi, getNewNotificationsApi, getAllNotificationsApi } from "../../api/notifications";
 import { askAiApi } from "../../api/ai";
 import { playNotificationSound } from "../utils/notificationSound";
-
+import toast from "react-hot-toast";
 export function Layout() {
 const pageInfo = {
   dashboard: {
@@ -104,63 +104,72 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  const WS_URL =
-    import.meta.env.VITE_API_URL.replace("https://", "wss://")
-      .replace("http://", "ws://") + "/ws/notifications";
-
   const token = localStorage.getItem("token");
-const connectWebSocket = () => {
-    const token = localStorage.getItem("token");
 
-    if (!token) return;
+  if (!token) return;
 
-    const socket = new WebSocket(`${WS_URL}?token=${token}`);
+  if (Notification.permission === "default") {
+    Notification.requestPermission();
+  }
 
-    socket.onmessage = async () => {
-        await loadNotifications();
+  const WS_URL =
+    import.meta.env.VITE_API_URL
+      .replace("https://", "wss://")
+      .replace("http://", "ws://") +
+    "/ws/notifications";
+
+  let socket: WebSocket;
+
+  const connectWebSocket = () => {
+    socket = new WebSocket(`${WS_URL}?token=${token}`);
+
+    socket.onopen = () => {
+      console.log("✅ Connected to notifications");
+    };
+
+    socket.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+
+      await loadNotifications();
+
+      if (settings.soundAlerts) {
+        playNotificationSound();
+      }
+
+      // Toast
+      toast.success(data.message);
+
+      // Native device notification
+      if (Notification.permission === "granted") {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification(data.title, {
+            body: data.message,
+            icon: "/logo192.png",
+            badge: "/logo192.png",
+          });
+        });
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.log("WebSocket error:", err);
     };
 
     socket.onclose = () => {
-        if (!localStorage.getItem("token")) return;
+      console.log("Disconnected");
 
-        setTimeout(connectWebSocket, 5000);
+      if (!localStorage.getItem("token")) return;
+
+      setTimeout(connectWebSocket, 5000);
     };
-};
-const socket = new WebSocket(
-  `${WS_URL}?token=${token}`
-);
-
-  socket.onopen = () => {
-    console.log("✅ Connected to notifications");
-  };
-socket.onclose = () => {
-    if (!localStorage.getItem("token")) {
-        return;
-    }
-
-    setTimeout(() => {
-        connectWebSocket();
-    }, 5000);
-};
-  socket.onmessage = async () => {
-  await loadNotifications();
-
-  if (settings.soundAlerts) {
-    playNotificationSound();
-  }
-};
-
-  socket.onerror = (err) => {
-    console.log("WebSocket error:", err);
   };
 
-  socket.onclose = () => {
-    console.log("Disconnected");
-  };
+  connectWebSocket();
 
-  return () => socket.close();
+  return () => {
+    socket?.close();
+  };
 }, [settings.soundAlerts]);
-
 
 useEffect(() => {
   const handleClickOutside = (event: MouseEvent) => {
@@ -275,12 +284,12 @@ const filteredNotifications = notifications.filter((n: any) => {
 
   // Only allow these notification types
   const allowedTypes = [
-    "debt",
-    "lowStock",
-    "export",
-    "update",
-  ];
-
+  "debt",
+  "lowStock",
+  "payment",
+  "export",
+  "update",
+];
   if (!allowedTypes.includes(n.type)) {
     return false;
   }
