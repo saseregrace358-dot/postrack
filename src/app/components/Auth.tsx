@@ -538,49 +538,51 @@ const handleForgotPassword = async () => {
       {/* PASSWORD STEP */}
       {resetStep === "password" && (
         <>
-          <div className="flex justify-between items-center mb-6">
+          {/* New Password */}
+<div className="relative mb-4">
+  <input
+    type={showPassword ? "text" : "password"}
+    value={newPassword}
+    onChange={(e) => setNewPassword(e.target.value)}
+    placeholder="New Password"
+    className="w-full border rounded-lg p-3 pr-12"
+  />
 
-            <button
-              onClick={() => setResetStep("code")}
-              className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
-            >
-              <ArrowLeft size={18} />
-              Back
-            </button>
+  <button
+    type="button"
+    onClick={() => setShowPassword(!showPassword)}
+    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+  >
+    {showPassword ? (
+      <EyeOff className="size-5" />
+    ) : (
+      <Eye className="size-5" />
+    )}
+  </button>
+</div>
 
-            <button
-              onClick={closeForgotPassword}
-              className="text-gray-500 hover:text-red-600"
-            >
-              <X size={22} />
-            </button>
+{/* Confirm Password */}
+<div className="relative">
+  <input
+    type={showPassword ? "text" : "password"}
+    value={confirmPassword}
+    onChange={(e) => setConfirmPassword(e.target.value)}
+    placeholder="Confirm Password"
+    className="w-full border rounded-lg p-3 pr-12"
+  />
 
-          </div>
-
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">
-            Create New Password
-          </h2>
-
-          <p className="text-gray-500 mb-5">
-            Your verification code has been confirmed.
-          </p>
-
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New Password"
-            className="w-full border rounded-lg p-3 mb-4"
-          />
-
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm Password"
-            className="w-full border rounded-lg p-3"
-          />
-
+  <button
+    type="button"
+    onClick={() => setShowPassword(!showPassword)}
+    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+  >
+    {showPassword ? (
+      <EyeOff className="size-5" />
+    ) : (
+      <Eye className="size-5" />
+    )}
+  </button>
+</div>
           <button
             onClick={handleResetPassword}
             disabled={savingPassword}
