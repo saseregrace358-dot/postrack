@@ -8,7 +8,7 @@ import {
   getSalesApi,
   addPaymentApi,
 } from "../../api/sales";
-
+import toast from "react-hot-toast";
 import { Metric } from "./ui/Metric";
 
 type CartItem = {
@@ -52,6 +52,7 @@ export function SalesHistory() {
   const [filterPeriod, setFilterPeriod] = useState("all");
  const [payAmount, setPayAmount] = useState("");
 const [searchTerm, setSearchTerm] = useState("");
+const [addingPayment, setAddingPayment] = useState(false);
   const loadSales = async () => {
   try {
     const res = await getSalesApi();
@@ -72,13 +73,18 @@ useEffect(() => {
 }, []);
 
 const addPayment = async (saleId: string, amount: number) => {
-    if (!amount || amount <= 0) return;
+  if (!amount || amount <= 0) {
+    toast.error("Enter a valid payment amount.");
+    return;
+  }
 
   try {
+    setAddingPayment(true);
+
     await addPaymentApi(saleId, {
-  amount,
-  method: "Cash",
-});
+      amount,
+      method: "Cash",
+    });
 
     await loadSales();
 
@@ -87,12 +93,20 @@ const addPayment = async (saleId: string, amount: number) => {
     const updatedSale = res.data.find((s: Sale) => s.id === saleId);
 
     if (updatedSale) {
-      setSelectedSale(updatedSale);
+      setSelectedSale({
+        ...updatedSale,
+        payments: updatedSale.payments ?? [],
+      });
     }
 
     setPayAmount("");
+
+    toast.success("Payment added successfully!");
   } catch (err) {
     console.error(err);
+    toast.error("Failed to add payment.");
+  } finally {
+    setAddingPayment(false);
   }
 };
 const selectedPayments = selectedSale?.payments ?? [];
@@ -488,13 +502,12 @@ const filteredSales = sales.filter((sale: Sale) => {
     />
 
     <button
-      onClick={() =>
-  addPayment(selectedSale.id, Number(payAmount))
-}
-      className="w-full mt-2 bg-blue-600 text-white p-2 rounded"
-    >
-      Add Payment
-    </button>
+  onClick={() => addPayment(selectedSale.id, Number(payAmount))}
+  disabled={addingPayment}
+  className="w-full mt-2 bg-blue-600 text-white p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {addingPayment ? "Adding..." : "Add Payment"}
+</button>
   </div>
 )}
 

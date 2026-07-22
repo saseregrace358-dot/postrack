@@ -52,7 +52,7 @@ const [savingPassword, setSavingPassword] = useState(false);
 };
 const handleResetPassword = async () => {
   if (newPassword !== confirmPassword) {
-    alert("Passwords do not match.");
+    toast("Passwords do not match.");
     return;
   }
 
@@ -77,7 +77,7 @@ setNewPassword("");
 setConfirmPassword("");
 
   } catch (err: any) {
-    alert(
+    toast.error(
       err.response?.data?.detail ||
       "Unable to reset password."
     );
@@ -193,11 +193,14 @@ localStorage.setItem(
   })
 );
 
+toast.success("Login successful!");
+
+onLogin(res.data.access_token);
     onLogin(res.data.access_token);
   } catch (err: any) {
     console.log(err);
 
-    alert(
+    toast.error(
       err?.response?.data?.detail ||
       "Login failed"
     );
