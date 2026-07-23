@@ -1,4 +1,4 @@
-PS C:\Users\Dell 7270\OneDrive\Desktop\POS Tracker\posbackend> Get-Content requirements.txt
+
 aiosmtplib==5.1.2                     
 alembic==1.18.4
 annotated-doc==0.0.4
