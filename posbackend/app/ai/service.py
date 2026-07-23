@@ -13,6 +13,7 @@ client = genai.Client(
 )
 
 def ask_ai(message: str, context: str = ""):
+    print("ASK_AI CALLED")
     prompt = f"""
 {SYSTEM_PROMPT}
 

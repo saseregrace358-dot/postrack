@@ -6,3 +6,5 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    from pydantic import BaseModel
+

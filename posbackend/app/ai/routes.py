@@ -38,5 +38,3 @@ def chat(
     )
 
     return {"reply": answer}
-def ask_ai(message, context=""):
-    print("ASK_AI CALLED")
