@@ -36,12 +36,14 @@ from app.models.payment import Payment
 from app.routes.subscriptions import router as subscription_router
 from app.services.seed_plans import seed_subscription_plans 
 from app.routes.payment import router as payment_router 
+from app.ai.routes import router as ai_router
 
+app.include_router(ai_router)
 app.include_router(auth_router)
 app.include_router(product_routes.router)
 app.include_router(sales_routes.router)
 app.include_router(employee_router)
-app.include_router(ai.router)
+
 app.include_router(notification_router)
 app.include_router(websocket_router)
 app.include_router(export_router)

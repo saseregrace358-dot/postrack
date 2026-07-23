@@ -1,12 +1,6 @@
-import axios from "axios";
+import api from "./api";
 
-const AI_URL =
-  "https://your-n8n-domain.com/webhook/biztrack-ai";
-
-export const askAiApi = async (
-  message: string
-) => {
-  return axios.post(AI_URL, {
+export const askAI = (message: string) =>
+  api.post("/ai/chat", {
     message,
   });
-};
