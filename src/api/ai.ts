@@ -1,6 +1,7 @@
 import api from "./api";
 
-export const askAI = (message: string) =>
-  api.post("/ai/chat", {
+export const askAiApi = (message: string) => {
+  return api.post("/ai/chat", {
     message,
   });
+};

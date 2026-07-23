@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { askAI } from "../../api/ai";
+import { askAiApi } from "../../api/ai";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -29,7 +29,7 @@ export default function AIChat() {
   setLoading(true);
 
   try {
-    const res = await askAI(userMessage);
+    const res = await askAiApi(userMessage);
 
     setMessages((prev) => [
       ...prev,
