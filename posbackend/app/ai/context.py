@@ -32,7 +32,7 @@ def build_context(db: Session, business_id: int):
         db.query(Product)
         .filter(
             Product.business_id == business_id,
-            Product.quantity <= 5
+            Product.stock <= 5
         )
         .count()
     )
