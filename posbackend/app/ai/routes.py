@@ -1,16 +1,10 @@
-from fastapi import APIRouter
-from fastapi import Depends
-
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-
 from app.auth.dependencies import get_current_user
-
 from app.ai.schemas import ChatRequest
-
 from app.ai.service import ask_ai
-
 from app.ai.context import build_context
 
 router = APIRouter(
@@ -32,9 +26,6 @@ def chat(
         user["business_id"],
     )
 
-    answer = ask_ai(
-        payload.message,
-        context,
-    )
+    answer = ask_ai(payload.message, context)
 
     return {"reply": answer}
