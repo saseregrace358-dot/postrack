@@ -234,8 +234,11 @@ const sendMessage = async () => {
     };
 
     setMessages((prev) => [...prev, aiMessage]);
-  } catch (err) {
-    console.log(err);
+  } catch (err: any) {
+  console.log(err);
+  console.log(err.response);
+  console.log(err.response?.data);
+
 
     setMessages((prev) => [
       ...prev,
