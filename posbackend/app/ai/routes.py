@@ -25,6 +25,7 @@ def chat(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    print("NEW AI ROUTE HIT")
 
     context = build_context(
         db,
@@ -36,6 +37,6 @@ def chat(
         context,
     )
 
-    return {
-        "reply": answer
-    }
+    return {"reply": answer}
+def ask_ai(message, context=""):
+    print("ASK_AI CALLED")
