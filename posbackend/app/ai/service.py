@@ -1,32 +1,28 @@
 import os
 
-from openai import OpenAI
-
+from google import genai
 from app.ai.prompts import SYSTEM_PROMPT
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY ")
 )
 
 
 def ask_ai(message: str, context: str):
 
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {
-                "role": "system",
-                "content": context,
-            },
-            {
-                "role": "user",
-                "content": message,
-            },
-        ],
+    prompt = f"""
+{SYSTEM_PROMPT}
+
+Business Context:
+{context}
+
+User:
+{message}
+"""
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
     )
 
-    return response.choices[0].message.content
+    return response.text
