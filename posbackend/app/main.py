@@ -22,17 +22,14 @@ app.add_middleware(
 
 # Imports AFTER app creation
 from app.routes.landing_payment import router as landing_payment_router
-from app.routes import product_routes, sales_routes, ai
+from app.routes import product_routes, sales_routes
 from app.auth.routes import router as auth_router
 from app.routes.employee import router as employee_router
-from app.database import engine, Base
+
 from app.routes.notification import router as notification_router
 from app.routes.websocket import router as websocket_router
 from app.routes.export import router as export_router
 from app.routes.settings import router as settings_router
-from app.models.subscription_plan import SubscriptionPlan
-from app.models.business_subscription import BusinessSubscription
-from app.models.payment import Payment
 from app.routes.subscriptions import router as subscription_router
 from app.services.seed_plans import seed_subscription_plans 
 from app.routes.payment import router as payment_router 
