@@ -79,7 +79,7 @@ export default function AIChat({
       justify-end
       bg-black/40
     `}
-    onClick={onClose}
+    
   >
     {/* Chat Panel */}
     <div
@@ -120,10 +120,13 @@ export default function AIChat({
       </div>
 
       <button
-          onClick={() => setMessages([])}
-          className="px-3 py-2 rounded-lg bg-red-600 text-white"
+        onClick={() => {
+          setMessages([]);
+          onClose();
+        }}
+        className="px-3 py-2 rounded-lg bg-red-600 text-white"
       >
-          End Chat
+        End Chat
       </button>
     </div>
 

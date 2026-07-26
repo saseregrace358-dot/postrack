@@ -707,34 +707,10 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
     </div>
   </nav>
 {showAiModal && (
-  <>
-   
-    {/* AI Panel */}
-    <div
-      className="
-        fixed
-        z-50
-
-        top-0
-        right-0
-
-        h-full
-        w-full
-
-        lg:w-[460px]
-
-        bg-white
-        dark:bg-slate-900
-
-        shadow-2xl
-      "
-    >
-      <AIChat
-        open={showAiModal}
-        onClose={() => setShowAiModal(false)}
-    />
-    </div>
-  </>
+  <AIChat
+    open={showAiModal}
+    onClose={() => setShowAiModal(false)}
+  />
 )}
 </div>
 
