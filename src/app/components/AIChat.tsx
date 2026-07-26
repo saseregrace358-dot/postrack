@@ -15,8 +15,7 @@ export default function AIChat({
   open,
   onClose,
 }: AIChatProps) {
-  if (!open) return null;
- 
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,11 +68,34 @@ export default function AIChat({
       setLoading(false);
     }
   };
+  
 
  return (
-  <div className="flex flex-col h-full">
-
-    {/* Header */}
+    
+  <div
+    className={`
+      fixed inset-0 z-50
+      ${open ? "flex" : "hidden"}
+      justify-end
+      bg-black/40
+    `}
+    onClick={onClose}
+  >
+    {/* Chat Panel */}
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="
+        w-full
+        h-full
+        md:w-[430px]
+        bg-white
+        dark:bg-slate-900
+        shadow-2xl
+        flex
+        flex-col
+      "
+    >
+     {/* Header */}
     <div className="flex items-center justify-between border-b p-5 bg-white dark:bg-slate-900">
       <div>
         <h2 className="text-xl font-bold">DGTrack AI</h2>
@@ -84,10 +106,10 @@ export default function AIChat({
       </div>
 
       <button
-        onClick={onClose}
-        className="text-2xl hover:text-red-500"
+          onClick={() => setMessages([])}
+          className="px-3 py-2 rounded-lg bg-red-600 text-white"
       >
-        ✕
+          End Chat
       </button>
     </div>
 
@@ -174,6 +196,6 @@ export default function AIChat({
       </div>
 
     </div>
-
+</div>
   </div>
 );}
