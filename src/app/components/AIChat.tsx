@@ -6,7 +6,18 @@ interface ChatMessage {
   content: string;
 }
 
-export default function AIChat() {
+interface AIChatProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function AIChat({
+  open,
+  onClose,
+}: AIChatProps) {
+  if (!open) return null;
+
+ 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
