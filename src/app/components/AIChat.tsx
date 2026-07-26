@@ -72,15 +72,15 @@ export default function AIChat({
 
  return (
     
-  <div
-    className={`
-      fixed inset-0 z-50
-      ${open ? "flex" : "hidden"}
-      justify-end
-      bg-black/40
-    `}
-    
-  >
+ <div
+  className={`
+    fixed inset-0 z-50
+    ${open ? "flex" : "hidden"}
+    justify-end
+    bg-black/40
+  `}
+  onClick={onClose}
+>
     {/* Chat Panel */}
     <div
       onClick={(e) => e.stopPropagation()}
