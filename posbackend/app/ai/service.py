@@ -1,40 +1,41 @@
+from openai import OpenAI
+from dotenv import load_dotenv
 import os
 import traceback
-
-from google import genai
-from dotenv import load_dotenv
-
 from app.ai.prompts import SYSTEM_PROMPT
+load_dotenv()   # <-- Load the .env file
 
-load_dotenv()
+print("OPENROUTER_API_KEY =", os.getenv("OPENROUTER_API_KEY"))
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+client = OpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
 )
 
 def ask_ai(message: str, context: str = ""):
     print("ASK_AI CALLED")
-    prompt = f"""
-{SYSTEM_PROMPT}
-
-{context}
-
-User:
-{message}
-"""
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
+        response = client.chat.completions.create(
+            model="deepseek/deepseek-chat",
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": f"{context}\n\n{message}",
+                },
+            ],
         )
 
-        print("Gemini Response:", response)
+        print("OpenRouter Response:", response)
 
-        return response.text
+        return response.choices[0].message.content
 
-    except Exception as e:
-        print("========== GEMINI ERROR ==========")
+    except Exception:
+        print("========== OPENROUTER ERROR ==========")
         traceback.print_exc()
-        print("==================================")
+        print("======================================")
         raise
