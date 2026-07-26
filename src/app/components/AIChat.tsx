@@ -96,7 +96,21 @@ export default function AIChat({
       "
     >
      {/* Header */}
-    <div className="flex items-center justify-between border-b p-5 bg-white dark:bg-slate-900">
+    <div
+  className="
+    sticky
+    top-0
+    z-10
+    flex
+    items-center
+    justify-between
+    border-b
+    px-5
+    py-4
+    bg-white
+    dark:bg-slate-900
+  "
+>
       <div>
         <h2 className="text-xl font-bold">DGTrack AI</h2>
 
@@ -172,27 +186,26 @@ export default function AIChat({
       <div className="flex gap-3">
 
         <textarea
-          value={message}
-          rows={2}
-          placeholder="Message DGTrack AI..."
-          className="flex-1 resize-none border rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-        />
+            value={message}
+            rows={1}
+            placeholder="Message DGTrack AI..."
+            className="flex-1 resize-none border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+          />
 
-        <button
-          onClick={sendMessage}
-          disabled={loading}
-          className="px-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "..." : "Send"}
-        </button>
-
+          <button
+            onClick={sendMessage}
+            disabled={loading}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+          >
+            Send
+          </button>
       </div>
 
     </div>
