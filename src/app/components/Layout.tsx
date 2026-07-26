@@ -706,11 +706,41 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
 
     </div>
   </nav>
-<AIChat
-    open={showAiModal}
-    onClose={() => setShowAiModal(false)}
-/>
-  
+{showAiModal && (
+  <>
+    {/* Backdrop */}
+    <div
+      className="fixed inset-0 bg-black/40 z-40"
+      onClick={() => setShowAiModal(false)}
+    />
+
+    {/* AI Panel */}
+    <div
+      className="
+        fixed
+        z-50
+
+        top-0
+        right-0
+
+        h-full
+        w-full
+
+        lg:w-[460px]
+
+        bg-white
+        dark:bg-slate-900
+
+        shadow-2xl
+      "
+    >
+      <AIChat
+        open={showAiModal}
+        onClose={() => setShowAiModal(false)}
+      />
+    </div>
+  </>
+)}
 </div>
 
 
