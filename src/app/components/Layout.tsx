@@ -706,14 +706,9 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
 
     </div>
   </nav>
-
+{showAiModal && (
   <>
-    {/* Backdrop */}
-    <div
-      className="fixed inset-0 bg-black/40 z-40"
-      onClick={() => setShowAiModal(false)}
-    />
-
+   
     {/* AI Panel */}
     <div
       className="
@@ -740,7 +735,7 @@ className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justi
     />
     </div>
   </>
-
+)}
 </div>
 
 
