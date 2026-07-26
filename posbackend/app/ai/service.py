@@ -18,16 +18,16 @@ def ask_ai(message: str, context: str = ""):
     try:
         response = client.chat.completions.create(
             model="deepseek/deepseek-chat",
-            messages=[
+           messages=[
                 {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
+                    "role":"system",
+                    "content":SYSTEM_PROMPT
                 },
                 {
-                    "role": "user",
-                    "content": f"{context}\n\n{message}",
-                },
-            ],
+                    "role":"user",
+                    "content":f"{context}\n\n{message}"
+                }
+            ]
         )
 
         print("OpenRouter Response:", response)
