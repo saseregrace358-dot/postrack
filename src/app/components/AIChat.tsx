@@ -88,18 +88,22 @@ export default function AIChat({
       <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50">
 
         {messages.length === 0 && (
-          <div className="text-center text-gray-400 mt-20">
-            <h2 className="text-2xl font-semibold mb-3">
-              👋 Welcome to DGTrack AI
-            </h2>
+          <div className="border-b p-5 bg-white flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold">DGTrack AI</h1>
+              <p className="text-gray-500">
+                Ask anything about your business or any general question.
+              </p>
+            </div>
 
-            <p>
-              Ask me about your business, inventory, reports,
-              programming, finance, or anything else.
-            </p>
+            <button
+              onClick={onClose}
+              className="text-2xl text-gray-500 hover:text-black"
+            >
+              ✕
+            </button>
           </div>
         )}
-
         {messages.map((msg, index) => (
           <div
             key={index}
