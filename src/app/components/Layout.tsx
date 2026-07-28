@@ -86,7 +86,10 @@ const [showNotifications, setShowNotifications] =
   
 const { notifications, setNotifications, settings } =
   useNotifications();
-
+const supportsNotifications =
+  typeof window !== "undefined" &&
+  "Notification" in window &&
+  "serviceWorker" in navigator;
   
     
 useEffect(() => {
@@ -110,9 +113,12 @@ useEffect(() => {
 
   if (!token) return;
 
-  if (Notification.permission === "default") {
-    Notification.requestPermission();
-  }
+  if (
+  supportsNotifications &&
+  Notification.permission === "default"
+) {
+  Notification.requestPermission();
+}
 
   const WS_URL =
     import.meta.env.VITE_API_URL
@@ -142,15 +148,20 @@ useEffect(() => {
       toast.success(data.message);
 
       // Native device notification
-      if (Notification.permission === "granted") {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(data.title, {
-            body: data.message,
-            icon: "/logo192.png",
-            badge: "/logo192.png",
-          });
-        });
-      }
+      if (
+  supportsNotifications &&
+  Notification.permission === "granted"
+) {
+  navigator.serviceWorker.ready.then((registration) => {
+    registration.showNotification(data.title, {
+      body: data.message,
+      icon: "/logo192.png",
+      badge: "/logo192.png",
+    });
+  });
+}
+       
+      
     };
 
     socket.onerror = (err) => {
