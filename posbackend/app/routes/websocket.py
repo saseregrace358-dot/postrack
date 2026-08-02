@@ -11,10 +11,10 @@ ALGORITHM = "HS256"
 
 @router.websocket("/ws/notifications")
 async def websocket_notifications(websocket: WebSocket):
-
     token = websocket.query_params.get("token")
 
     if not token:
+        print("No token received")
         await websocket.close(code=1008)
         return
 
@@ -25,17 +25,20 @@ async def websocket_notifications(websocket: WebSocket):
             algorithms=[ALGORITHM]
         )
 
+        print("JWT Payload:", payload)
+
         business_id = payload["business_id"]
 
-    except JWTError:
-        await websocket.close(code=1008)
-        return
+        await manager.connect(business_id, websocket)
+        print("WebSocket connected")
 
-    await manager.connect(business_id, websocket)
-
-    try:
         while True:
             await websocket.receive_text()
 
-    except WebSocketDisconnect:
-        manager.disconnect(business_id, websocket)
+    except JWTError as e:
+        print("JWT ERROR:", e)
+        await websocket.close(code=1008)
+
+    except Exception as e:
+        print("GENERAL ERROR:", repr(e))
+        await websocket.close(code=1008)
