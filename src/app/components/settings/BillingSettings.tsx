@@ -76,7 +76,7 @@ useEffect(() => {
     }, 1000);
   }
 }, []);
-  async function subscribe(plan: string) {
+   async function subscribe(plan: string) {
   try {
     setPayingPlan(plan);
 
@@ -92,6 +92,7 @@ useEffect(() => {
     setPayingPlan(null);
   }
 }
+
   if (loading) {
     return (
       <div className="p-6 text-center">
@@ -116,61 +117,38 @@ useEffect(() => {
 
       {/* Current Subscription */}
 
-      {/* Current Subscription */}
+      <div className="rounded-xl border bg-blue-50 dark:bg-slate-800 p-5">
 
-<div className="rounded-2xl border bg-white p-6 shadow-sm dark:bg-slate-800">
-  <div className="flex items-center justify-between">
-    <div>
-      <h2 className="text-2xl font-bold">
-        Current Subscription
-      </h2>
+        <h2 className="font-bold text-lg">
+          Current Subscription
+        </h2>
 
-      <p className="mt-1 text-slate-500">
-        Your active business plan
-      </p>
-    </div>
+        <p className="mt-2">
+          <span className="font-semibold">
+            Plan:
+          </span>{" "}
+          {subscription?.plan_name ?? "Free"}
+        </p>
 
-    <span className="rounded-full bg-blue-100 px-4 py-1 text-sm font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-      {subscription?.status ?? "Active"}
-    </span>
-  </div>
+        <p>
+          <span className="font-semibold">
+            Status:
+          </span>{" "}
+          {subscription?.status ?? "Active"}
+        </p>
 
-  <div className="mt-6 grid gap-6 md:grid-cols-3">
+        {subscription?.expires_at && (
+          <p>
+  <span className="font-semibold">
+    Expires:
+  </span>{" "}
+  {subscription?.expires_at
+    ? new Date(subscription.expires_at).toLocaleDateString()
+    : "Not available"}
+</p>
+        )}
 
-    <div className="rounded-xl border p-4">
-      <p className="text-sm text-slate-500">
-        Plan
-      </p>
-
-      <p className="mt-2 text-xl font-bold">
-        {subscription?.plan_name ?? "Free"}
-      </p>
-    </div>
-
-    <div className="rounded-xl border p-4">
-      <p className="text-sm text-slate-500">
-        Status
-      </p>
-
-      <p className="mt-2 text-xl font-bold text-green-600">
-        {subscription?.status ?? "Active"}
-      </p>
-    </div>
-
-    <div className="rounded-xl border p-4">
-      <p className="text-sm text-slate-500">
-        Expires
-      </p>
-
-      <p className="mt-2 text-xl font-bold">
-        {subscription?.expires_at
-          ? new Date(subscription.expires_at).toLocaleDateString()
-          : "Never"}
-      </p>
-    </div>
-
-  </div>
-</div>
+      </div>
 
       {/* Plans */}
       {/* Upgrade Plans */}
