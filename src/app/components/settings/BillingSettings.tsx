@@ -158,14 +158,7 @@ useEffect(() => {
     Upgrade Your Plan
   </h2>
 
-  {/* Debug (remove after testing) */}
-  <div className="mb-4 text-red-500 space-y-1">
-    <p>Total Plans: {plans.length}</p>
-    <p>
-      Upgrade Plans:{" "}
-      {plans.filter((p) => p.name.toLowerCase() !== "free").length}
-    </p>
-  </div>
+  
 
   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
     {plans
