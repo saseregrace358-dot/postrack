@@ -134,95 +134,106 @@ export default function BillingSettings({
       </div>
 
       {/* Plans */}
-      <p className="text-red-500">
-  Number of plans: {plans.length}
-</p>
+      {/* Upgrade Plans */}
 
-<p className="text-red-500">
-  Upgrade plans:
-  {plans.filter((p) => p.name.toLowerCase() !== "free").length}
-</p>
+<div className="mt-6">
+  <h2 className="mb-6 text-2xl font-bold">
+    Upgrade Your Plan
+  </h2>
 
-      {plans
+  {/* Debug (remove after testing) */}
+  <div className="mb-4 text-red-500 space-y-1">
+    <p>Total Plans: {plans.length}</p>
+    <p>
+      Upgrade Plans:{" "}
+      {plans.filter((p) => p.name.toLowerCase() !== "free").length}
+    </p>
+  </div>
+
+  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+    {plans
       .filter((plan) => plan.name.toLowerCase() !== "free")
       .map((plan) => (
-            <div
+        <div
           key={plan.id}
-          className="rounded-xl border p-5 bg-white dark:bg-slate-800"
+          className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:bg-slate-800"
         >
-          <div className="flex justify-between items-center">
+          {/* Header */}
+          <div className="mb-5">
+            <h3 className="text-2xl font-bold">
+              {plan.name}
+            </h3>
 
-            <div>
+            <p className="mt-2 text-3xl font-bold text-blue-600">
+              ₦{plan.price.toLocaleString()}
+            </p>
 
-              <h2 className="text-xl font-bold">
-                {plan.name}
-              </h2>
-
-              <p className="text-3xl font-bold text-blue-600 mt-2">
-                ₦{plan.price.toLocaleString()}
-              </p>
-
-              <p className="text-gray-500">
-                {plan.duration_days} Days
-              </p>
-
-            </div>
-
+            <p className="text-sm text-gray-500">
+              {plan.duration_days} Days
+            </p>
           </div>
 
-          <div className="mt-5 space-y-2">
+          {/* Features */}
+          <div className="space-y-3">
 
-            <p className="flex items-center gap-2">
-              <CheckCircle size={18} />
-              {plan.max_products.toLocaleString()} Products
-            </p>
+            <div className="flex items-center gap-2">
+              <CheckCircle size={18} className="text-green-600" />
+              <span>
+                {plan.max_products.toLocaleString()} Products
+              </span>
+            </div>
 
-            <p className="flex items-center gap-2">
-              <CheckCircle size={18} />
-              {plan.max_employees.toLocaleString()} Employees
-            </p>
+            <div className="flex items-center gap-2">
+              <CheckCircle size={18} className="text-green-600" />
+              <span>
+                {plan.max_employees.toLocaleString()} Employees
+              </span>
+            </div>
 
-            <p className="flex items-center gap-2">
-              <CheckCircle size={18} />
-              {plan.max_customers.toLocaleString()} Customers
-            </p>
+            <div className="flex items-center gap-2">
+              <CheckCircle size={18} className="text-green-600" />
+              <span>
+                {plan.max_customers.toLocaleString()} Customers
+              </span>
+            </div>
 
             {plan.ai_enabled && (
-              <p className="flex items-center gap-2">
-                <CheckCircle size={18} />
-                AI Features
-              </p>
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-green-600" />
+                <span>AI Features</span>
+              </div>
             )}
 
             {plan.reports_enabled && (
-              <p className="flex items-center gap-2">
-                <CheckCircle size={18} />
-                Advanced Reports
-              </p>
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-green-600" />
+                <span>Advanced Reports</span>
+              </div>
             )}
 
             {plan.notifications_enabled && (
-              <p className="flex items-center gap-2">
-                <CheckCircle size={18} />
-                Notifications
-              </p>
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-green-600" />
+                <span>Notifications</span>
+              </div>
             )}
-
           </div>
 
+          {/* Button */}
           <button
             onClick={() => subscribe(plan.name.toLowerCase())}
             disabled={payingPlan !== null}
-            className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+            className="mt-6 w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:bg-gray-400"
           >
             {payingPlan === plan.name.toLowerCase()
               ? "Redirecting..."
               : "Choose Plan"}
           </button>
-
         </div>
       ))}
-      </div>
+  </div>
+</div>   
+  </div>
     </div>
   );
 }
