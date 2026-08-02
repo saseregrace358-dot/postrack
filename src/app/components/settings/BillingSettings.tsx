@@ -44,21 +44,28 @@ export default function BillingSettings({
   const [payingPlan, setPayingPlan] =
     useState<string | null>(null);
 
-  useEffect(() => {
+  
+  async function loadData() {
+  try {
+    const plansRes = await getPlans();
+    setPlans(plansRes.data);
+  } catch (err) {
+    console.error("Failed to load plans", err);
+  }
+
+  try {
+    const subRes = await getMySubscription();
+    setSubscription(subRes.data);
+  } catch (err) {
+    console.log("No active subscription");
+    setSubscription(null);
+  }
+
+  setLoading(false);
+}
+useEffect(() => {
     loadData();
   }, []);
-
-  async function loadData() {
-    try {
-      const plansRes = await getPlans();
-      const subRes = await getMySubscription();
-
-      setPlans(plansRes.data);
-      setSubscription(subRes.data);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function subscribe(plan: string) {
     try {
