@@ -1,8 +1,8 @@
-"""create missing tables
+"""initial schema
 
-Revision ID: 800c27df680d
-Revises: 2a9c41aff9cd
-Create Date: 2026-07-12 10:52:42.080394
+Revision ID: 6a11ecf14ccf
+Revises: 
+Create Date: 2026-08-02 12:43:49.119315
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '800c27df680d'
-down_revision: Union[str, Sequence[str], None] = '2a9c41aff9cd'
+revision: str = '6a11ecf14ccf'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -27,30 +27,31 @@ def upgrade() -> None:
     sa.Column('tax_enabled', sa.Boolean(), nullable=True),
     sa.Column('tax_rate', sa.Float(), nullable=True),
     sa.Column('debt_threshold', sa.Float(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_business_settings_business_id'), 'business_settings', ['business_id'], unique=True)
     op.create_index(op.f('ix_business_settings_id'), 'business_settings', ['id'], unique=False)
-    op.create_table('business_subscriptions',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('business_id', sa.String(), nullable=True),
-    sa.Column('plan_id', sa.Integer(), nullable=False),
-    sa.Column('status', sa.String(), nullable=True),
-    sa.Column('started_at', sa.DateTime(), nullable=True),
-    sa.Column('expires_at', sa.DateTime(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_business_subscriptions_business_id'), 'business_subscriptions', ['business_id'], unique=True)
-    op.create_index(op.f('ix_business_subscriptions_id'), 'business_subscriptions', ['id'], unique=False)
     op.create_table('employees',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('full_name', sa.String(), nullable=True),
+    sa.Column('email', sa.String(), nullable=True),
     sa.Column('password', sa.String(), nullable=False),
     sa.Column('permissions', sa.JSON(), nullable=True),
     sa.Column('business_id', sa.String(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_employees_email'), 'employees', ['email'], unique=True)
     op.create_index(op.f('ix_employees_id'), 'employees', ['id'], unique=False)
+    op.create_table('inventory_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('product_id', sa.Integer(), nullable=True),
+    sa.Column('change_type', sa.String(), nullable=True),
+    sa.Column('quantity', sa.Integer(), nullable=True),
+    sa.Column('timestamp', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('notifications',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('business_id', sa.String(), nullable=True),
@@ -75,12 +76,51 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_payments_business_id'), 'payments', ['business_id'], unique=False)
     op.create_index(op.f('ix_payments_id'), 'payments', ['id'], unique=False)
+    op.create_table('products',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('cost', sa.Float(), nullable=False),
+    sa.Column('price', sa.Float(), nullable=False),
+    sa.Column('category', sa.String(), nullable=True),
+    sa.Column('stock', sa.Integer(), nullable=True),
+    sa.Column('image', sa.String(), nullable=True),
+    sa.Column('barcode', sa.String(), nullable=True),
+    sa.Column('business_id', sa.String(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=True),
+    sa.Column('created_by_name', sa.String(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_products_business_id'), 'products', ['business_id'], unique=False)
+    op.create_index(op.f('ix_products_id'), 'products', ['id'], unique=False)
+    op.create_table('sales',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('order_id', sa.String(), nullable=True),
+    sa.Column('date', sa.DateTime(), nullable=True),
+    sa.Column('items', sa.JSON(), nullable=True),
+    sa.Column('subtotal', sa.Float(), nullable=True),
+    sa.Column('tax', sa.Float(), nullable=True),
+    sa.Column('total', sa.Float(), nullable=True),
+    sa.Column('amountPaid', sa.Float(), nullable=True),
+    sa.Column('balance', sa.Float(), nullable=True),
+    sa.Column('paymentMethod', sa.String(), nullable=True),
+    sa.Column('payments', sa.JSON(), nullable=True),
+    sa.Column('status', sa.String(), nullable=True),
+    sa.Column('business_id', sa.String(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=True),
+    sa.Column('created_by_name', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_sales_business_id'), 'sales', ['business_id'], unique=False)
+    op.create_index(op.f('ix_sales_order_id'), 'sales', ['order_id'], unique=True)
     op.create_table('subscription_plans',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=True),
     sa.Column('price', sa.Float(), nullable=True),
     sa.Column('duration_days', sa.Integer(), nullable=True),
     sa.Column('description', sa.String(), nullable=True),
+    sa.Column('max_sales', sa.Integer(), nullable=True),
     sa.Column('max_products', sa.Integer(), nullable=True),
     sa.Column('max_employees', sa.Integer(), nullable=True),
     sa.Column('max_customers', sa.Integer(), nullable=True),
@@ -111,12 +151,27 @@ def upgrade() -> None:
     op.create_index(op.f('ix_users_business_name'), 'users', ['business_name'], unique=True)
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
+    op.create_table('business_subscriptions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('business_id', sa.String(), nullable=True),
+    sa.Column('plan_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(), nullable=True),
+    sa.Column('started_at', sa.DateTime(), nullable=True),
+    sa.Column('expires_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['plan_id'], ['subscription_plans.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_business_subscriptions_business_id'), 'business_subscriptions', ['business_id'], unique=True)
+    op.create_index(op.f('ix_business_subscriptions_id'), 'business_subscriptions', ['id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_business_subscriptions_id'), table_name='business_subscriptions')
+    op.drop_index(op.f('ix_business_subscriptions_business_id'), table_name='business_subscriptions')
+    op.drop_table('business_subscriptions')
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_index(op.f('ix_users_business_name'), table_name='users')
@@ -124,16 +179,21 @@ def downgrade() -> None:
     op.drop_table('users')
     op.drop_index(op.f('ix_subscription_plans_id'), table_name='subscription_plans')
     op.drop_table('subscription_plans')
+    op.drop_index(op.f('ix_sales_order_id'), table_name='sales')
+    op.drop_index(op.f('ix_sales_business_id'), table_name='sales')
+    op.drop_table('sales')
+    op.drop_index(op.f('ix_products_id'), table_name='products')
+    op.drop_index(op.f('ix_products_business_id'), table_name='products')
+    op.drop_table('products')
     op.drop_index(op.f('ix_payments_id'), table_name='payments')
     op.drop_index(op.f('ix_payments_business_id'), table_name='payments')
     op.drop_table('payments')
     op.drop_index(op.f('ix_notifications_id'), table_name='notifications')
     op.drop_table('notifications')
+    op.drop_table('inventory_logs')
     op.drop_index(op.f('ix_employees_id'), table_name='employees')
+    op.drop_index(op.f('ix_employees_email'), table_name='employees')
     op.drop_table('employees')
-    op.drop_index(op.f('ix_business_subscriptions_id'), table_name='business_subscriptions')
-    op.drop_index(op.f('ix_business_subscriptions_business_id'), table_name='business_subscriptions')
-    op.drop_table('business_subscriptions')
     op.drop_index(op.f('ix_business_settings_id'), table_name='business_settings')
     op.drop_index(op.f('ix_business_settings_business_id'), table_name='business_settings')
     op.drop_table('business_settings')
