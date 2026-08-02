@@ -85,7 +85,9 @@ export default function BillingSettings({
   }
 
   return (
-    <div className="space-y-5">
+  
+  <div className="mx-auto max-w-7xl p-6">
+    <div className="space-y-6">
 
       {/* Back */}
       <button
@@ -150,20 +152,23 @@ export default function BillingSettings({
         >
           <div className="flex justify-between items-center">
 
-            <div className="bg-red-500 p-5 text-white">
-  TEST
-</div>
+            <div>
 
-{plans
-  .filter((plan) => plan.name.toLowerCase() !== "free")
-  .map((plan) => (
-    <div
-      key={plan.id}
-      className="bg-green-500 p-5 text-white"
-    >
-      {plan.name}
-    </div>
-  ))}          </div>
+              <h2 className="text-xl font-bold">
+                {plan.name}
+              </h2>
+
+              <p className="text-3xl font-bold text-blue-600 mt-2">
+                ₦{plan.price.toLocaleString()}
+              </p>
+
+              <p className="text-gray-500">
+                {plan.duration_days} Days
+              </p>
+
+            </div>
+
+          </div>
 
           <div className="mt-5 space-y-2">
 
@@ -217,7 +222,7 @@ export default function BillingSettings({
 
         </div>
       ))}
-
+      </div>
     </div>
   );
 }
