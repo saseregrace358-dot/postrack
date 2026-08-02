@@ -132,9 +132,19 @@ export default function BillingSettings({
       </div>
 
       {/* Plans */}
+      <p className="text-red-500">
+  Number of plans: {plans.length}
+</p>
 
-      {plans.map((plan) => (
-        <div
+<p className="text-red-500">
+  Upgrade plans:
+  {plans.filter((p) => p.name.toLowerCase() !== "free").length}
+</p>
+
+      {plans
+      .filter((plan) => plan.name.toLowerCase() !== "free")
+      .map((plan) => (
+            <div
           key={plan.id}
           className="rounded-xl border p-5 bg-white dark:bg-slate-800"
         >
