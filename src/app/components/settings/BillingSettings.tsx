@@ -64,9 +64,18 @@ export default function BillingSettings({
   setLoading(false);
 }
 useEffect(() => {
-    loadData();
-  }, []);
+  loadData();
 
+  const plan = sessionStorage.getItem("selectedPlan");
+
+  if (plan) {
+    sessionStorage.removeItem("selectedPlan");
+
+    setTimeout(() => {
+      loadData();
+    }, 1000);
+  }
+}, []);
   async function subscribe(plan: string) {
     try {
       setPayingPlan(plan);
@@ -129,13 +138,13 @@ useEffect(() => {
 
         {subscription?.expires_at && (
           <p>
-            <span className="font-semibold">
-              Expires:
-            </span>{" "}
-            {new Date(
-              subscription.expires_at
-            ).toLocaleDateString()}
-          </p>
+  <span className="font-semibold">
+    Expires:
+  </span>{" "}
+  {subscription?.expires_at
+    ? new Date(subscription.expires_at).toLocaleDateString()
+    : "Not available"}
+</p>
         )}
 
       </div>
