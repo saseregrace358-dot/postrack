@@ -19,6 +19,7 @@ import {
 } from "../../api/settings";
 import toast from "react-hot-toast";
 import BillingSettings from "./settings/BillingSettings";
+import ReturnItems  from "./settings/return";
 
 export function Settings() {
   
@@ -30,7 +31,7 @@ const [savingTax, setSavingTax] = useState(false);
 const [savingDebt, setSavingDebt] = useState(false);
 
 const [showBilling, setShowBilling] = useState(false);
-
+const [showReturn, setShowReturn] = useState(false);
   const downloadFile = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
 
@@ -143,6 +144,13 @@ if (showBilling) {
   return (
    <BillingSettings
   onBack={() => setShowBilling(false)}
+/>
+  );
+}
+if (showReturn) {
+  return (
+   <ReturnItems
+  onBack={() => setShowReturn(false)}
 />
   );
 }
@@ -262,6 +270,18 @@ if (showBilling) {
   )}
 </div>
 
+  <div className="bg-white dark:bg-slate-800 rounded-xl border">
+  <button
+    onClick={() => setShowReturn(true)}
+    className="w-full flex justify-between items-center p-4"
+  >
+    <span>Returned Items</span>
+
+    <span>→</span>
+  </button>
+</div>
+
+
 <div className="bg-white dark:bg-slate-800 rounded-xl border">
   <button
     onClick={() => setExpanded(expanded === "export" ? null : "export")}
@@ -303,7 +323,6 @@ if (showBilling) {
 </button>
 
 
-
 <button
   onClick={handleExportDashboardPdf}
   className="w-full py-2 bg-orange-600 text-white rounded"
@@ -324,6 +343,7 @@ if (showBilling) {
     <span>→</span>
   </button>
 </div>
+
  </div>
   );
 }

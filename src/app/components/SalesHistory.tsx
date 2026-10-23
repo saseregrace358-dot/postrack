@@ -196,32 +196,35 @@ const filteredSales = sales.filter((sale: Sale) => {
       
 
       {/* Summary Cards */}
-<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
+      {/* SUMMARY CARDS */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        {/* Total Sales — full width on mobile */}
+        <div className="col-span-2 lg:col-span-1">
+          <Metric
+            title="Total Sales"
+            value={filteredSales.length}
+            icon={ShoppingCart}
+          />
+        </div>
 
-  <Metric
-    title="Total Sales"
-    value={filteredSales.length}
-    icon={ShoppingCart}
-  />
+        {/* Total Items Sold */}
+        <Metric
+          title="Total Items Sold"
+          value={totalItems}
+          icon={Package}
+        />
 
-  <Metric
-    title="Total Items Sold"
-    value={totalItems}
-    icon={Package}
-  />
-  </div>
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-
-  <Metric
-    title="Total Debt"
-    value={`₦${totalDebt.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-    })}`}
-    icon={AlertTriangle}
-  />
-
-</div>
-      {/* Filters */}
+        {/* Total Debt */}
+        <Metric
+          title="Total Debt"
+          value={`₦${totalDebt.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+          })}`}
+          icon={AlertTriangle}
+        />
+      </div>
+      
+        {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         <button
           onClick={() => setFilterPeriod("all")}

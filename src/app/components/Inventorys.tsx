@@ -279,25 +279,32 @@ if (loading) {
       </div>
 
       {/* STATS */}
-      <div className="grid grid-cols-3 sm:grid-cols-3 gap-3">
-  <Metric
-    title="Products"
-    value={totalProducts}
-    icon={Package}
-  />
+            {/* STATS */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        {/* Products — full width on mobile */}
+        <div className="col-span-2 lg:col-span-1">
+          <Metric
+            title="Products"
+            value={totalProducts}
+            icon={Package}
+          />
+        </div>
 
-  <Metric
-    title="Stock Units"
-    value={totalStock}
-    icon={Boxes}
-  />
+        {/* Stock Units */}
+        <Metric
+          title="Stock Units"
+          value={totalStock}
+          icon={Boxes}
+        />
 
-  <Metric
-    title="Low Stock"
-    value={lowStock}
-    icon={AlertTriangle}
-  />
-</div>
+        {/* Low Stock */}
+        <Metric
+          title="Low Stock"
+          value={lowStock}
+          icon={AlertTriangle}
+        />
+      </div>
+      
       {/* SEARCH */}
       <div className="relative">
         <Search className="absolute left-3 top-3 text-gray-400" />
