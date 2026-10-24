@@ -10,7 +10,7 @@ import {
 } from "../../api/sales";
 import toast from "react-hot-toast";
 import { Metric } from "./ui/Metric";
-
+import { getReturnsApi } from "../../api/returns";
 type CartItem = {
   id: number;
   name: string;
@@ -52,21 +52,48 @@ export function SalesHistory() {
   const [filterPeriod, setFilterPeriod] = useState("all");
  const [payAmount, setPayAmount] = useState("");
 const [searchTerm, setSearchTerm] = useState("");
+const [returnTotals, setReturnTotals] = useState<Record<string, number>>({});
 const [addingPayment, setAddingPayment] = useState(false);
   const loadSales = async () => {
   try {
-    const res = await getSalesApi();
+    const salesRes = await getSalesApi();
+    setSales(
+      salesRes.data.map((sale: Sale) => ({
+        ...sale,
+        payments: sale.payments ?? [],
+      }))
+    );
 
-    const safeSales = res.data.map((sale: Sale) => ({
-  ...sale,
-  payments: sale.payments ?? [],
-}));
+    try {
+      const returnsRes = await getReturnsApi();
+      const totals: Record<string, number> = {};
 
-    setSales(safeSales);
-  } catch (err) {
-    console.error(err);
+      for (const record of returnsRes.data) {
+        const saleId = String(record.sale_id);
+
+        totals[saleId] =
+          (totals[saleId] ?? 0) +
+          Number(record.refund_amount ?? 0);
+      }
+
+      setReturnTotals(totals);
+    } catch (returnError) {
+      console.error("Failed to load returns:", returnError);
+      toast.error("Could not load return amounts.");
+    }
+  } catch (error) {
+    console.error("Failed to load sales:", error);
+    toast.error("Could not load sales history.");
   }
 };
+const getReturnedAmount = (sale: Sale) =>
+  returnTotals[String(sale.id)] ?? 0;
+
+const getNetTotal = (sale: Sale) =>
+  Math.max(0, sale.total - getReturnedAmount(sale));
+
+const getNetBalance = (sale: Sale) =>
+  Math.max(0, getNetTotal(sale) - Number(sale.amountPaid ?? 0));
 
 useEffect(() => {
   loadSales();
@@ -118,7 +145,7 @@ const totalPaid =
   ) || 0;
 
 const balance = selectedSale
-  ? selectedSale.total - totalPaid
+  ? Math.max(0, getNetTotal(selectedSale) - totalPaid)
   : 0;
  
  
@@ -177,11 +204,7 @@ const filteredSales = sales.filter((sale: Sale) => {
   0
 );
   const totalDebt = filteredSales.reduce(
-  (sum, sale) =>
-    sum +
-    (sale.status === "DEBT" || sale.status === "PARTIAL"
-      ? sale.balance
-      : 0),
+  (sum, sale) => sum + getNetBalance(sale),
   0
 );
 
@@ -297,8 +320,22 @@ const filteredSales = sales.filter((sale: Sale) => {
                   <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(sale.date)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">₦{sale.total.toFixed(2)}</p>
-                  <div className="flex flex-col items-end gap-1">
+                 <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+            ₦{getNetTotal(sale).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+
+          {getReturnedAmount(sale) > 0 && (
+            <p className="text-xs text-orange-600">
+              Returned: ₦{getReturnedAmount(sale).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          )}   
+           <div className="flex flex-col items-end gap-1">
                   
                   <span
                     className={`inline-block px-2 py-0.5 text-xs rounded-full ${
@@ -441,38 +478,33 @@ const filteredSales = sales.filter((sale: Sale) => {
   </div>
 )}
   <div className="flex justify-between font-semibold text-slate-900 dark:text-white border-t pt-2">
-    <span>Total Amount</span>
+  <span>Original Total</span>
+  <span>
+    ₦{selectedSale.total.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+    })}
+  </span>
+</div>
+
+{getReturnedAmount(selectedSale) > 0 && (
+  <div className="flex justify-between text-orange-600">
+    <span>Returned Amount</span>
     <span>
-      ₦{selectedSale.total.toLocaleString(undefined, {
+      −₦{getReturnedAmount(selectedSale).toLocaleString(undefined, {
         minimumFractionDigits: 2,
       })}
     </span>
   </div>
+)}
 
-  <div className="flex justify-between text-green-600 font-semibold">
-    <span>Amount Paid</span>
-    <span>
-      ₦{selectedSale.amountPaid.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-      })}
-    </span>
-  </div>
-
-  <div className="flex justify-between font-semibold">
-    <span>Balance</span>
-    <span
-      className={
-        selectedSale.balance > 0
-          ? "text-red-600"
-          : "text-green-600"
-      }
-    >
-      ₦{selectedSale.balance.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-      })}
-    </span>
-  </div>
-
+<div className="flex justify-between font-bold text-base border-t pt-2">
+  <span>Net Sale Amount</span>
+  <span>
+    ₦{getNetTotal(selectedSale).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+    })}
+  </span>
+</div>
   <div className="flex justify-between font-bold text-base border-t pt-2">
     
   </div>
@@ -516,15 +548,15 @@ const filteredSales = sales.filter((sale: Sale) => {
 
 {/* TOTALS */}
 <div className="border-t mt-3 pt-2 text-sm">
-  <p>Total: ₦{selectedSale.total}</p>
-  <p>Paid: ₦{totalPaid}</p>
-  <p>Balance: ₦{balance}</p>
- 
-</div>             {/* Footer */}
-              <div className="text-center border-t border-dashed border-slate-300 dark:border-slate-700 pt-4">
+  <p>Net Total: ₦{getNetTotal(selectedSale).toLocaleString()}</p>
+  <p>Paid: ₦{totalPaid.toLocaleString()}</p>
+  <p>Balance: ₦{balance.toLocaleString()}</p>
+</div>
+      {/* Footer */}
+   <div className="text-center border-t border-dashed border-slate-300 dark:border-slate-700 pt-4">
                 <p className="text-sm text-slate-600 dark:text-slate-400">Thank you for your business!</p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Powered by BizTrack POS</p>
-              </div>
+        </div>
             </div>
           </div>
         </div>
