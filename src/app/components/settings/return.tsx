@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -8,13 +7,17 @@ import {
   RotateCcw,
   Search,
   X,
+  CheckCircle2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import {
   createReturnApi,
   getReturnsApi,
+  updateReturnStatusApi,
+  type RefundStatus,
 } from "../../../api/returns";
+
 import { getProducts } from "../../../api/products";
 import { getSalesApi } from "../../../api/sales";
 
@@ -178,6 +181,11 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState(today());
 
+  const [refundStatus, setRefundStatus] =
+    useState<RefundStatus>("PENDING");
+  const [updatingReturnId, setUpdatingReturnId] =
+    useState<string | null>(null);
+
   const [saleSearch, setSaleSearch] = useState("");
   const [selectedSaleId, setSelectedSaleId] = useState("");
   const [showSaleSuggestions, setShowSaleSuggestions] = useState(false);
@@ -302,7 +310,6 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
       )
       .reduce((sum, record) => sum + record.quantity, 0);
 
-  // The backend combines matching product IDs in a return request.
   // Count all matching sale lines when calculating remaining quantity.
   const soldQuantityForProduct = (
     sale: Sale,
@@ -319,10 +326,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     selectedSale && selectedSaleItem
       ? Math.max(
           0,
-          soldQuantityForProduct(
-            selectedSale,
-            selectedProductId
-          ) -
+          soldQuantityForProduct(selectedSale, selectedProductId) -
             returnedQuantityForProduct(
               selectedSale.id,
               selectedProductId
@@ -353,6 +357,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     setQuantity("");
     setReason("");
     setCondition("Resellable");
+    setRefundStatus("PENDING");
     setError("");
     setShowForm(false);
   };
@@ -427,12 +432,10 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     const loadingToast = toast.loading("Saving return to database...");
 
     try {
-      // Do not update inventory here.
-      // FastAPI validates the sale, calculates the refund,
-      // saves the return and updates inventory in one transaction.
       const response = await createReturnApi({
         sale_id: Number(selectedSale.id),
         reason: reason.trim(),
+        refund_status: refundStatus,
         items: [
           {
             product_id: Number(productId),
@@ -452,14 +455,11 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
         );
       }
 
-      // Reload all persisted records instead of adding a local-only record.
       await loadData();
 
       const savedDate = getDateKey(savedReturn.created_at) || today();
       setDateFilter(savedDate);
-      setExpandedId(
-        `${savedReturn.id}-${Number(productId)}`
-      );
+      setExpandedId(`${savedReturn.id}-${Number(productId)}`);
 
       window.dispatchEvent(new Event("inventory-updated"));
 
@@ -476,15 +476,53 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
 
       toast.dismiss(loadingToast);
 
-      const message = getApiError(
-        err,
-        "Unable to save the return."
-      );
+      const message = getApiError(err, "Unable to save the return.");
 
       setError(message);
       toast.error(message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCompleteRefund = async (item: ReturnRecord) => {
+    if (updatingReturnId !== null) return;
+
+    if (item.refund_status?.toUpperCase() !== "PENDING") {
+      toast.error("Only pending refunds can be completed.");
+      return;
+    }
+
+    const returnId = Number(item.return_id);
+
+    if (!Number.isInteger(returnId) || returnId <= 0) {
+      toast.error("Invalid return record ID.");
+      return;
+    }
+
+    setUpdatingReturnId(item.return_id);
+    const loadingToast = toast.loading("Updating refund status...");
+
+    try {
+      await updateReturnStatusApi(returnId, "COMPLETED");
+
+      // Reload persisted data so the displayed status matches the database.
+      await loadData();
+
+      window.dispatchEvent(new Event("returns-updated"));
+      window.dispatchEvent(new Event("sales-updated"));
+
+      toast.dismiss(loadingToast);
+      toast.success("Refund marked as completed.");
+    } catch (err) {
+      console.error("Failed to complete refund:", err);
+
+      toast.dismiss(loadingToast);
+      toast.error(
+        getApiError(err, "Unable to update the refund status.")
+      );
+    } finally {
+      setUpdatingReturnId(null);
     }
   };
 
@@ -561,6 +599,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
           type="button"
           onClick={() => {
             setError("");
+            setRefundStatus("PENDING");
             setShowForm(true);
           }}
           className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
@@ -849,6 +888,23 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                 </select>
               </div>
 
+              {/* REFUND STATUS */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Refund Status
+                </label>
+                <select
+                  value={refundStatus}
+                  onChange={(e) =>
+                    setRefundStatus(e.target.value as RefundStatus)
+                  }
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </div>
+
               {/* STOCK PREVIEW */}
               {selectedInventoryProduct &&
                 Number.isInteger(Number(quantity)) &&
@@ -931,6 +987,9 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
           {filteredReturns.map((item) => {
             const expanded = expandedId === item.id;
+            const isPending =
+              item.refund_status?.toUpperCase() === "PENDING";
+            const isUpdating = updatingReturnId === item.return_id;
 
             return (
               <div key={item.id}>
@@ -1034,14 +1093,39 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                       </p>
                     </div>
 
-                    <div>
-                      <p className="text-xs text-slate-500">Refund Status</p>
-                      <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
-                        {item.refund_status}
-                      </p>
+                    {/* REFUND STATUS AND COMPLETE ACTION */}
+                    <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs text-slate-500">
+                            Refund Status
+                          </p>
+                          <span
+                            className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              isPending
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            }`}
+                          >
+                            {item.refund_status || "PENDING"}
+                          </span>
+                        </div>
+
+                        {isPending && (
+                          <button
+                            type="button"
+                            onClick={() => void handleCompleteRefund(item)}
+                            disabled={updatingReturnId !== null}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <CheckCircle2 size={17} />
+                            {isUpdating ? "Updating..." : "Complete"}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div>
+                    <div className="sm:col-span-2">
                       <p className="text-xs text-slate-500">Reason</p>
                       <p className="mt-1 text-sm text-slate-800 dark:text-white">
                         {item.reason}

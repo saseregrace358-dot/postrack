@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DollarSign,
   Activity,
@@ -32,18 +32,23 @@ import { getSalesApi, getProductsApi } from "../../api/dashboard";
 
 type SaleItem = {
   product_id: number;
-  name: string;
+  name?: string;
+  product_name?: string;
   quantity: number;
-  price: number;
+  price?: number | string;
+  unit_price?: number | string;
+  cost?: number | string;
 };
 
 type Sale = {
-  id: string;
-  date: string;
+  id: string | number;
+  date?: string;
+  sale_date?: string;
+  created_at?: string;
   total: number;
-  balance: number;
-  status: string;
-  items: SaleItem[];
+  balance?: number;
+  status?: string;
+  items?: SaleItem[];
 };
 
 type Product = {
@@ -55,11 +60,12 @@ type Product = {
 };
 
 type ReturnRecord = {
-  id: number;
+  id?: number | string;
+  return_id?: number | string;
   product_id?: number;
   product_name?: string;
   name?: string;
-  quantity: number;
+  quantity?: number | string;
   price?: number | string;
   unit_price?: number | string;
   condition?: string;
@@ -67,6 +73,19 @@ type ReturnRecord = {
   reason?: string;
   return_reason?: string;
   returned_at?: string;
+  created_at?: string;
+  refund_status?: string;
+  items?: ReturnRecord[];
+  return_items?: ReturnRecord[];
+};
+
+type DashboardResponse<T> = {
+  data?: T[] | {
+    sales?: T[];
+    products?: T[];
+    returns?: T[];
+    items?: T[];
+  };
 };
 
 // ================= HELPERS =================
@@ -87,77 +106,228 @@ const PIE_COLORS = [
   "#f97316",
 ];
 
+const getArray = <T,>(response: DashboardResponse<T>): T[] => {
+  const data = response?.data;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (data && typeof data === "object") {
+    const record = data as {
+      sales?: T[];
+      products?: T[];
+      returns?: T[];
+      items?: T[];
+    };
+
+    if (Array.isArray(record.sales)) return record.sales;
+    if (Array.isArray(record.products)) return record.products;
+    if (Array.isArray(record.returns)) return record.returns;
+    if (Array.isArray(record.items)) return record.items;
+  }
+
+  return [];
+};
+
+const getSaleDate = (sale: Sale) =>
+  sale.date ?? sale.sale_date ?? sale.created_at ?? "";
+
+const getSaleItems = (sale: Sale): SaleItem[] =>
+  Array.isArray(sale.items) ? sale.items : [];
+
+const getProductName = (item: SaleItem) =>
+  item.name ?? item.product_name ?? "Unknown product";
+
+const getItemPrice = (item: SaleItem) =>
+  Number(item.price ?? item.unit_price ?? 0);
+
+const getLocalDateKey = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const getToday = () => getLocalDateKey(new Date());
+
+const getReturnQuantity = (item: ReturnRecord) =>
+  Math.max(0, Number(item.quantity ?? 0) || 0);
+
+const getReturnCondition = (item: ReturnRecord) =>
+  String(item.condition ?? item.item_condition ?? "")
+    .trim()
+    .toLowerCase();
+
+const getReturnReason = (item: ReturnRecord) =>
+  String(item.reason ?? item.return_reason ?? "Other").trim() || "Other";
+
+/**
+ * Supports APIs that return either:
+ * 1. Individual return items, or
+ * 2. Return records containing nested items/return_items.
+ *
+ * Nested items inherit the saved return's reason and date.
+ */
+const normalizeReturns = (records: ReturnRecord[]): ReturnRecord[] => {
+  return records.flatMap((record) => {
+    const nestedItems = Array.isArray(record.items)
+      ? record.items
+      : Array.isArray(record.return_items)
+        ? record.return_items
+        : [];
+
+    if (nestedItems.length === 0) {
+      return [record];
+    }
+
+    return nestedItems.map((item) => ({
+      ...item,
+      id: item.id ?? record.id,
+      return_id: item.return_id ?? record.return_id ?? record.id,
+      reason: item.reason ?? record.reason,
+      return_reason: item.return_reason ?? record.return_reason,
+      returned_at:
+        item.returned_at ?? record.returned_at ?? record.created_at,
+      created_at: item.created_at ?? record.created_at,
+      refund_status: item.refund_status ?? record.refund_status,
+      product_id: item.product_id ?? record.product_id,
+      product_name: item.product_name ?? record.product_name,
+      name: item.name ?? record.name,
+      price: item.price ?? record.price,
+      unit_price: item.unit_price ?? record.unit_price,
+      condition: item.condition ?? record.condition,
+      item_condition: item.item_condition ?? record.item_condition,
+    }));
+  });
+};
+
+// ================= DASHBOARD =================
+
 export function Dashboard() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
 
-  const [weekDate, setWeekDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [weekDate, setWeekDate] = useState(getToday);
 
-  // ================= LOAD DATA =================
+  // ================= LOAD / REFRESH DATA =================
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const [salesResponse, productsResponse] = await Promise.all([
-          getSalesApi(),
-          getProductsApi(),
-        ]);
+  const loadDashboard = useCallback(async () => {
+    const token = localStorage.getItem("token");
 
-        setSales(
-          Array.isArray(salesResponse.data) ? salesResponse.data : []
-        );
-
-        setProducts(
-          Array.isArray(productsResponse.data)
-            ? productsResponse.data
-            : []
-        );
-      } catch (error) {
-        console.error("Unable to load dashboard data:", error);
-      }
-    };
-
-    const loadReturns = async () => {
-      try {
-        const token = localStorage.getItem("token");
-
-        const response = await fetch(
-          "https://postrack.onrender.com/returns",
-          {
-            headers: token
-              ? { Authorization: `Bearer ${token}` }
-              : {},
-          }
-        );
-
+    // Load all three sources independently so a failed returns
+    // request does not prevent sales and products from refreshing.
+    const results = await Promise.allSettled([
+      getSalesApi(),
+      getProductsApi(),
+      fetch("https://postrack.onrender.com/returns", {
+        headers: token
+          ? { Authorization: `Bearer ${token}` }
+          : {},
+      }).then(async (response) => {
         if (!response.ok) {
-          throw new Error(
-            `Failed to load returns (${response.status})`
-          );
+          throw new Error(`Failed to load returns (${response.status})`);
         }
 
-        const data = await response.json();
+        return response.json();
+      }),
+    ]);
 
-        const records = Array.isArray(data)
-          ? data
-          : Array.isArray(data.returns)
-            ? data.returns
-            : Array.isArray(data.items)
-              ? data.items
-              : [];
+    const [salesResult, productsResult, returnsResult] = results;
 
-        setReturns(records);
-      } catch (error) {
-        console.error("Unable to load return records:", error);
+    if (salesResult.status === "fulfilled") {
+      const salesData = getArray<Sale>(
+        salesResult.value as DashboardResponse<Sale>
+      );
+
+      setSales(salesData);
+    } else {
+      console.error(
+        "Unable to refresh dashboard sales:",
+        salesResult.reason
+      );
+    }
+
+    if (productsResult.status === "fulfilled") {
+      const productsData = getArray<Product>(
+        productsResult.value as DashboardResponse<Product>
+      );
+
+      setProducts(productsData);
+    } else {
+      console.error(
+        "Unable to refresh dashboard products:",
+        productsResult.reason
+      );
+    }
+
+    if (returnsResult.status === "fulfilled") {
+      const responseData = returnsResult.value;
+
+      const rawRecords: ReturnRecord[] = Array.isArray(responseData)
+        ? responseData
+        : Array.isArray(responseData?.returns)
+          ? responseData.returns
+          : Array.isArray(responseData?.items)
+            ? responseData.items
+            : [];
+
+      setReturns(normalizeReturns(rawRecords));
+    } else {
+      console.error(
+        "Unable to refresh dashboard returns:",
+        returnsResult.reason
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+
+    // These events should be dispatched by the pages that change
+    // sales, inventory, or return records.
+    const refreshEvents = [
+      "returns-updated",
+      "sales-updated",
+      "inventory-updated",
+      "products-updated",
+    ];
+
+    const handleRefresh = () => {
+      void loadDashboard();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadDashboard();
       }
     };
 
-    loadDashboard();
-    loadReturns();
-  }, []);
+    refreshEvents.forEach((eventName) => {
+      window.addEventListener(eventName, handleRefresh);
+    });
+
+    window.addEventListener("focus", handleRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      refreshEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, handleRefresh);
+      });
+
+      window.removeEventListener("focus", handleRefresh);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    };
+  }, [loadDashboard]);
 
   // ================= DATE FILTER =================
 
@@ -169,20 +339,22 @@ export function Dashboard() {
 
   const selectedSales = useMemo(() => {
     return sales.filter((sale) => {
-      const date = new Date(sale.date);
+      const saleDate = getSaleDate(sale);
 
       return (
-        !Number.isNaN(date.getTime()) &&
-        date.toISOString().slice(0, 10) === weekDate
+        Boolean(saleDate) &&
+        getLocalDateKey(saleDate) === weekDate
       );
     });
   }, [sales, weekDate]);
 
   const salesUntilDate = useMemo(() => {
     return sales.filter((sale) => {
-      const date = new Date(sale.date);
+      const saleDate = getSaleDate(sale);
+      const date = new Date(saleDate);
 
       return (
+        Boolean(saleDate) &&
         !Number.isNaN(date.getTime()) &&
         date <= selectedDate
       );
@@ -208,9 +380,11 @@ export function Dashboard() {
 
   const weekSales = useMemo(() => {
     return sales.filter((sale) => {
-      const date = new Date(sale.date);
+      const saleDate = getSaleDate(sale);
+      const date = new Date(saleDate);
 
       return (
+        Boolean(saleDate) &&
         !Number.isNaN(date.getTime()) &&
         date >= weekStart &&
         date <= weekEnd
@@ -220,37 +394,50 @@ export function Dashboard() {
 
   // ================= CORE METRICS =================
 
-  const totalRevenue = salesUntilDate.reduce(
-    (sum, sale) => sum + Number(sale.total || 0),
-    0
+  const totalRevenue = useMemo(
+    () =>
+      salesUntilDate.reduce(
+        (sum, sale) => sum + Number(sale.total || 0),
+        0
+      ),
+    [salesUntilDate]
   );
 
-  const daySales = selectedSales.reduce(
-    (sum, sale) => sum + Number(sale.total || 0),
-    0
+  const daySales = useMemo(
+    () =>
+      selectedSales.reduce(
+        (sum, sale) => sum + Number(sale.total || 0),
+        0
+      ),
+    [selectedSales]
   );
 
-  const profit = salesUntilDate.reduce((sum, sale) => {
-    const cost =
-      sale.items?.reduce(
+  const profit = useMemo(() => {
+    return salesUntilDate.reduce((sum, sale) => {
+      const cost = getSaleItems(sale).reduce(
         (total, item) =>
           total +
-          Number(item.price || 0) *
+          getItemPrice(item) *
             Number(item.quantity || 0) *
             0.7,
         0
-      ) || 0;
+      );
 
-    return sum + (Number(sale.total || 0) - cost);
-  }, 0);
+      return sum + (Number(sale.total || 0) - cost);
+    }, 0);
+  }, [salesUntilDate]);
 
-  const inventoryValue = products.reduce((sum, product) => {
-    return (
-      sum +
-      Number(product.cost || 0) *
-        Number(product.stock || 0)
-    );
-  }, 0);
+  const inventoryValue = useMemo(
+    () =>
+      products.reduce(
+        (sum, product) =>
+          sum +
+          Number(product.cost || 0) *
+            Number(product.stock || 0),
+        0
+      ),
+    [products]
+  );
 
   const totalOrders = salesUntilDate.length;
 
@@ -259,38 +446,35 @@ export function Dashboard() {
 
   // ================= DAMAGED RETURNS =================
 
-  const damagedReturns = useMemo(() => {
-    return returns.filter((item) => {
-      const condition = String(
-        item.condition ?? item.item_condition ?? ""
-      )
-        .trim()
-        .toLowerCase();
+  const damagedReturns = useMemo(
+    () =>
+      returns.filter(
+        (item) => getReturnCondition(item) === "damaged"
+      ),
+    [returns]
+  );
 
-      return condition === "damaged";
-    });
-  }, [returns]);
+  const damagedQuantity = useMemo(
+    () =>
+      damagedReturns.reduce(
+        (sum, item) => sum + getReturnQuantity(item),
+        0
+      ),
+    [damagedReturns]
+  );
 
-  const damagedQuantity = useMemo(() => {
-    return damagedReturns.reduce(
-      (sum, item) => sum + Number(item.quantity || 0),
-      0
-    );
-  }, [damagedReturns]);
+  const damagedValue = useMemo(
+    () =>
+      damagedReturns.reduce((sum, item) => {
+        const price = Math.max(
+          0,
+          Number(item.price ?? item.unit_price ?? 0) || 0
+        );
 
-  const damagedValue = useMemo(() => {
-    return damagedReturns.reduce((sum, item) => {
-      const price = Number(
-        item.price ?? item.unit_price ?? 0
-      );
-
-      return (
-        sum +
-        Math.max(0, Number(item.quantity || 0)) *
-          Math.max(0, price)
-      );
-    }, 0);
-  }, [damagedReturns]);
+        return sum + getReturnQuantity(item) * price;
+      }, 0),
+    [damagedReturns]
+  );
 
   // ================= RETURNS BY REASON =================
 
@@ -298,15 +482,11 @@ export function Dashboard() {
     const grouped = new Map<string, number>();
 
     returns.forEach((item) => {
-      const reason =
-        item.reason?.trim() ||
-        item.return_reason?.trim() ||
-        "Other";
+      const reason = getReturnReason(item);
 
       grouped.set(
         reason,
-        (grouped.get(reason) || 0) +
-          Math.max(0, Number(item.quantity || 0))
+        (grouped.get(reason) || 0) + getReturnQuantity(item)
       );
     });
 
@@ -327,9 +507,11 @@ export function Dashboard() {
     }));
 
     weekSales.forEach((sale) => {
-      const day = new Date(sale.date).getDay();
+      const date = new Date(getSaleDate(sale));
 
-      data[day].sales += Number(sale.total || 0);
+      if (!Number.isNaN(date.getTime())) {
+        data[date.getDay()].sales += Number(sale.total || 0);
+      }
     });
 
     return data;
@@ -341,11 +523,14 @@ export function Dashboard() {
     const salesByHour: Record<number, number> = {};
 
     salesUntilDate.forEach((sale) => {
-      const hour = new Date(sale.date).getHours();
+      const date = new Date(getSaleDate(sale));
+
+      if (Number.isNaN(date.getTime())) return;
+
+      const hour = date.getHours();
 
       salesByHour[hour] =
-        (salesByHour[hour] || 0) +
-        Number(sale.total || 0);
+        (salesByHour[hour] || 0) + Number(sale.total || 0);
     });
 
     const entries = Object.entries(salesByHour);
@@ -368,16 +553,16 @@ export function Dashboard() {
     const totals = days.map(() => 0);
 
     salesUntilDate.forEach((sale) => {
-      const day = new Date(sale.date).getDay();
+      const date = new Date(getSaleDate(sale));
 
-      totals[day] += Number(sale.total || 0);
+      if (Number.isNaN(date.getTime())) return;
+
+      totals[date.getDay()] += Number(sale.total || 0);
     });
 
     if (salesUntilDate.length === 0) return "No data";
 
-    const maxDayIndex = totals.indexOf(Math.max(...totals));
-
-    return days[maxDayIndex];
+    return days[totals.indexOf(Math.max(...totals))];
   }, [salesUntilDate]);
 
   // ================= MONTHLY SALES TREND =================
@@ -394,7 +579,7 @@ export function Dashboard() {
     }));
 
     salesUntilDate.forEach((sale) => {
-      const date = new Date(sale.date);
+      const date = new Date(getSaleDate(sale));
 
       if (!Number.isNaN(date.getTime())) {
         data[date.getMonth()].value += Number(sale.total || 0);
@@ -410,11 +595,12 @@ export function Dashboard() {
     const map: Record<string, number> = {};
 
     weekSales.forEach((sale) => {
-      sale.items?.forEach((item) => {
-        map[item.name] =
-          (map[item.name] || 0) +
-          Number(item.quantity || 0) *
-            Number(item.price || 0);
+      getSaleItems(sale).forEach((item) => {
+        const name = getProductName(item);
+
+        map[name] =
+          (map[name] || 0) +
+          Number(item.quantity || 0) * getItemPrice(item);
       });
     });
 
@@ -428,11 +614,9 @@ export function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 pb-6 sm:space-y-6">
-
       {/* HEADER */}
       <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:w-[600px]">
-
           {/* DATE FILTER */}
           <div className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:px-4">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
@@ -482,14 +666,13 @@ export function Dashboard() {
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6">
-
         {/* TOTAL REVENUE */}
         <div className="group flex min-h-[112px] min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 border-l-4 border-l-blue-500 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:border-l-blue-500 dark:bg-slate-800 sm:p-4">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Total Revenue
             </p>
-            <h3 className="mt-2  text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
               {formatCurrency(totalRevenue)}
             </h3>
             <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
@@ -501,16 +684,16 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* SALES FOR SELECTED DATE */}
+        {/* SELECTED DATE SALES */}
         <div className="group flex min-h-[112px] min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:border-l-emerald-500 dark:bg-slate-800 sm:p-4">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Sales for Selected Date
             </p>
-            <h3 className="mt-2  text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
               {formatCurrency(daySales)}
             </h3>
-            <p className="mt-2  text-[10px] leading-snug text-slate-400 sm:text-xs">
+            <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
               Sales on {weekDate}
             </p>
           </div>
@@ -525,7 +708,7 @@ export function Dashboard() {
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Total Profit
             </p>
-            <h3 className="mt-2  text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
               {formatCurrency(profit)}
             </h3>
             <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
@@ -543,7 +726,7 @@ export function Dashboard() {
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Average Order Value
             </p>
-            <h3 className="mt-2  text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
               {formatCurrency(aov)}
             </h3>
             <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
@@ -561,7 +744,7 @@ export function Dashboard() {
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Inventory Value
             </p>
-            <h3 className="mt-2  text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white [overflow-wrap:anywhere] sm:text-lg">
               {formatCurrency(inventoryValue)}
             </h3>
             <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
@@ -579,30 +762,26 @@ export function Dashboard() {
             <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
               Damaged Returned Goods
             </p>
-
-            <h3 className="mt-2  text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
+            <h3 className="mt-2 text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
               {damagedQuantity.toLocaleString()} units
             </h3>
-
             <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">
               <p className="text-[10px] text-slate-500 dark:text-slate-400 sm:text-xs">
                 Total value
               </p>
-              <p className="mt-1  text-sm font-semibold leading-tight text-red-600 dark:text-red-400 [overflow-wrap:anywhere] sm:text-base">
+              <p className="mt-1 text-sm font-semibold leading-tight text-red-600 dark:text-red-400 [overflow-wrap:anywhere] sm:text-base">
                 {formatCurrency(damagedValue)}
               </p>
             </div>
           </div>
-
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 transition-transform group-hover:scale-105 dark:bg-red-950 dark:text-red-400 sm:h-9 sm:w-9">
             <AlertTriangle size={18} />
           </div>
         </div>
       </div>
 
-      {/* ALL CHARTS: ONE COLUMN ON MOBILE, TWO ON TABLET/DESKTOP */}
+      {/* CHARTS */}
       <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 xl:gap-6">
-
         {/* WEEKLY SALES */}
         <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
           <div className="mb-4">
@@ -722,7 +901,6 @@ export function Dashboard() {
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
               <RotateCcw size={19} />
             </div>
-
             <div className="min-w-0">
               <h3 className="font-semibold text-slate-900 dark:text-white">
                 Returns by Reason
@@ -770,7 +948,6 @@ export function Dashboard() {
                     />
                   ))}
                 </Pie>
-
                 <RechartsTooltip
                   formatter={(value) => [
                     `${Number(value).toLocaleString()} units`,
@@ -781,221 +958,208 @@ export function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
           )}
-          </div>
+        </div>
 
         {/* TOP SELLING PRODUCTS */}
         <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        {/* HEADER */}
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-3 dark:border-slate-700 sm:p-5">
-          <div className="min-w-0">
-            <h3 className="font-semibold text-slate-900 dark:text-white">
-              Top Selling Products
-            </h3>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-              Product performance for the selected week
-            </p>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-3 dark:border-slate-700 sm:p-5">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Top Selling Products
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+                Product performance for the selected week
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              Top 6
+            </span>
           </div>
 
-          <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-            Top 6
-          </span>
-        </div>
+          {/* MOBILE LIST */}
+          <div className="divide-y divide-slate-100 dark:divide-slate-700 sm:hidden">
+            {topProducts.map((product) => {
+              const productItems = weekSales.flatMap((sale) =>
+                getSaleItems(sale).filter(
+                  (item) => getProductName(item) === product.name
+                )
+              );
 
-        {/* MOBILE PRODUCT LIST */}
-        <div className="divide-y divide-slate-100 dark:divide-slate-700 sm:hidden">
-          {topProducts.map((product, index) => {
-            const productItems = weekSales.flatMap((sale) =>
-              (sale.items || []).filter(
-                (item) => item.name === product.name
-              )
-            );
+              const quantitySold = productItems.reduce(
+                (sum, item) => sum + Number(item.quantity || 0),
+                0
+              );
 
-            const quantitySold = productItems.reduce(
-              (sum, item) => sum + Number(item.quantity || 0),
-              0
-            );
+              const revenue = productItems.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(item.quantity || 0) * getItemPrice(item),
+                0
+              );
 
-            const revenue = productItems.reduce(
-              (sum, item) =>
-                sum +
-                Number(item.quantity || 0) *
-                  Number(item.price || 0),
-              0
-            );
+              const estimatedProfit = productItems.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(item.quantity || 0) *
+                    getItemPrice(item) *
+                    0.3,
+                0
+              );
 
-            const estimatedProfit = productItems.reduce(
-              (sum, item) =>
-                sum +
-                Number(item.quantity || 0) *
-                  Number(item.price || 0) *
-                  0.3,
-              0
-            );
-
-            return (
-              <details key={product.name} className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40 sm:px-4 [&::-webkit-details-marker]:hidden">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
-                    <Package size={17} />
-                  </div>
-
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 dark:text-white">
-                    {product.name}
-                  </span>
-
-                  <svg
-                    className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </summary>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-slate-50/80 px-3 py-3 pl-14 dark:bg-slate-900/40 sm:px-4">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Qty Sold
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-white">
-                      {quantitySold.toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Revenue
-                    </p>
-                    <p className="mt-1  text-sm font-semibold text-blue-600 dark:text-blue-400">
-                      {formatCurrency(revenue)}
-                    </p>
-                  </div>
-
-                  <div className="col-span-2 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Estimated Profit
+              return (
+                <details key={product.name} className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40 sm:px-4 [&::-webkit-details-marker]:hidden">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                      <Package size={17} />
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 dark:text-white">
+                      {product.name}
                     </span>
-                    <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(estimatedProfit)}
-                    </span>
+                    <svg
+                      className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </summary>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-slate-50/80 px-3 py-3 pl-14 dark:bg-slate-900/40 sm:px-4">
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Qty Sold
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-white">
+                        {quantitySold.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Revenue
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-blue-600 dark:text-blue-400">
+                        {formatCurrency(revenue)}
+                      </p>
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Estimated Profit
+                      </span>
+                      <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(estimatedProfit)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </details>
-            );
-          })}
+                </details>
+              );
+            })}
 
-          {topProducts.length === 0 && (
-            <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-              No product sales found.
-            </div>
-          )}
-        </div>
+            {topProducts.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                No product sales found.
+              </div>
+            )}
+          </div>
 
-        {/* DESKTOP TABLE */}
-        <div className="hidden overflow-x-auto sm:block">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-              <tr>
-                <th className="px-5 py-4 font-medium">Product Name</th>
-                <th className="px-5 py-4 text-right font-medium">Qty Sold</th>
-                <th className="px-5 py-4 text-right font-medium">Revenue</th>
-                <th className="px-5 py-4 text-right font-medium">Profit</th>
-              </tr>
-            </thead>
+          {/* DESKTOP TABLE */}
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                <tr>
+                  <th className="px-5 py-4 font-medium">Product Name</th>
+                  <th className="px-5 py-4 text-right font-medium">Qty Sold</th>
+                  <th className="px-5 py-4 text-right font-medium">Revenue</th>
+                  <th className="px-5 py-4 text-right font-medium">Profit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {topProducts.map((product, index) => {
+                  const productItems = weekSales.flatMap((sale) =>
+                    getSaleItems(sale).filter(
+                      (item) => getProductName(item) === product.name
+                    )
+                  );
 
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {topProducts.map((product, index) => {
-                const productItems = weekSales.flatMap((sale) =>
-                  (sale.items || []).filter(
-                    (item) => item.name === product.name
-                  )
-                );
+                  const quantitySold = productItems.reduce(
+                    (sum, item) =>
+                      sum + Number(item.quantity || 0),
+                    0
+                  );
 
-                const quantitySold = productItems.reduce(
-                  (sum, item) =>
-                    sum + Number(item.quantity || 0),
-                  0
-                );
+                  const revenue = productItems.reduce(
+                    (sum, item) =>
+                      sum +
+                      Number(item.quantity || 0) * getItemPrice(item),
+                    0
+                  );
 
-                const revenue = productItems.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(item.quantity || 0) *
-                      Number(item.price || 0),
-                  0
-                );
+                  const estimatedProfit = productItems.reduce(
+                    (sum, item) =>
+                      sum +
+                      Number(item.quantity || 0) *
+                        getItemPrice(item) *
+                        0.3,
+                    0
+                  );
 
-                const estimatedProfit = productItems.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(item.quantity || 0) *
-                      Number(item.price || 0) *
-                      0.3,
-                  0
-                );
-
-                return (
-                  <tr
-                    key={product.name}
-                    className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40"
-                  >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
-                          <Package size={19} />
+                  return (
+                    <tr
+                      key={product.name}
+                      className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                            <Package size={19} />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-800 dark:text-white">
+                              {product.name}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Product #{index + 1}
+                            </p>
+                          </div>
                         </div>
+                      </td>
+                      <td className="px-5 py-4 text-right font-medium text-slate-700 dark:text-slate-200">
+                        {quantitySold.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-right font-medium text-slate-800 dark:text-white">
+                        {formatCurrency(revenue)}
+                      </td>
+                      <td className="px-5 py-4 text-right font-semibold text-emerald-600">
+                        {formatCurrency(estimatedProfit)}
+                      </td>
+                    </tr>
+                  );
+                })}
 
-                        <div>
-                          <p className="font-medium text-slate-800 dark:text-white">
-                            {product.name}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Product #{index + 1}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-medium text-slate-700 dark:text-slate-200">
-                      {quantitySold.toLocaleString()}
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-medium text-slate-800 dark:text-white">
-                      {formatCurrency(revenue)}
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-semibold text-emerald-600">
-                      {formatCurrency(estimatedProfit)}
+                {topProducts.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-5 py-12 text-center text-slate-500 dark:text-slate-400"
+                    >
+                      No product sales found.
                     </td>
                   </tr>
-                );
-              })}
+                )}
+              </tbody>
+            </table>
+          </div>
 
-              {topProducts.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-5 py-12 text-center text-slate-500 dark:text-slate-400"
-                  >
-                    No product sales found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className="border-t border-slate-200 px-3 py-3 dark:border-slate-700 sm:px-5">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Showing the top products by revenue for the selected week.
+            </p>
+          </div>
         </div>
-
-        <div className="border-t border-slate-200 px-3 py-3 dark:border-slate-700 sm:px-5">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Showing the top products by revenue for the selected week.
-          </p>
-        </div>
-      </div>
       </div>
     </div>
   );
