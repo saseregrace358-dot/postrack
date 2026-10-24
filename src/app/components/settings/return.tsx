@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronDown,
@@ -11,7 +11,11 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { getProducts, updateProductApi } from "../../../api/products";
+import {
+  createReturnApi,
+  getReturnsApi,
+} from "../../../api/returns";
+import { getProducts } from "../../../api/products";
 import { getSalesApi } from "../../../api/sales";
 
 type Product = {
@@ -21,48 +25,35 @@ type Product = {
   price: number;
   category: string;
   stock: number;
-  image: string;
+  image?: string;
   barcode?: string;
-  created_at?: string;
-  updated_at?: string;
-  created_by?: number;
-  created_by_name?: string;
-  business_id?: string;
 };
 
 type SaleItem = {
-  id: number | string;
+  id?: number | string;
   product_id?: number | string;
   name: string;
   price: number;
   quantity: number;
 };
 
-type SaleStatus = "PAID" | "PARTIAL" | "DEBT";
-
 type Sale = {
-  id: string;
+  id: number | string;
   order_id: string;
-  date: string;
+  date?: string;
+  created_at?: string;
   items: SaleItem[];
   subtotal: number;
   tax: number;
   total: number;
-  amountPaid: number;
-  balance: number;
-  paymentMethod: string;
-  status: SaleStatus;
-  payments?: { amount: number; date: string; method: string }[];
-  created_by?: number;
-  created_by_name?: string;
 };
 
 type RestockCondition = "Resellable" | "Damaged";
 
 type ReturnRecord = {
   id: string;
+  return_id: string;
   sale_id: string;
-  sale_item_id: string;
   order_id: string;
   product_id: number;
   product_name: string;
@@ -72,16 +63,52 @@ type ReturnRecord = {
   reason: string;
   condition: RestockCondition;
   date: string;
-  previous_stock: number;
-  new_stock: number;
+  restocked: boolean;
+  refund_status: string;
 };
 
 type ReturnItemsProps = {
   onBack: () => void;
 };
 
+type SavedReturn = {
+  id: number | string;
+  sale_id: number | string;
+  order_id: string;
+  reason: string;
+  refund_amount: number;
+  refund_status: string;
+  created_at: string;
+  items: {
+    id?: number | string;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    refund_amount: number;
+    item_condition: RestockCondition;
+    restocked: boolean;
+  }[];
+};
+
 const today = () => {
   const date = new Date();
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+};
+
+const getDateKey = (value?: string) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 10);
+  }
 
   return [
     date.getFullYear(),
@@ -96,6 +123,48 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   })}`;
 
+const getApiError = (err: unknown, fallback: string) => {
+  const error = err as {
+    response?: {
+      data?: {
+        detail?: string;
+        message?: string;
+      };
+    };
+    message?: string;
+  };
+
+  return (
+    error.response?.data?.detail ||
+    error.response?.data?.message ||
+    error.message ||
+    fallback
+  );
+};
+
+const getSaleProductId = (item: SaleItem) =>
+  item.product_id ?? item.id;
+
+const flattenReturns = (records: SavedReturn[]): ReturnRecord[] =>
+  records.flatMap((record) =>
+    (record.items || []).map((item) => ({
+      id: `${record.id}-${item.product_id}`,
+      return_id: String(record.id),
+      sale_id: String(record.sale_id),
+      order_id: record.order_id,
+      product_id: Number(item.product_id),
+      product_name: item.product_name,
+      quantity: Number(item.quantity),
+      unit_price: Number(item.unit_price),
+      refund_amount: Number(item.refund_amount),
+      reason: record.reason,
+      condition: item.item_condition,
+      date: getDateKey(record.created_at),
+      restocked: Boolean(item.restocked),
+      refund_status: record.refund_status,
+    }))
+  );
+
 export default function ReturnItems({ onBack }: ReturnItemsProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -103,10 +172,10 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pageError, setPageError] = useState("");
 
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
   const [dateFilter, setDateFilter] = useState(today());
 
   const [saleSearch, setSaleSearch] = useState("");
@@ -118,21 +187,28 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
   const [reason, setReason] = useState("");
   const [condition, setCondition] =
     useState<RestockCondition>("Resellable");
-
-  const [returnDate, setReturnDate] = useState(today());
   const [error, setError] = useState("");
 
-  const loadData = async () => {
-    const [productResponse, salesResponse] = await Promise.all([
-      getProducts(),
-      getSalesApi(),
-    ]);
+  const loadData = useCallback(async () => {
+    const [productResponse, salesResponse, returnsResponse] =
+      await Promise.all([
+        getProducts(),
+        getSalesApi(),
+        getReturnsApi(),
+      ]);
 
     const productData = productResponse.data;
     const salesData = salesResponse.data;
+    const returnsData = returnsResponse.data;
 
-    if (!Array.isArray(productData) || !Array.isArray(salesData)) {
-      throw new Error("Invalid sales or inventory response.");
+    if (
+      !Array.isArray(productData) ||
+      !Array.isArray(salesData) ||
+      !Array.isArray(returnsData)
+    ) {
+      throw new Error(
+        "The server returned an unexpected sales, inventory, or returns response."
+      );
     }
 
     setProducts(productData);
@@ -143,47 +219,56 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
         items: Array.isArray(sale.items) ? sale.items : [],
       }))
     );
-  };
+
+    setReturns(flattenReturns(returnsData as SavedReturn[]));
+    setPageError("");
+  }, []);
 
   useEffect(() => {
+    let active = true;
+
     const load = async () => {
       try {
         await loadData();
       } catch (err) {
         console.error("Failed to load return data:", err);
-        setError(
-          "Unable to load sales and inventory. Please refresh and try again."
-        );
+
+        if (active) {
+          setPageError(
+            getApiError(
+              err,
+              "Unable to load return history, sales, and inventory."
+            )
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     void load();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [loadData]);
 
   const selectedSale = sales.find(
     (sale) => String(sale.id) === selectedSaleId
   );
 
-  // The selected ID identifies the sale line.
-  // The sale line's product_id identifies the inventory product.
+  // Backend returns are tracked by product_id, not sale-line id.
   const selectedSaleItem = selectedSale?.items.find(
-    (item) => String(item.id) === selectedProductId
+    (item) => String(getSaleProductId(item) ?? "") === selectedProductId
   );
 
-  // Always compare normalized IDs, not number === string.
-  const getInventoryProduct = (item: SaleItem): Product | undefined => {
-    const productId = item.product_id ?? item.id;
+  const selectedProductIdNumber = selectedSaleItem
+    ? Number(getSaleProductId(selectedSaleItem))
+    : NaN;
 
-    return products.find(
-      (product) => String(product.id) === String(productId)
-    );
-  };
-
-  const selectedInventoryProduct = selectedSaleItem
-    ? getInventoryProduct(selectedSaleItem)
-    : undefined;
+  const selectedInventoryProduct = products.find(
+    (product) => product.id === selectedProductIdNumber
+  );
 
   const filteredSales = useMemo(() => {
     const search = saleSearch.trim().toLowerCase();
@@ -191,7 +276,9 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     if (!search) return [];
 
     return sales.filter((sale) =>
-      `${sale.order_id} ${sale.id} ${sale.date ?? ""}`
+      `${sale.order_id} ${sale.id} ${sale.date ?? ""} ${
+        sale.created_at ?? ""
+      }`
         .toLowerCase()
         .includes(search)
     );
@@ -202,32 +289,49 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     [returns, dateFilter]
   );
 
-  // Track returns against the original sale line, not the inventory product ID.
-  const returnedQuantityForItem = (
-    saleId: string,
-    saleItemId: string | number
+  // Count saved returns against the original product in the sale.
+  const returnedQuantityForProduct = (
+    saleId: string | number,
+    productId: string | number
   ) =>
     returns
       .filter(
         (record) =>
-          record.sale_id === saleId &&
-          record.sale_item_id === String(saleItemId)
+          record.sale_id === String(saleId) &&
+          String(record.product_id) === String(productId)
       )
       .reduce((sum, record) => sum + record.quantity, 0);
+
+  // The backend combines matching product IDs in a return request.
+  // Count all matching sale lines when calculating remaining quantity.
+  const soldQuantityForProduct = (
+    sale: Sale,
+    productId: string | number
+  ) =>
+    sale.items
+      .filter(
+        (item) =>
+          String(getSaleProductId(item) ?? "") === String(productId)
+      )
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   const remainingQuantity =
     selectedSale && selectedSaleItem
       ? Math.max(
           0,
-          Number(selectedSaleItem.quantity) -
-            returnedQuantityForItem(
+          soldQuantityForProduct(
+            selectedSale,
+            selectedProductId
+          ) -
+            returnedQuantityForProduct(
               selectedSale.id,
-              selectedSaleItem.id
+              selectedProductId
             )
         )
       : 0;
 
-  const refundAmount =
+  // Informational estimate only. The backend calculates the saved refund.
+  const refundEstimate =
     selectedSaleItem && Number(quantity) > 0
       ? Number(quantity) * Number(selectedSaleItem.price)
       : 0;
@@ -249,7 +353,6 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     setQuantity("");
     setReason("");
     setCondition("Resellable");
-    setReturnDate(today());
     setError("");
     setShowForm(false);
   };
@@ -269,27 +372,46 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
       return;
     }
 
+    const productId = getSaleProductId(selectedSaleItem);
+
+    if (
+      productId === undefined ||
+      productId === null ||
+      !Number.isInteger(Number(productId)) ||
+      Number(productId) <= 0
+    ) {
+      setError(
+        "This sale item has no valid inventory product ID. Check the original sale data."
+      );
+      return;
+    }
+
+    if (!selectedInventoryProduct) {
+      setError(
+        "This product could not be found in your inventory. No return was saved."
+      );
+      return;
+    }
+
     const returnedQuantity = Number(quantity);
 
-    if (!Number.isInteger(returnedQuantity) || returnedQuantity <= 0) {
+    if (
+      !Number.isInteger(returnedQuantity) ||
+      returnedQuantity <= 0
+    ) {
       setError("Enter a valid whole-number return quantity.");
       return;
     }
 
     if (returnedQuantity > remainingQuantity) {
       setError(
-        `You can return up to ${remainingQuantity} more unit(s) from this sale item.`
+        `You can return up to ${remainingQuantity} more unit(s) of this product.`
       );
       return;
     }
 
     if (!reason.trim()) {
       setError("Select a reason for the return.");
-      return;
-    }
-
-    if (!returnDate) {
-      setError("Select the return date.");
       return;
     }
 
@@ -301,103 +423,66 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
       return;
     }
 
-    const shouldRestock = condition === "Resellable";
-    const inventoryProduct = getInventoryProduct(selectedSaleItem);
-
-    // A resellable item must match inventory before stock can be changed.
-    if (shouldRestock && !inventoryProduct) {
-      console.error("Inventory product match failed:", {
-        saleItem: selectedSaleItem,
-        inventoryProductIds: products.map((product) => product.id),
-      });
-
-      setError(
-        "This sale item could not be matched to inventory. Check the sale item's product_id against the inventory product ID."
-      );
-      return;
-    }
-
-    const previousStock = inventoryProduct?.stock ?? 0;
-
-    const newStock = shouldRestock
-      ? previousStock + returnedQuantity
-      : previousStock;
-
     setSaving(true);
-
-    const loadingToast = toast.loading("Processing return...");
+    const loadingToast = toast.loading("Saving return to database...");
 
     try {
-      // Update stock using the actual inventory product ID.
-      if (shouldRestock && inventoryProduct) {
-        await updateProductApi(inventoryProduct.id, {
-          name: inventoryProduct.name,
-          cost: inventoryProduct.cost,
-          price: inventoryProduct.price,
-          category: inventoryProduct.category,
-          stock: newStock,
-          image: inventoryProduct.image,
-          barcode: inventoryProduct.barcode,
-        });
-      }
-
-      // For a damaged item without an inventory match, keep the sale's
-      // product reference. Never use it to update inventory.
-      const recordProductId =
-        inventoryProduct?.id ??
-        Number(selectedSaleItem.product_id ?? selectedSaleItem.id);
-
-      const record: ReturnRecord = {
-        id: `${Date.now()}-${selectedSale.id}-${selectedSaleItem.id}`,
-        sale_id: String(selectedSale.id),
-        sale_item_id: String(selectedSaleItem.id),
-        order_id: selectedSale.order_id,
-        product_id: recordProductId,
-        product_name: selectedSaleItem.name,
-        quantity: returnedQuantity,
-        unit_price: Number(selectedSaleItem.price),
-        refund_amount: refundAmount,
+      // Do not update inventory here.
+      // FastAPI validates the sale, calculates the refund,
+      // saves the return and updates inventory in one transaction.
+      const response = await createReturnApi({
+        sale_id: Number(selectedSale.id),
         reason: reason.trim(),
-        condition,
-        date: returnDate,
-        previous_stock: previousStock,
-        new_stock: newStock,
-      };
+        items: [
+          {
+            product_id: Number(productId),
+            quantity: returnedQuantity,
+            item_condition: condition,
+          },
+        ],
+      });
 
-      if (shouldRestock) {
-        const productResponse = await getProducts();
+      const savedReturn = response.data?.return as
+        | SavedReturn
+        | undefined;
 
-        if (!Array.isArray(productResponse.data)) {
-          throw new Error("Invalid inventory response after restocking.");
-        }
-
-        setProducts(productResponse.data);
+      if (!savedReturn || savedReturn.id === undefined) {
+        throw new Error(
+          "The server response did not contain the saved return."
+        );
       }
 
-      setReturns((previous) => [record, ...previous]);
-      setDateFilter(returnDate);
-      setExpandedId(record.id);
+      // Reload all persisted records instead of adding a local-only record.
+      await loadData();
+
+      const savedDate = getDateKey(savedReturn.created_at) || today();
+      setDateFilter(savedDate);
+      setExpandedId(
+        `${savedReturn.id}-${Number(productId)}`
+      );
 
       window.dispatchEvent(new Event("inventory-updated"));
 
-      toast.dismiss(loadingToast);
       resetForm();
 
+      toast.dismiss(loadingToast);
       toast.success(
-        shouldRestock
-          ? "Return recorded and inventory restocked."
-          : "Damaged return recorded; inventory was not restocked."
+        `Return saved successfully. Refund recorded: ${money(
+          Number(savedReturn.refund_amount)
+        )}`
       );
     } catch (err) {
       console.error("Return processing failed:", err);
 
       toast.dismiss(loadingToast);
 
-      setError(
-        "Unable to process the return. Check inventory and try again."
+      const message = getApiError(
+        err,
+        "Unable to save the return."
       );
 
-      toast.error("Return failed. Please try again.");
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -406,7 +491,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
   if (loading) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-slate-500">
-        Loading sales and inventory...
+        Loading sales, inventory, and saved returns...
       </div>
     );
   }
@@ -420,8 +505,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
             Return Items
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Link each return to its original sale, calculate the refund,
-            and record the item's condition.
+            Record returns against original sales and review saved return history.
           </p>
         </div>
 
@@ -436,12 +520,34 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
         </button>
       </div>
 
+      {pageError && (
+        <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between">
+          <p>{pageError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              void loadData()
+                .catch((err) => {
+                  setPageError(
+                    getApiError(err, "Unable to reload return data.")
+                  );
+                })
+                .finally(() => setLoading(false));
+            }}
+            className="shrink-0 rounded-lg border border-red-200 px-3 py-2 font-medium hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-950"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* DATE FILTER AND ADD BUTTON */}
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-end sm:justify-between">
         <div className="w-full sm:max-w-xs">
           <label className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
             <CalendarDays size={17} />
-            Filter by return date
+            Filter by recorded date
           </label>
           <input
             type="date"
@@ -463,12 +569,6 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
           Add Return Item
         </button>
       </div>
-
-      {error && !showForm && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          {error}
-        </div>
-      )}
 
       {/* POPUP FORM */}
       {showForm && (
@@ -493,8 +593,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                   Record Returned Item
                 </h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Choose the original sale and return only items sold in
-                  that transaction.
+                  Select the original sale and product.
                 </p>
               </div>
 
@@ -562,12 +661,13 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                           onClick={() => handleSaleChange(sale)}
                           className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0 hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-800"
                         >
-                          <span>
+                          <span className="min-w-0">
                             <span className="block text-sm font-medium text-slate-800 dark:text-white">
                               Order #{sale.order_id}
                             </span>
                             <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                              {sale.date} · {sale.items.length} product line(s)
+                              {sale.date ?? sale.created_at ?? "Date unavailable"} ·{" "}
+                              {sale.items.length} product line(s)
                             </span>
                           </span>
                           <span className="shrink-0 text-sm font-semibold text-blue-600 dark:text-blue-400">
@@ -589,7 +689,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                       Order #{selectedSale.order_id}
                     </p>
                     <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                      Sale date: {selectedSale.date} · Sale total:{" "}
+                      Sale date: {selectedSale.date ?? selectedSale.created_at ?? "Unavailable"} · Sale total:{" "}
                       {money(Number(selectedSale.total))}
                     </p>
                   </div>
@@ -618,33 +718,45 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                       : "Select an original sale first"}
                   </option>
 
-                  {selectedSale?.items.map((item) => {
-                    const alreadyReturned = returnedQuantityForItem(
-                      selectedSale.id,
-                      item.id
-                    );
-                    const remaining = Math.max(
-                      0,
-                      Number(item.quantity) - alreadyReturned
-                    );
+                  {selectedSale &&
+                    Array.from(
+                      new Map(
+                        selectedSale.items.map((item) => [
+                          String(getSaleProductId(item) ?? ""),
+                          item,
+                        ])
+                      ).values()
+                    ).map((item) => {
+                      const productId = getSaleProductId(item);
+                      const alreadyReturned = returnedQuantityForProduct(
+                        selectedSale.id,
+                        String(productId)
+                      );
+                      const sold = soldQuantityForProduct(
+                        selectedSale,
+                        String(productId)
+                      );
+                      const remaining = Math.max(
+                        0,
+                        sold - alreadyReturned
+                      );
 
-                    return (
-                      <option
-                        key={item.id}
-                        value={String(item.id)}
-                        disabled={remaining === 0}
-                      >
-                        {item.name} · Sold: {item.quantity} · Remaining
-                        returnable: {remaining} · {money(Number(item.price))}
-                      </option>
-                    );
-                  })}
+                      return (
+                        <option
+                          key={String(productId)}
+                          value={String(productId)}
+                          disabled={!productId || remaining === 0}
+                        >
+                          {item.name} · Sold: {sold} · Remaining: {remaining}
+                        </option>
+                      );
+                    })}
                 </select>
 
                 {selectedSaleItem && (
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                     Original unit price: {money(Number(selectedSaleItem.price))}{" "}
-                    · Quantity remaining to return: {remainingQuantity}
+                    · Quantity remaining: {remainingQuantity}
                   </p>
                 )}
 
@@ -658,11 +770,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                   >
                     {selectedInventoryProduct
                       ? `Inventory matched: ${selectedInventoryProduct.name} · Current stock: ${selectedInventoryProduct.stock}`
-                      : `Inventory not matched. Sale item ID: ${String(
-                          selectedSaleItem.id
-                        )}; product_id: ${String(
-                          selectedSaleItem.product_id ?? "not provided"
-                        )}`}
+                      : "No matching inventory product was found. This return cannot be submitted."}
                   </p>
                 )}
               </div>
@@ -685,23 +793,10 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                 />
               </div>
 
-              {/* DATE */}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Return Date
-                </label>
-                <input
-                  type="date"
-                  value={returnDate}
-                  onChange={(e) => setReturnDate(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-              </div>
-
               {/* CONDITION */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Restock Condition
+                  Item Condition
                 </label>
                 <select
                   value={condition}
@@ -711,29 +806,29 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 >
                   <option value="Resellable">
-                    Resellable — add back to stock
+                    Resellable — restock item
                   </option>
                   <option value="Damaged">
-                    Damaged — do not add to stock
+                    Damaged — do not restock
                   </option>
                 </select>
               </div>
 
-              {/* REFUND */}
+              {/* REFUND ESTIMATE */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Refund Amount
+                  Estimated Refund
                 </label>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-blue-300">
-                  {money(refundAmount)}
+                  {money(refundEstimate)}
                 </div>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Original sale price × return quantity.
+                  Final refund is calculated and saved by the server, including applicable sale tax.
                 </p>
               </div>
 
               {/* REASON */}
-              <div className="sm:col-span-2">
+              <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Reason for Return
                 </label>
@@ -754,39 +849,25 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                 </select>
               </div>
 
-              {/* SUMMARY */}
-              {selectedSaleItem &&
+              {/* STOCK PREVIEW */}
+              {selectedInventoryProduct &&
                 Number.isInteger(Number(quantity)) &&
                 Number(quantity) > 0 && (
                   <div className="sm:col-span-2 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <span className="text-slate-600 dark:text-slate-300">
-                        Refund to record
-                      </span>
-                      <span className="font-semibold text-slate-900 dark:text-white">
-                        {money(refundAmount)}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-600 dark:text-slate-300">
                         Inventory stock after return
                       </span>
                       <span className="font-semibold text-blue-700 dark:text-blue-300">
                         {condition === "Damaged"
-                          ? "Unchanged (damaged item)"
-                          : selectedInventoryProduct
-                            ? selectedInventoryProduct.stock +
-                              Number(quantity)
-                            : "Not matched"}
+                          ? selectedInventoryProduct.stock
+                          : selectedInventoryProduct.stock + Number(quantity)}
                       </span>
                     </div>
 
-                    {condition === "Damaged" && (
-                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                        Damaged items will not be added to available stock.
-                      </p>
-                    )}
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      This is a preview. The backend validates and updates stock when you submit.
+                    </p>
                   </div>
                 )}
             </div>
@@ -805,27 +886,46 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
               <button
                 type="button"
                 onClick={handleReturn}
-                disabled={saving}
+                disabled={saving || Boolean(pageError)}
                 className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw size={17} />
-                {saving ? "Processing Return..." : "Record Return"}
+                {saving ? "Saving Return..." : "Record Return"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* RETURNED ITEMS */}
+      {/* DATABASE-BACKED RETURN HISTORY */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-200 p-4 sm:p-5 dark:border-slate-700">
-          <h3 className="font-semibold text-slate-900 dark:text-white">
-            Returned Items
-          </h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Return entries are held in this page session and will disappear
-            after a refresh.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Returned Items
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Saved return records loaded from the database.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                void loadData()
+                  .then(() => toast.success("Return history refreshed."))
+                  .catch((err) =>
+                    toast.error(
+                      getApiError(err, "Unable to refresh return history.")
+                    )
+                  );
+              }}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -871,6 +971,13 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                 {expanded && (
                   <div className="grid grid-cols-1 gap-3 bg-slate-50 px-4 py-4 sm:grid-cols-2 sm:px-5 dark:bg-slate-900/40">
                     <div>
+                      <p className="text-xs text-slate-500">Return Record</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
+                        #{item.return_id}
+                      </p>
+                    </div>
+
+                    <div>
                       <p className="text-xs text-slate-500">Original Order</p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         #{item.order_id}
@@ -878,66 +985,64 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Return Date</p>
+                      <p className="text-xs text-slate-500">Recorded Date</p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {item.date}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">
-                        Quantity Returned
-                      </p>
+                      <p className="text-xs text-slate-500">Quantity Returned</p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {item.quantity}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">
-                        Original Unit Price
-                      </p>
+                      <p className="text-xs text-slate-500">Original Unit Price</p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {money(item.unit_price)}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Refund Amount</p>
+                      <p className="text-xs text-slate-500">Item Refund</p>
                       <p className="mt-1 text-sm font-semibold text-blue-600">
                         {money(item.refund_amount)}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">
-                        Restock Condition
-                      </p>
+                      <p className="text-xs text-slate-500">Restock Condition</p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {item.condition}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Previous Stock</p>
-                      <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
-                        {item.previous_stock}
+                      <p className="text-xs text-slate-500">Inventory</p>
+                      <p
+                        className={`mt-1 text-sm font-medium ${
+                          item.restocked
+                            ? "text-emerald-600"
+                            : "text-amber-600"
+                        }`}
+                      >
+                        {item.restocked
+                          ? "Restocked"
+                          : "Not restocked"}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">
-                        Stock After Return
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-emerald-600">
-                        {item.new_stock}
+                      <p className="text-xs text-slate-500">Refund Status</p>
+                      <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
+                        {item.refund_status}
                       </p>
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <p className="text-xs text-slate-500">
-                        Reason for Return
-                      </p>
+                    <div>
+                      <p className="text-xs text-slate-500">Reason</p>
                       <p className="mt-1 text-sm text-slate-800 dark:text-white">
                         {item.reason}
                       </p>

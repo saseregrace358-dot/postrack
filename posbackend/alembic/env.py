@@ -21,6 +21,8 @@ from app.models.payment import Payment
 from app.models.employee import Employee
 from app.models.business_settings import BusinessSettings
 from app.models.notification import Notification
+from app.models.return_item import ReturnItem
+from app.models.return_record import ReturnRecord
 
 target_metadata = Base.metadata
 # this is the Alembic Config object, which provides

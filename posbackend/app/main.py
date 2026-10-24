@@ -34,6 +34,7 @@ from app.routes.subscriptions import router as subscription_router
 from app.services.seed_plans import seed_subscription_plans 
 from app.routes.payment import router as payment_router 
 from app.ai.routes import router as ai_router
+from app.routes.returns import router as returns_router
 
 app.include_router(ai_router)
 app.include_router(auth_router)
@@ -48,6 +49,8 @@ app.include_router(settings_router)
 app.include_router(subscription_router)
 app.include_router(payment_router)
 app.include_router(landing_payment_router)
+
+app.include_router(returns_router)
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
