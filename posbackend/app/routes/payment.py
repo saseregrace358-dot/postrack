@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta
 from uuid import uuid4
 import os
@@ -8,32 +9,54 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-
 from app.models.payment import Payment
 from app.models.business_subscription import BusinessSubscription
 from app.models.subscription_plan import SubscriptionPlan
-from sqlalchemy import func
 from app.services.paystack import (
     initialize_payment,
     verify_payment,
 )
 
-router = APIRouter(
-    prefix="/payments",
-    tags=["Payments"],
-)
+router = APIRouter(prefix="/payments", tags=["Payments"])
 
 
 class PaymentRequest(BaseModel):
     plan: str
 
 
-# Fallback prices (used when initializing payment)
-PLAN_PRICES = {
-    "starter": 5000,
-    "professional": 15000,
-    "enterprise": 30000,
-}
+def get_business_id(user) -> str:
+    business_id = user.get("business_id")
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+    return str(business_id)
+
+
+def get_valid_subscription(db: Session, business_id: str):
+    subscription = (
+        db.query(BusinessSubscription)
+        .filter(
+            BusinessSubscription.business_id == business_id
+        )
+        .first()
+    )
+
+    if not subscription:
+        return None
+
+    now = datetime.utcnow()
+
+    if (
+        subscription.status == "active"
+        and subscription.expires_at is not None
+        and subscription.expires_at <= now
+    ):
+        subscription.status = "expired"
+        db.commit()
+
+    return subscription
 
 
 # ==========================================
@@ -45,163 +68,299 @@ def initialize_subscription_payment(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = get_business_id(user)
+    email = user.get("email")
 
-    print("Received plan:", payload.plan)
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Your account email is missing.",
+        )
 
-    plans = db.query(SubscriptionPlan).all()
-
-    print("Plans in database:")
-    for p in plans:
-        print(p.id, p.name)
+    frontend_url = os.getenv("FRONTEND_URL", "").rstrip("/")
+    if not frontend_url:
+        raise HTTPException(
+            status_code=500,
+            detail="FRONTEND_URL is not configured.",
+        )
 
     plan = (
         db.query(SubscriptionPlan)
         .filter(
-            func.lower(SubscriptionPlan.name)
-            == payload.plan.lower()
+            SubscriptionPlan.name.ilike(payload.plan.strip()),
+            SubscriptionPlan.active.is_(True),
         )
         .first()
     )
 
-    print("Matched plan:", plan)
-
     if not plan:
         raise HTTPException(
             status_code=404,
-            detail="Subscription plan not found",
+            detail="Active subscription plan not found.",
+        )
+
+    if plan.price is None or plan.price <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="This plan cannot be purchased through this checkout.",
         )
 
     reference = str(uuid4())
 
-    print("Current User:", user)
+    # Record the intended transaction BEFORE calling Paystack.
+    payment = Payment(
+        business_id=business_id,
+        plan_id=plan.id,
+        amount=plan.price,
+        provider="Paystack",
+        reference=reference,
+        status="pending",
+    )
 
-    response = initialize_payment(
-    email=user["email"],
-    amount=plan.price,
-    reference=reference,
-    callback_url=f"{os.getenv('FRONTEND_URL')}/payment-success",
-    business_id=str(user["business_id"]),
-    plan=plan.name,
-)
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
 
-    
+    try:
+        response = initialize_payment(
+            email=email,
+            amount=plan.price,
+            reference=reference,
+            callback_url=f"{frontend_url}/payment-success",
+            business_id=business_id,
+            plan=plan.name,
+        )
+    except Exception:
+        db.rollback()
+        payment = (
+            db.query(Payment)
+            .filter(Payment.reference == reference)
+            .first()
+        )
+        if payment and payment.status == "pending":
+            payment.status = "failed"
+            db.commit()
 
-    print("PAYSTACK RESPONSE:")
-    print(response)
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to connect to the payment provider.",
+        )
 
-    if not response.get("status"):
+    if not response or not response.get("status"):
+        payment.status = "failed"
+        db.commit()
         raise HTTPException(
             status_code=400,
-            detail=response.get("message"),
+            detail=(
+                response.get("message", "Payment initialization failed.")
+                if response else "Payment initialization failed."
+            ),
+        )
+
+    authorization_url = (
+        response.get("data", {}).get("authorization_url")
+    )
+
+    if not authorization_url:
+        payment.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Payment checkout URL was not returned.",
         )
 
     return {
-        "authorization_url": response["data"]["authorization_url"],
+        "authorization_url": authorization_url,
         "reference": reference,
-    }    
+    }
+
 
 # ==========================================
-# VERIFY PAYMENT
+# VERIFY PAYMENT AND ACTIVATE SUBSCRIPTION
 # ==========================================
 @router.get("/verify/{reference}")
 def verify_subscription(
     reference: str,
     db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
+    business_id = get_business_id(user)
 
-    response = verify_payment(reference)
-
-    if not response["status"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to verify payment",
-        )
-
-    data = response["data"]
-
-    if data["status"] != "success":
-        raise HTTPException(
-            status_code=400,
-            detail="Payment not successful",
-        )
-
-    existing_payment = (
+    # Only verify a transaction that this application initialized
+    # for the authenticated business.
+    payment = (
         db.query(Payment)
-        .filter(Payment.reference == reference)
+        .filter(
+            Payment.reference == reference,
+            Payment.business_id == business_id,
+        )
         .first()
     )
 
-    if existing_payment:
+    if not payment:
+        raise HTTPException(
+            status_code=404,
+            detail="Payment reference not found for this business.",
+        )
+
+    # Idempotency: do not activate the same payment twice.
+    if payment.status == "success":
+        subscription = (
+            db.query(BusinessSubscription)
+            .filter(
+                BusinessSubscription.business_id == business_id
+            )
+            .first()
+        )
+
         return {
-            "message": "Payment already verified",
-            "subscription": "active",
+            "message": "Payment already verified.",
+            "payment_status": "success",
+            "subscription_status": (
+                subscription.status if subscription else "inactive"
+            ),
+            "plan_id": payment.plan_id,
+            "expires": (
+                subscription.expires_at if subscription else None
+            ),
         }
 
-    metadata = data.get("metadata", {})
+    if payment.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"This payment is {payment.status}.",
+        )
 
-    business_id = metadata.get("business_id")
-    plan_name = metadata.get("plan")
+    try:
+        response = verify_payment(reference)
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to verify payment with the provider.",
+        )
 
+    if not response or not response.get("status"):
+        raise HTTPException(
+            status_code=400,
+            detail="Payment verification failed.",
+        )
+
+    data = response.get("data") or {}
+
+    if data.get("reference") != reference:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment reference does not match.",
+        )
+
+    if data.get("status") != "success":
+        payment.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Payment was not successful.",
+        )
+
+    # Paystack amounts are returned in kobo for NGN.
+    try:
+        paid_amount_kobo = int(data["amount"])
+        expected_amount_kobo = round(float(payment.amount) * 100)
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid amount in payment verification response.",
+        )
+
+    if paid_amount_kobo != expected_amount_kobo:
+        raise HTTPException(
+            status_code=400,
+            detail="The verified payment amount does not match.",
+        )
+
+    if data.get("currency") != "NGN":
+        raise HTTPException(
+            status_code=400,
+            detail="Unexpected payment currency.",
+        )
+
+    # Use our stored payment record, not untrusted metadata,
+    # to identify which plan should be activated.
     plan = (
         db.query(SubscriptionPlan)
-        .filter(SubscriptionPlan.name == plan_name)
+        .filter(SubscriptionPlan.id == payment.plan_id)
         .first()
     )
 
     if not plan:
         raise HTTPException(
             status_code=404,
-            detail="Subscription plan not found",
+            detail="The purchased plan no longer exists.",
         )
 
-    payment = Payment(
-        business_id=business_id,
-        plan_id=plan.id,
-        provider="Paystack",
-        reference=reference,
-        amount=data["amount"] / 100,
-        status="success",
-        paid_at=datetime.utcnow(),
-    )
+    now = datetime.utcnow()
 
-    db.add(payment)
-
-    subscription = (
-        db.query(BusinessSubscription)
-        .filter(
-            BusinessSubscription.business_id == business_id
-        )
-        .first()
-    )
-
-    if subscription:
-
-        subscription.plan_id = plan.id
-        subscription.status = "active"
-        subscription.started_at = datetime.utcnow()
-        subscription.expires_at = (
-            datetime.utcnow()
-            + timedelta(days=plan.duration_days)
+    try:
+        subscription = (
+            db.query(BusinessSubscription)
+            .filter(
+                BusinessSubscription.business_id == business_id
+            )
+            .with_for_update()
+            .first()
         )
 
-    else:
+        # Extend an existing unexpired subscription from its
+        # current expiry; otherwise start from now.
+        if (
+            subscription
+            and subscription.status == "active"
+            and subscription.expires_at
+            and subscription.expires_at > now
+        ):
+            start_at = subscription.expires_at
+        else:
+            start_at = now
 
-        subscription = BusinessSubscription(
-            business_id=business_id,
-            plan_id=plan.id,
-            status="active",
-            started_at=datetime.utcnow(),
-            expires_at=datetime.utcnow()
-            + timedelta(days=plan.duration_days),
+        expires_at = start_at + timedelta(
+            days=plan.duration_days or 30
         )
 
-        db.add(subscription)
+        if subscription:
+            subscription.plan_id = plan.id
+            subscription.status = "active"
+            subscription.started_at = now
+            subscription.expires_at = expires_at
+        else:
+            subscription = BusinessSubscription(
+                business_id=business_id,
+                plan_id=plan.id,
+                status="active",
+                started_at=now,
+                expires_at=expires_at,
+            )
+            db.add(subscription)
 
-    db.commit()
+        payment.status = "success"
+        payment.paid_at = now
+
+        db.commit()
+        db.refresh(subscription)
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Subscription activation failed. "
+                "Please retry verification before paying again."
+            ),
+        )
 
     return {
-        "message": "Subscription activated successfully",
+        "message": "Subscription activated successfully.",
+        "payment_status": payment.status,
         "plan": plan.name,
+        "subscription_status": subscription.status,
         "expires": subscription.expires_at,
     }
 
@@ -214,14 +373,9 @@ def get_subscription(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = get_business_id(user)
 
-    subscription = (
-        db.query(BusinessSubscription)
-        .filter(
-            BusinessSubscription.business_id == user["business_id"]
-        )
-        .first()
-    )
+    subscription = get_valid_subscription(db, business_id)
 
     if not subscription:
         return {
@@ -253,11 +407,12 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = get_business_id(user)
 
     subscription = (
         db.query(BusinessSubscription)
         .filter(
-            BusinessSubscription.business_id == user["business_id"]
+            BusinessSubscription.business_id == business_id
         )
         .first()
     )
@@ -265,13 +420,19 @@ def cancel_subscription(
     if not subscription:
         raise HTTPException(
             status_code=404,
-            detail="Subscription not found",
+            detail="Subscription not found.",
+        )
+
+    if subscription.status != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="There is no active subscription to cancel.",
         )
 
     subscription.status = "cancelled"
-
     db.commit()
 
     return {
-        "message": "Subscription cancelled successfully"
+        "message": "Subscription cancelled successfully.",
+        "status": subscription.status,
     }

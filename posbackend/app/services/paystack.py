@@ -1,12 +1,22 @@
+
 import os
 import requests
 
-PAYSTACK_SECRET = os.getenv("PAYSTACK_SECRET_KEY")
+PAYSTACK_URL = "https://api.paystack.co"
 
-headers = {
-    "Authorization": f"Bearer {PAYSTACK_SECRET}",
-    "Content-Type": "application/json",
-}
+
+def get_headers():
+    secret = os.getenv("PAYSTACK_SECRET_KEY")
+
+    if not secret:
+        raise RuntimeError(
+            "PAYSTACK_SECRET_KEY is not configured."
+        )
+
+    return {
+        "Authorization": f"Bearer {secret}",
+        "Content-Type": "application/json",
+    }
 
 
 def initialize_payment(
@@ -17,11 +27,10 @@ def initialize_payment(
     business_id: str,
     plan: str,
 ):
-    url = "https://api.paystack.co/transaction/initialize"
-
     payload = {
         "email": email,
-        "amount": int(amount * 100),   # Kobo
+        "amount": round(amount * 100),
+        "currency": "NGN",
         "reference": reference,
         "callback_url": callback_url,
         "metadata": {
@@ -30,30 +39,23 @@ def initialize_payment(
         },
     }
 
-    print("EMAIL:", email)
-    print("PLAN:", plan)
-    print("AMOUNT:", amount)
-    print("REFERENCE:", reference)
-    print("CALLBACK:", callback_url)
-
     response = requests.post(
-        url,
+        f"{PAYSTACK_URL}/transaction/initialize",
         json=payload,
-        headers=headers,
+        headers=get_headers(),
+        timeout=20,
     )
 
-    print("PAYSTACK RESPONSE:")
-    print(response.json())
-
+    response.raise_for_status()
     return response.json()
 
 
 def verify_payment(reference: str):
-    url = f"https://api.paystack.co/transaction/verify/{reference}"
-
     response = requests.get(
-        url,
-        headers=headers,
+        f"{PAYSTACK_URL}/transaction/verify/{reference}",
+        headers=get_headers(),
+        timeout=20,
     )
 
+    response.raise_for_status()
     return response.json()

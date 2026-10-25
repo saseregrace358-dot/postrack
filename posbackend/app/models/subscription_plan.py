@@ -26,7 +26,7 @@ class SubscriptionPlan(Base):
     ai_enabled = Column(Boolean, default=False)
 
     reports_enabled = Column(Boolean, default=False)
-    Export_enable = Column(Boolean, default=False)
+    export_enabled = Column("Export_enable", Boolean, default=False)
 
     notifications_enabled = Column(Boolean, default=True)
 

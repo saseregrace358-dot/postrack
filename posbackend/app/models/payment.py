@@ -1,6 +1,14 @@
-from sqlalchemy import Column, Integer, Float, String, DateTime
-from app.database import Base
+
 from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    Float,
+    String,
+    DateTime,
+)
+from app.database import Base
 
 
 class Payment(Base):
@@ -8,18 +16,19 @@ class Payment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    business_id = Column(String, index=True)
+    business_id = Column(String, index=True, nullable=False)
+    plan_id = Column(Integer, nullable=False)
+    amount = Column(Float, nullable=False)
+    provider = Column(String, nullable=False)
 
-    plan_id = Column(Integer)
+    reference = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
 
-    amount = Column(Float)
+    status = Column(String, nullable=False, default="pending")
 
-    provider = Column(String)
-
-    reference = Column(String)
-
-    status = Column(String)
-
-    paid_at = Column(DateTime, default=datetime.utcnow)
-
-    
+    # Only set this after successful payment verification.
+    paid_at = Column(DateTime, nullable=True, default=None)

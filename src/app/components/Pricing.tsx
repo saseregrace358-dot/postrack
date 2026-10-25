@@ -1,26 +1,30 @@
 import { initializePayment } from "../../api/payment";
 
+
 const plans = [
   {
     name: "starter",
     title: "Starter",
     price: 5000,
-    products: 100,
-    employees: 3,
+    products: "500",
+    employees: "3",
+    customers: "1,000",
   },
   {
     name: "professional",
     title: "Professional",
     price: 15000,
-    products: 1000,
-    employees: 10,
+    products: "5,000",
+    employees: "20",
+    customers: "10,000",
   },
   {
     name: "enterprise",
     title: "Enterprise",
     price: 30000,
-    products: "Unlimited",
-    employees: "Unlimited",
+    products: "999,999",
+    employees: "9,999",
+    customers: "999,999",
   },
 ];
 

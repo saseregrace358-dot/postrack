@@ -87,14 +87,22 @@ Export and backup files""",
     }
 ]
     
-    for plan in plans:
+    
+    for plan_data in plans:
         existing = (
             db.query(SubscriptionPlan)
-            .filter(SubscriptionPlan.name == plan["name"])
+            .filter(
+                SubscriptionPlan.name.ilike(
+                    plan_data["name"]
+                )
+            )
             .first()
         )
 
-        if not existing:
-            db.add(SubscriptionPlan(**plan))
+        if existing:
+            for key, value in plan_data.items():
+                setattr(existing, key, value)
+        else:
+            db.add(SubscriptionPlan(**plan_data))
 
     db.commit()

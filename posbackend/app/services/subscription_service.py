@@ -64,7 +64,7 @@ async def check_permission(
     # Feature permissions
     feature_flags = {
         "reports": plan.reports_enabled,
-        "export": plan.Export_enable,
+        "export": plan.export_enabled,
         "ai": plan.ai_enabled,
         "notifications": plan.notifications_enabled,
     }
