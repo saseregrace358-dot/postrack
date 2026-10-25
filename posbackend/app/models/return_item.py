@@ -1,18 +1,34 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    ForeignKey,
+)
 from datetime import datetime
+from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
 class ReturnItem(Base):
     __tablename__ = "return_items"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+        autoincrement=True,
+    )
 
     return_id = Column(
         Integer,
         ForeignKey("return_records.id"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     product_id = Column(Integer, nullable=False, index=True)
@@ -22,7 +38,25 @@ class ReturnItem(Base):
     unit_price = Column(Float, nullable=False)
     refund_amount = Column(Float, nullable=False)
 
-    item_condition = Column(String, nullable=False, default="Resellable")
-    restocked = Column(Boolean, nullable=False, default=False)
+    item_condition = Column(
+        String,
+        nullable=False,
+        default="Resellable",
+    )
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    restocked = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    return_record = relationship(
+        "ReturnRecord",
+        back_populates="items",
+    )
