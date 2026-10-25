@@ -16,10 +16,15 @@ from app.auth.password import (
 )
 from app.auth.jwt import create_access_token
 from app.models.user import User
+from datetime import datetime
+from app.models.business_subscription import BusinessSubscription
+from app.models.subscription_plan import SubscriptionPlan
+
 router = APIRouter(
     prefix="/employees",
     tags=["Employees"],
 )
+
 
 
 # ===========================
@@ -31,12 +36,87 @@ def create_employee(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+
+    # Find this business's subscription.
+    subscription = (
+        db.query(BusinessSubscription)
+        .filter(
+            BusinessSubscription.business_id == business_id
+        )
+        .first()
+    )
+
+    if not subscription or subscription.status != "active":
+        raise HTTPException(
+            status_code=403,
+            detail="An active subscription is required to add employees.",
+        )
+
+    # Check that the subscription has not expired.
+    now = datetime.utcnow()
+
+    if not subscription.expires_at or subscription.expires_at <= now:
+        subscription.status = "expired"
+        db.commit()
+
+        raise HTTPException(
+            status_code=403,
+            detail="Your subscription has expired. Please renew to add employees.",
+        )
+
+    # Load the plan assigned to this subscription.
+    plan = (
+        db.query(SubscriptionPlan)
+        .filter(
+            SubscriptionPlan.id == subscription.plan_id
+        )
+        .first()
+    )
+
+    if not plan:
+        raise HTTPException(
+            status_code=403,
+            detail="Your subscription plan could not be found.",
+        )
+
+    # Count employees belonging to this business only.
+    employee_count = (
+        db.query(Employee)
+        .filter(Employee.business_id == business_id)
+        .count()
+    )
+
+    # A limit of -1 means unlimited.
+    # Otherwise, reject creation when the limit is reached.
+    if plan.max_employees is None:
+        raise HTTPException(
+            status_code=403,
+            detail="The employee limit for your plan is not configured.",
+        )
+
+    if plan.max_employees != -1 and employee_count >= plan.max_employees:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"You have reached your plan's employee limit "
+                f"of {plan.max_employees}."
+            ),
+        )
+
+    # Create the employee only after the checks pass.
     employee = Employee(
         full_name=payload.full_name,
         email=payload.email,
         password=hash_password(payload.password),
         permissions=payload.permissions,
-        business_id=user["business_id"],
+        business_id=business_id,
     )
 
     db.add(employee)

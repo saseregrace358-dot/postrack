@@ -11,6 +11,8 @@ from app.models.sale import Sale
 from app.models.product import Product
 from app.models.return_record import ReturnRecord
 from app.models.return_item import ReturnItem
+from app.models.business_subscription import BusinessSubscription
+from app.models.subscription_plan import SubscriptionPlan
 
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -58,19 +60,60 @@ def get_line_cost(line, product_by_id):
     return as_float(product.cost) if product else 0.0
 
 
+def has_reports_access(db: Session, business_id: str) -> bool:
+    """
+    Advanced charts and insights require an active,
+    unexpired subscription whose plan enables reports.
+
+    Basic dashboard metrics remain available regardless.
+    """
+    subscription = (
+        db.query(BusinessSubscription)
+        .filter(BusinessSubscription.business_id == business_id)
+        .first()
+    )
+
+    if not subscription or subscription.status != "active":
+        return False
+
+    now = datetime.utcnow()
+
+    if not subscription.expires_at or subscription.expires_at <= now:
+        subscription.status = "expired"
+        db.commit()
+        return False
+
+    plan = (
+        db.query(SubscriptionPlan)
+        .filter(SubscriptionPlan.id == subscription.plan_id)
+        .first()
+    )
+
+    return bool(plan and plan.reports_enabled)
+
+
 @router.get("/summary")
 def get_dashboard_summary(
     selected_date: date = Query(default_factory=date.today),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
+
+    if not business_id:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+
+    reports_enabled = has_reports_access(db, business_id)
 
     selected_start = datetime.combine(selected_date, time.min)
     selected_end = selected_start + timedelta(days=1)
 
-    # Load ALL sales for this business.
-    # Total revenue, profit, and order count are cumulative.
+    # Load all sales for the business.
     sales = (
         db.query(Sale)
         .filter(Sale.business_id == business_id)
@@ -78,8 +121,7 @@ def get_dashboard_summary(
         .all()
     )
 
-    # Load ALL returns for this business.
-    # Returns are attributed to the date they were recorded.
+    # Load all returns for the business.
     all_returns = (
         db.query(ReturnRecord)
         .filter(ReturnRecord.business_id == business_id)
@@ -147,15 +189,11 @@ def get_dashboard_summary(
         lambda: {"quantity": 0, "value": 0.0}
     )
 
-
-    # Daily and monthly figures are independent of cumulative profit.
-    daily_gross = defaultdict(float)
+    # Daily/monthly figures support charts when enabled.
     daily_net = defaultdict(float)
-    monthly_gross = defaultdict(float)
     monthly_net = defaultdict(float)
 
-    # Cumulative financial totals.
-    gross_sales = 0.0
+    # Cumulative financial metrics available on all plans.
     net_revenue = 0.0
     total_profit = 0.0
     total_refunds = 0.0
@@ -166,7 +204,7 @@ def get_dashboard_summary(
     order_count = 0
     selected_day_order_count = 0
 
-    # Per-product totals.
+    # Product totals support advanced product insights.
     product_sales = defaultdict(
         lambda: {
             "name": "Unknown product",
@@ -177,7 +215,7 @@ def get_dashboard_summary(
     )
 
     # ---------------------------------------------------------
-    # 1. Calculate cumulative sales and profit from ALL sales.
+    # 1. Calculate sales, profit, and basic metrics.
     # ---------------------------------------------------------
     for sale in sales:
         if not sale.date:
@@ -189,16 +227,12 @@ def get_dashboard_summary(
 
         subtotal = as_float(sale.subtotal)
 
-        gross_sales += subtotal
         net_revenue += subtotal
         order_count += 1
 
-        daily_gross[day_key] += subtotal
         daily_net[day_key] += subtotal
-        monthly_gross[month_key] += subtotal
         monthly_net[month_key] += subtotal
 
-        # Only this count depends on the selected date.
         if selected_start <= sale.date < selected_end:
             selected_day_order_count += 1
 
@@ -237,8 +271,8 @@ def get_dashboard_summary(
             entry["profit"] += line_profit
 
     # ---------------------------------------------------------
-    # 2. Apply ALL valid returns to cumulative financial totals.
-    #    Daily/monthly sales are adjusted on the return date.
+    # 2. Apply valid returns to financial metrics.
+    #    Returns affect daily/monthly figures on their return date.
     # ---------------------------------------------------------
     for record in returns:
         refund_amount = as_float(record.refund_amount)
@@ -283,12 +317,10 @@ def get_dashboard_summary(
                 damaged_entry["quantity"] += quantity
                 damaged_entry["value"] += item_value
 
-            # Sales/revenue exclude tax, so subtract merchandise value.
+            # Sales exclude tax; subtract merchandise value.
             net_revenue -= item_value
 
-            # Each day stands alone. A return on a no-sales day can
-            # produce negative daily net sales; it is not carried into
-            # the next day's daily sales.
+            # Each day's net sales stand alone.
             if return_date:
                 day_key = return_date.isoformat()
                 month_key = return_date.strftime("%Y-%m")
@@ -296,8 +328,7 @@ def get_dashboard_summary(
                 daily_net[day_key] -= item_value
                 monthly_net[month_key] -= item_value
 
-            # Reverse the returned item's original merchandise revenue
-            # from cumulative profit.
+            # Reverse returned merchandise revenue from profit.
             total_profit -= item_value
 
             original_cost = 0.0
@@ -308,12 +339,10 @@ def get_dashboard_summary(
                     0.0,
                 )
 
-            # Resellable stock only recovers its original cost when it
-            # has actually been restocked.
+            # Recover original cost only for restocked resellable goods.
             if condition == "resellable" and bool(item.restocked):
                 total_profit += original_cost * quantity
 
-            # Update product-level metrics.
             product_entry = product_sales.get(key)
 
             if product_entry:
@@ -323,19 +352,56 @@ def get_dashboard_summary(
                 if condition == "resellable" and bool(item.restocked):
                     product_entry["profit"] += original_cost * quantity
 
-        # ---------------------------------------------------------
-    # Peak sales hour for the selected date.
+    # ---------------------------------------------------------
+    # 3. Selected-day metrics available on every plan.
+    # ---------------------------------------------------------
+    selected_day_sales = daily_net.get(
+        selected_date.isoformat(),
+        0.0,
+    )
+
+    average_order_value = (
+        sum(as_float(sale.subtotal) for sale in sales if sale.date)
+        / order_count
+        if order_count
+        else 0.0
+    )
+
+    metrics = {
+        "totalRevenue": round(net_revenue, 2),
+        "daySales": round(selected_day_sales, 2),
+        "totalProfit": round(total_profit, 2),
+        "averageOrderValue": round(average_order_value, 2),
+        "pendingOtherReturns": pending_other_returns,
+        "pendingRefundAmount": round(pending_refund_amount, 2),
+        "damagedReturnedGoods": round(damaged_return_value, 2),
+        "totalRefunds": round(total_refunds, 2),
+        "totalOrders": order_count,
+        "selectedDayOrders": selected_day_order_count,
+    }
+
+    # Keep response fields present for frontend compatibility.
+    # Plans without reports receive no advanced analytics data.
+    if not reports_enabled:
+        return {
+            "selected_date": selected_date.isoformat(),
+            "reports_enabled": False,
+            "metrics": metrics,
+            "weeklyData": [],
+            "monthlyTrend": [],
+            "damagedProducts": [],
+            "topProducts": [],
+            "peakHour": None,
+        }
+
+    # ---------------------------------------------------------
+    # 4. Peak sales hour for the selected date.
     # ---------------------------------------------------------
     hourly_sales = defaultdict(float)
 
     for sale in sales:
-        if not sale.date:
-            continue
-
-        if sale.date.date() != selected_date:
-            continue
-
-        hourly_sales[sale.date.hour] += as_float(sale.subtotal)
+        if sale.date and sale.date.date() == selected_date:
+            hourly_sales[sale.date.hour] += as_float(sale.subtotal)
 
     peak_hour = (
         max(hourly_sales, key=hourly_sales.get)
@@ -359,21 +425,7 @@ def get_dashboard_summary(
         peak_hour_label = f"{start_label} – {end_label}"
 
     # ---------------------------------------------------------
-    # 3. Selected-day metrics.
-    # ---------------------------------------------------------
-    selected_day_sales = daily_net.get(
-        selected_date.isoformat(),
-        0.0,
-    )
-
-    average_order_value = (
-        gross_sales / order_count
-        if order_count
-        else 0.0
-    )
-
-    # ---------------------------------------------------------
-    # 4. Seven-day chart ending on selected_date.
+    # 5. Seven-day chart ending on selected_date.
     # ---------------------------------------------------------
     weekly_data = []
 
@@ -389,7 +441,7 @@ def get_dashboard_summary(
         })
 
     # ---------------------------------------------------------
-    # 5. Six-month chart ending in selected_date's month.
+    # 6. Six-month chart ending in selected_date's month.
     # ---------------------------------------------------------
     monthly_trend = []
     month_cursor = selected_date.replace(day=1)
@@ -410,7 +462,7 @@ def get_dashboard_summary(
         })
 
     # ---------------------------------------------------------
-    # 6. Top products, adjusted for returns.
+    # 7. Top products, adjusted for returns.
     # ---------------------------------------------------------
     top_products = []
 
@@ -434,7 +486,7 @@ def get_dashboard_summary(
     )
 
     # ---------------------------------------------------------
-    # 7. Damaged returned products.
+    # 8. Damaged returned products.
     # ---------------------------------------------------------
     damaged_products = []
 
@@ -456,22 +508,12 @@ def get_dashboard_summary(
     )
 
     # ---------------------------------------------------------
-    # 8. Response: preserve the existing frontend field names.
+    # 9. Response with advanced analytics enabled.
     # ---------------------------------------------------------
     return {
         "selected_date": selected_date.isoformat(),
-        "metrics": {
-            "totalRevenue": round(net_revenue, 2),
-            "daySales": round(selected_day_sales, 2),
-            "totalProfit": round(total_profit, 2),
-            "averageOrderValue": round(average_order_value, 2),
-            "pendingOtherReturns": pending_other_returns,
-            "pendingRefundAmount": round(pending_refund_amount, 2),
-            "damagedReturnedGoods": round(damaged_return_value, 2),
-            "totalRefunds": round(total_refunds, 2),
-            "totalOrders": order_count,
-            "selectedDayOrders": selected_day_order_count,
-        },
+        "reports_enabled": True,
+        "metrics": metrics,
         "weeklyData": weekly_data,
         "monthlyTrend": monthly_trend,
         "damagedProducts": damaged_products[:6],
