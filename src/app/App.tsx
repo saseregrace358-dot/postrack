@@ -9,6 +9,7 @@ import { AuthContext } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { Toaster } from "react-hot-toast";
 import { InstallPrompt } from "./components/InstallPrompt";
+import PaymentSuccess from "./components/PaymentSuccess";
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -77,6 +78,10 @@ export default function App() {
   }
 
   if (!token) {
+  const isPaymentSuccess =
+    window.location.pathname === "/payment-success";
+
+  if (!isPaymentSuccess) {
     return (
       <>
         <InstallPrompt />
@@ -85,7 +90,7 @@ export default function App() {
       </>
     );
   }
-
+}
   return (
     <AuthContext.Provider value={{ handleLogout }}>
       <ThemeProvider>

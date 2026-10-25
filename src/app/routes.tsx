@@ -1,4 +1,5 @@
-import { createBrowserRouter } from "react-router";
+
+import { createBrowserRouter } from "react-router-dom";
 import { POS } from "./components/POS";
 import { SalesHistory } from "./components/SalesHistory";
 import { Dashboard } from "./components/Dashboard";
@@ -7,8 +8,13 @@ import { Settings } from "./components/Settings";
 import { Layout } from "./components/Layout";
 import { Inventory } from "./components/Inventorys";
 import Pricing from "./components/Pricing";
+import PaymentSuccess from "./components/PaymentSuccess";
 
 export const router = createBrowserRouter([
+  {
+    path: "/payment-success",
+    Component: PaymentSuccess,
+  },
   {
     path: "/",
     Component: Layout,
@@ -19,10 +25,7 @@ export const router = createBrowserRouter([
       { path: "reports", Component: Reports },
       { path: "settings", Component: Settings },
       { path: "inventory", Component: Inventory },
-      {
-    path: "/pricing",
-    element: <Pricing />,
-},
+      { path: "pricing", Component: Pricing },
     ],
   },
 ]);
