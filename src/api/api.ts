@@ -1,3 +1,4 @@
+
 import axios from "axios";
 
 const api = axios.create({
@@ -7,9 +8,11 @@ const api = axios.create({
   },
 });
 
-// Automatically attach the JWT
+// Read the token from either storage.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token =
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token");
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -18,17 +21,37 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Automatically handle expired tokens
+// Handle expired or invalid sessions globally.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Clear auth data
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+    const status = error.response?.status;
+    const requestUrl = String(error.config?.url ?? "");
 
-      // Redirect to login
-      window.location.href = "/";
+    // Do not log out because a login or registration request failed.
+    const isAuthRequest =
+      /\/(login|register|forgot-password|reset-password)(\/|$|\?)/i.test(
+        requestUrl
+      );
+
+    if (status === 401 && !isAuthRequest) {
+      // Prevent repeated logout handling from concurrent API requests.
+      if (localStorage.getItem("token") || sessionStorage.getItem("token")) {
+        localStorage.removeItem("token");
+        sessionStorage.removeItem("token");
+
+        localStorage.removeItem("user");
+        sessionStorage.removeItem("user");
+
+        localStorage.removeItem("role");
+        sessionStorage.removeItem("role");
+
+        localStorage.removeItem("permissions");
+        sessionStorage.removeItem("permissions");
+
+        // Notify App.tsx to update its authentication state.
+        window.dispatchEvent(new Event("session-expired"));
+      }
     }
 
     return Promise.reject(error);
