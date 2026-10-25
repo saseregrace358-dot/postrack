@@ -75,21 +75,28 @@ type ReturnItemsProps = {
 };
 
 type SavedReturn = {
-  id: number | string;
-  sale_id: number | string;
+  id: string | number;
+  return_id?: string | number;
+  sale_id: string | number;
   order_id: string;
-  reason: string;
+  business_id?: string;
+  reason?: string;
+  return_reason?: string;
   refund_amount: number;
-  refund_status: string;
-  created_at: string;
-  items: {
-    id?: number | string;
+  refund_status?: string;
+  created_at?: string;
+  returned_at?: string;
+  items?: {
+    id?: string | number;
     product_id: number;
-    product_name: string;
+    product_name?: string;
+    name?: string;
     quantity: number;
-    unit_price: number;
+    unit_price?: number;
+    price?: number;
     refund_amount: number;
-    item_condition: RestockCondition;
+    item_condition?: RestockCondition;
+    condition?: RestockCondition;
     restocked: boolean;
   }[];
 };
@@ -148,26 +155,26 @@ const getApiError = (err: unknown, fallback: string) => {
 const getSaleProductId = (item: SaleItem) =>
   item.product_id ?? item.id;
 
-const flattenReturns = (records: SavedReturn[]): ReturnRecord[] =>
-  records.flatMap((record) =>
-    (record.items || []).map((item) => ({
-      id: `${record.id}-${item.product_id}`,
-      return_id: String(record.id),
+function flattenReturns(returns: SavedReturn[]): ReturnRecord[] {
+  return returns.flatMap((record) =>
+    (record.items ?? []).map((item) => ({
+      id: String(item.id ?? `${record.id}-${item.product_id}`),
+      return_id: String(record.return_id ?? record.id),
       sale_id: String(record.sale_id),
       order_id: record.order_id,
-      product_id: Number(item.product_id),
-      product_name: item.product_name,
-      quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
-      refund_amount: Number(item.refund_amount),
-      reason: record.reason,
-      condition: item.item_condition,
-      date: getDateKey(record.created_at),
-      restocked: Boolean(item.restocked),
-      refund_status: record.refund_status,
-    }))
+      product_id: item.product_id,
+      product_name: item.product_name ?? item.name ?? "Unknown product",
+      quantity: item.quantity,
+      unit_price: item.unit_price ?? item.price ?? 0,
+      refund_amount: item.refund_amount ?? 0,
+      reason: record.reason ?? record.return_reason ?? "",
+      condition: item.item_condition ?? item.condition ?? "Resellable",
+      date: record.created_at ?? record.returned_at ?? "",
+      restocked: item.restocked ?? false,
+      refund_status: record.refund_status ?? "PENDING",
+     })),
   );
-
+}
 export default function ReturnItems({ onBack }: ReturnItemsProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -179,8 +186,17 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
 
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState(today());
+  const [dateFilter, setDateFilter] = useState("");
 
+const filteredReturns = useMemo(
+  () =>
+    returns.filter(
+      (record) =>
+        !dateFilter ||
+        getDateKey(record.date) === dateFilter
+    ),
+  [returns, dateFilter]
+);
   const [refundStatus, setRefundStatus] =
     useState<RefundStatus>("PENDING");
   const [updatingReturnId, setUpdatingReturnId] =
@@ -292,11 +308,7 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
     );
   }, [sales, saleSearch]);
 
-  const filteredReturns = useMemo(
-    () => returns.filter((record) => record.date === dateFilter),
-    [returns, dateFilter]
-  );
-
+ 
   // Count saved returns against the original product in the sale.
   const returnedQuantityForProduct = (
     saleId: string | number,

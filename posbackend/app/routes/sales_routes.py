@@ -85,10 +85,10 @@ async def create_sale(
         sale_items.append({
             "product_id": product.id,
             "name": product.name,
-            "price": item.price,
-            "quantity": item.quantity
+            "price": float(item.price),
+            "cost": float(product.cost),
+            "quantity": item.quantity,
         })
-
         if product.stock <= 4:
 
             notification = Notification(
