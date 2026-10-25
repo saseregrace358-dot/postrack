@@ -47,7 +47,10 @@ def sale_lines(items):
 
 
 def get_line_cost(line, product_by_id):
-    """Use the saved cost snapshot; estimate only for legacy sales."""
+    """
+    Prefer the cost saved with the original sale.
+    Fall back to the current product cost for legacy sales.
+    """
     if line.get("cost") is not None:
         return as_float(line["cost"])
 
@@ -66,29 +69,25 @@ def get_dashboard_summary(
     selected_start = datetime.combine(selected_date, time.min)
     selected_end = selected_start + timedelta(days=1)
 
-    # Include only sales recorded before the end of the selected date.
+    # Load ALL sales for this business.
+    # Total revenue, profit, and order count are cumulative.
     sales = (
         db.query(Sale)
-        .filter(
-            Sale.business_id == business_id,
-            Sale.date < selected_end,
-        )
+        .filter(Sale.business_id == business_id)
         .order_by(Sale.date.asc())
         .all()
     )
 
-    # Returns are reported on the date they were recorded, not the
-    # original sale date. Exclude records explicitly rejected.
+    # Load ALL returns for this business.
+    # Returns are attributed to the date they were recorded.
     all_returns = (
         db.query(ReturnRecord)
-        .filter(
-            ReturnRecord.business_id == business_id,
-            ReturnRecord.created_at < selected_end,
-        )
+        .filter(ReturnRecord.business_id == business_id)
         .order_by(ReturnRecord.created_at.asc())
         .all()
     )
 
+    # Rejected returns must not affect financial metrics.
     returns = [
         record
         for record in all_returns
@@ -105,6 +104,7 @@ def get_dashboard_summary(
         product_key(product.id): product
         for product in products
     }
+
     sale_by_id = {sale.id: sale for sale in sales}
 
     return_ids = [record.id for record in returns]
@@ -118,10 +118,11 @@ def get_dashboard_summary(
         )
 
     items_by_return = defaultdict(list)
+
     for item in return_items:
         items_by_return[item.return_id].append(item)
 
-    # Build the original cost lookup from each sale's saved item snapshot.
+    # Preserve original item costs from each sale.
     original_cost_by_sale_product = {}
 
     for sale in sales:
@@ -134,26 +135,25 @@ def get_dashboard_summary(
                 product_key(line.get("product_id")),
             )
 
-            # Keep the first matching saved cost for this sale/product.
             if key not in original_cost_by_sale_product:
                 original_cost_by_sale_product[key] = get_line_cost(
-                    line, product_by_id
+                    line,
+                    product_by_id,
                 )
 
-    # Return-related accumulators.
+    # Return accumulators.
     returned_quantity_by_product = defaultdict(int)
     damaged_by_product = defaultdict(
         lambda: {"quantity": 0, "value": 0.0}
     )
 
-    # Daily and monthly sales are net of merchandise value returned
-    # on that same day/month. Product sales exclude sales tax.
+    # Daily and monthly figures are independent of cumulative profit.
     daily_gross = defaultdict(float)
     daily_net = defaultdict(float)
     monthly_gross = defaultdict(float)
     monthly_net = defaultdict(float)
 
-    # Financial totals through the selected date.
+    # Cumulative financial totals.
     gross_sales = 0.0
     net_revenue = 0.0
     total_profit = 0.0
@@ -161,10 +161,11 @@ def get_dashboard_summary(
     pending_refund_amount = 0.0
     pending_other_returns = 0
     damaged_return_value = 0.0
+
     order_count = 0
     selected_day_order_count = 0
 
-    # Per-product sales accumulators.
+    # Per-product totals.
     product_sales = defaultdict(
         lambda: {
             "name": "Unknown product",
@@ -174,7 +175,9 @@ def get_dashboard_summary(
         }
     )
 
-    # First calculate sales and profit from the sale records.
+    # ---------------------------------------------------------
+    # 1. Calculate cumulative sales and profit from ALL sales.
+    # ---------------------------------------------------------
     for sale in sales:
         if not sale.date:
             continue
@@ -184,6 +187,7 @@ def get_dashboard_summary(
         month_key = sale_day.strftime("%Y-%m")
 
         subtotal = as_float(sale.subtotal)
+
         gross_sales += subtotal
         net_revenue += subtotal
         order_count += 1
@@ -193,6 +197,7 @@ def get_dashboard_summary(
         monthly_gross[month_key] += subtotal
         monthly_net[month_key] += subtotal
 
+        # Only this count depends on the selected date.
         if selected_start <= sale.date < selected_end:
             selected_day_order_count += 1
 
@@ -202,6 +207,7 @@ def get_dashboard_summary(
 
             product_id = line.get("product_id")
             key = product_key(product_id)
+
             quantity = as_int(line.get("quantity"))
             unit_price = as_float(line.get("price"))
 
@@ -209,6 +215,7 @@ def get_dashboard_summary(
                 continue
 
             product = product_by_id.get(key)
+
             name = (
                 line.get("name")
                 or (product.name if product else None)
@@ -216,6 +223,7 @@ def get_dashboard_summary(
             )
 
             unit_cost = get_line_cost(line, product_by_id)
+
             line_revenue = unit_price * quantity
             line_profit = (unit_price - unit_cost) * quantity
 
@@ -227,9 +235,10 @@ def get_dashboard_summary(
             entry["revenue"] += line_revenue
             entry["profit"] += line_profit
 
-    # Apply each return once. Merchandise value is deducted from sales
-    # on the return date. Actual refund totals are tracked separately
-    # using ReturnRecord.refund_amount, which may include tax.
+    # ---------------------------------------------------------
+    # 2. Apply ALL valid returns to cumulative financial totals.
+    #    Daily/monthly sales are adjusted on the return date.
+    # ---------------------------------------------------------
     for record in returns:
         refund_amount = as_float(record.refund_amount)
         total_refunds += refund_amount
@@ -239,6 +248,7 @@ def get_dashboard_summary(
 
         if status == "PENDING":
             pending_refund_amount += refund_amount
+
             if reason != "damaged":
                 pending_other_returns += 1
 
@@ -248,13 +258,17 @@ def get_dashboard_summary(
             else None
         )
 
+        original_sale = sale_by_id.get(record.sale_id)
+
         for item in items_by_return.get(record.id, []):
             quantity = as_int(item.quantity)
+
             if quantity <= 0:
                 continue
 
             key = product_key(item.product_id)
             item_value = as_float(item.unit_price) * quantity
+
             condition = (
                 (item.item_condition or "").strip().lower()
             )
@@ -263,14 +277,17 @@ def get_dashboard_summary(
 
             if condition == "damaged":
                 damaged_return_value += item_value
+
                 damaged_entry = damaged_by_product[key]
                 damaged_entry["quantity"] += quantity
                 damaged_entry["value"] += item_value
 
-            # Revenue excludes sales tax, so deduct the returned
-            # merchandise value, not the tax-inclusive refund amount.
+            # Sales/revenue exclude tax, so subtract merchandise value.
             net_revenue -= item_value
 
+            # Each day stands alone. A return on a no-sales day can
+            # produce negative daily net sales; it is not carried into
+            # the next day's daily sales.
             if return_date:
                 day_key = return_date.isoformat()
                 month_key = return_date.strftime("%Y-%m")
@@ -278,48 +295,52 @@ def get_dashboard_summary(
                 daily_net[day_key] -= item_value
                 monthly_net[month_key] -= item_value
 
-            # Reverse the sale's merchandise profit for returned items.
+            # Reverse the returned item's original merchandise revenue
+            # from cumulative profit.
             total_profit -= item_value
 
-            # If the item is resellable and restocked, reverse its
-            # original cost of goods sold. Damaged goods get no recovery.
-            if condition == "resellable":
-                original_sale = sale_by_id.get(record.sale_id)
+            original_cost = 0.0
 
-                original_cost = 0.0
-                if original_sale:
-                    original_cost = original_cost_by_sale_product.get(
-                        (original_sale.id, key), 0.0
-                    )
+            if original_sale:
+                original_cost = original_cost_by_sale_product.get(
+                    (original_sale.id, key),
+                    0.0,
+                )
 
+            # Resellable stock only recovers its original cost when it
+            # has actually been restocked.
+            if condition == "resellable" and bool(item.restocked):
                 total_profit += original_cost * quantity
 
-            # Adjust product-level revenue/profit for this return.
+            # Update product-level metrics.
             product_entry = product_sales.get(key)
+
             if product_entry:
                 product_entry["revenue"] -= item_value
                 product_entry["profit"] -= item_value
 
-                if condition == "resellable":
-                    original_sale = sale_by_id.get(record.sale_id)
-                    original_cost = (
-                        original_cost_by_sale_product.get(
-                            (original_sale.id, key), 0.0
-                        )
-                        if original_sale
-                        else 0.0
-                    )
+                if condition == "resellable" and bool(item.restocked):
                     product_entry["profit"] += original_cost * quantity
 
-    # Net sales for the selected date include refunds recorded that day.
-    selected_day_sales = daily_net.get(selected_date.isoformat(), 0.0)
-
-    average_order_value = (
-        gross_sales / order_count if order_count else 0.0
+    # ---------------------------------------------------------
+    # 3. Selected-day metrics.
+    # ---------------------------------------------------------
+    selected_day_sales = daily_net.get(
+        selected_date.isoformat(),
+        0.0,
     )
 
-    # Seven calendar days ending on the selected date.
+    average_order_value = (
+        gross_sales / order_count
+        if order_count
+        else 0.0
+    )
+
+    # ---------------------------------------------------------
+    # 4. Seven-day chart ending on selected_date.
+    # ---------------------------------------------------------
     weekly_data = []
+
     for offset in range(6, -1, -1):
         chart_date = selected_date - timedelta(days=offset)
         key = chart_date.isoformat()
@@ -331,7 +352,9 @@ def get_dashboard_summary(
             "revenue": round(daily_net[key], 2),
         })
 
-    # Six months ending with the selected date's month.
+    # ---------------------------------------------------------
+    # 5. Six-month chart ending in selected_date's month.
+    # ---------------------------------------------------------
     monthly_trend = []
     month_cursor = selected_date.replace(day=1)
 
@@ -339,6 +362,7 @@ def get_dashboard_summary(
         month_index = month_cursor.month - 1 - offset
         year = month_cursor.year + (month_index // 12)
         month = (month_index % 12) + 1
+
         month_date = date(year, month, 1)
         key = month_date.strftime("%Y-%m")
 
@@ -349,7 +373,11 @@ def get_dashboard_summary(
             "revenue": round(monthly_net[key], 2),
         })
 
+    # ---------------------------------------------------------
+    # 6. Top products, adjusted for returns.
+    # ---------------------------------------------------------
     top_products = []
+
     for key, entry in product_sales.items():
         sold_quantity = entry["quantity"]
         returned_quantity = returned_quantity_by_product.get(key, 0)
@@ -369,7 +397,11 @@ def get_dashboard_summary(
         reverse=True,
     )
 
+    # ---------------------------------------------------------
+    # 7. Damaged returned products.
+    # ---------------------------------------------------------
     damaged_products = []
+
     for key, entry in damaged_by_product.items():
         product = product_by_id.get(key)
 
@@ -387,6 +419,9 @@ def get_dashboard_summary(
         reverse=True,
     )
 
+    # ---------------------------------------------------------
+    # 8. Response: preserve the existing frontend field names.
+    # ---------------------------------------------------------
     return {
         "selected_date": selected_date.isoformat(),
         "metrics": {
