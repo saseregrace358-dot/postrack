@@ -38,26 +38,21 @@ def as_int(value):
         return 0
 
 
-def parse_datetime(value):
-    if not value:
-        return None
-
-    if isinstance(value, datetime):
-        return value
-
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
-                tzinfo=None
-            )
-        except ValueError:
-            return None
-
-    return None
+def product_key(product_id):
+    return str(product_id) if product_id is not None else None
 
 
-def parse_sale_items(items):
+def sale_lines(items):
     return items if isinstance(items, list) else []
+
+
+def get_line_cost(line, product_by_id):
+    """Use the saved cost snapshot; estimate only for legacy sales."""
+    if line.get("cost") is not None:
+        return as_float(line["cost"])
+
+    product = product_by_id.get(product_key(line.get("product_id")))
+    return as_float(product.cost) if product else 0.0
 
 
 @router.get("/summary")
@@ -68,13 +63,10 @@ def get_dashboard_summary(
 ):
     business_id = user["business_id"]
 
-    # Use an exclusive end boundary so all times on the selected date
-    # are included. Database datetimes are treated as UTC-naive here.
     selected_start = datetime.combine(selected_date, time.min)
     selected_end = selected_start + timedelta(days=1)
 
-    # Only load records belonging to this business and recorded
-    # on or before the selected date.
+    # Include only sales recorded before the end of the selected date.
     sales = (
         db.query(Sale)
         .filter(
@@ -85,7 +77,9 @@ def get_dashboard_summary(
         .all()
     )
 
-    returns = (
+    # Returns are reported on the date they were recorded, not the
+    # original sale date. Exclude records explicitly rejected.
+    all_returns = (
         db.query(ReturnRecord)
         .filter(
             ReturnRecord.business_id == business_id,
@@ -95,19 +89,27 @@ def get_dashboard_summary(
         .all()
     )
 
+    returns = [
+        record
+        for record in all_returns
+        if (record.refund_status or "").strip().upper() != "REJECTED"
+    ]
+
     products = (
         db.query(Product)
         .filter(Product.business_id == business_id)
         .all()
     )
 
-    product_by_id = {product.id: product for product in products}
+    product_by_id = {
+        product_key(product.id): product
+        for product in products
+    }
+    sale_by_id = {sale.id: sale for sale in sales}
 
-    # Fetch all return items in one query rather than querying once
-    # for every return record.
     return_ids = [record.id for record in returns]
-
     return_items = []
+
     if return_ids:
         return_items = (
             db.query(ReturnItem)
@@ -119,79 +121,72 @@ def get_dashboard_summary(
     for item in return_items:
         items_by_return[item.return_id].append(item)
 
-    # Build a lookup of returned quantities by product.
+    # Build the original cost lookup from each sale's saved item snapshot.
+    original_cost_by_sale_product = {}
+
+    for sale in sales:
+        for line in sale_lines(sale.items):
+            if not isinstance(line, dict):
+                continue
+
+            key = (
+                sale.id,
+                product_key(line.get("product_id")),
+            )
+
+            # Keep the first matching saved cost for this sale/product.
+            if key not in original_cost_by_sale_product:
+                original_cost_by_sale_product[key] = get_line_cost(
+                    line, product_by_id
+                )
+
+    # Return-related accumulators.
     returned_quantity_by_product = defaultdict(int)
     damaged_by_product = defaultdict(
         lambda: {"quantity": 0, "value": 0.0}
     )
 
-    total_refunds = 0.0
-    pending_refund_amount = 0.0
-    pending_other_returns = 0
-    damaged_return_value = 0.0
-
-    for record in returns:
-        refund_amount = as_float(record.refund_amount)
-        total_refunds += refund_amount
-
-        if (record.refund_status or "").upper() == "PENDING":
-            pending_refund_amount += refund_amount
-
-            reason = (record.reason or "").strip().lower()
-            if reason != "damaged":
-                pending_other_returns += 1
-
-        for item in items_by_return.get(record.id, []):
-            quantity = as_int(item.quantity)
-            product_id = item.product_id
-
-            returned_quantity_by_product[product_id] += quantity
-
-            condition = (item.item_condition or "").strip().lower()
-            item_value = as_float(item.unit_price) * quantity
-
-            if condition == "damaged":
-                damaged_return_value += item_value
-
-                entry = damaged_by_product[product_id]
-                entry["quantity"] += quantity
-                entry["value"] += item_value
-
-    # Metrics and chart accumulators.
-    gross_sales_subtotal = 0.0
-    net_revenue = 0.0
-    total_profit = 0.0
-    selected_day_sales = 0.0
-    selected_day_order_count = 0
-    order_count = 0
-
+    # Daily and monthly sales are net of merchandise value returned
+    # on that same day/month. Product sales exclude sales tax.
     daily_gross = defaultdict(float)
     daily_net = defaultdict(float)
     monthly_gross = defaultdict(float)
     monthly_net = defaultdict(float)
 
+    # Financial totals through the selected date.
+    gross_sales = 0.0
+    net_revenue = 0.0
+    total_profit = 0.0
+    total_refunds = 0.0
+    pending_refund_amount = 0.0
+    pending_other_returns = 0
+    damaged_return_value = 0.0
+    order_count = 0
+    selected_day_order_count = 0
+
+    # Per-product sales accumulators.
     product_sales = defaultdict(
-        lambda: {"name": "Unknown product", "quantity": 0, "revenue": 0.0}
+        lambda: {
+            "name": "Unknown product",
+            "quantity": 0,
+            "revenue": 0.0,
+            "profit": 0.0,
+        }
     )
 
-    # Profit uses saved cost snapshots where available. Older sales
-    # fall back to the current inventory cost.
+    # First calculate sales and profit from the sale records.
     for sale in sales:
-        sale_date = sale.date.date() if sale.date else None
-        if not sale_date:
+        if not sale.date:
             continue
 
-        subtotal = as_float(sale.subtotal)
-        tax = as_float(sale.tax)
-        sale_total = as_float(sale.total)
+        sale_day = sale.date.date()
+        day_key = sale_day.isoformat()
+        month_key = sale_day.strftime("%Y-%m")
 
-        # Revenue excludes sales tax. Tax collected is not business revenue.
-        gross_sales_subtotal += subtotal
+        subtotal = as_float(sale.subtotal)
+        gross_sales += subtotal
         net_revenue += subtotal
         order_count += 1
-
-        day_key = sale_date.isoformat()
-        month_key = sale_date.strftime("%Y-%m")
 
         daily_gross[day_key] += subtotal
         daily_net[day_key] += subtotal
@@ -199,93 +194,128 @@ def get_dashboard_summary(
         monthly_net[month_key] += subtotal
 
         if selected_start <= sale.date < selected_end:
-            selected_day_sales += subtotal
             selected_day_order_count += 1
 
-        for line in parse_sale_items(sale.items):
+        for line in sale_lines(sale.items):
             if not isinstance(line, dict):
                 continue
 
             product_id = line.get("product_id")
+            key = product_key(product_id)
             quantity = as_int(line.get("quantity"))
             unit_price = as_float(line.get("price"))
 
             if quantity <= 0:
                 continue
 
-            product = product_by_id.get(product_id)
-
-            # New sale records will contain the cost snapshot.
-            # Legacy records use current inventory cost as an estimate.
-            if line.get("cost") is not None:
-                unit_cost = as_float(line.get("cost"))
-            else:
-                unit_cost = as_float(product.cost) if product else 0.0
-
-            line_revenue = unit_price * quantity
-            total_profit += line_revenue - (unit_cost * quantity)
-
+            product = product_by_id.get(key)
             name = (
                 line.get("name")
                 or (product.name if product else None)
                 or "Unknown product"
             )
 
-            product_sales[product_id]["name"] = name
-            product_sales[product_id]["quantity"] += quantity
-            product_sales[product_id]["revenue"] += line_revenue
+            unit_cost = get_line_cost(line, product_by_id)
+            line_revenue = unit_price * quantity
+            line_profit = (unit_price - unit_cost) * quantity
 
-    # Deduct the returned merchandise value from revenue. The return
-    # item unit price excludes the allocated sales tax.
+            total_profit += line_profit
+
+            entry = product_sales[key]
+            entry["name"] = name
+            entry["quantity"] += quantity
+            entry["revenue"] += line_revenue
+            entry["profit"] += line_profit
+
+    # Apply each return once. Merchandise value is deducted from sales
+    # on the return date. Actual refund totals are tracked separately
+    # using ReturnRecord.refund_amount, which may include tax.
     for record in returns:
-        return_date = record.created_at.date() if record.created_at else None
-        if not return_date:
-            continue
+        refund_amount = as_float(record.refund_amount)
+        total_refunds += refund_amount
+
+        status = (record.refund_status or "").strip().upper()
+        reason = (record.reason or "").strip().lower()
+
+        if status == "PENDING":
+            pending_refund_amount += refund_amount
+            if reason != "damaged":
+                pending_other_returns += 1
+
+        return_date = (
+            record.created_at.date()
+            if record.created_at
+            else None
+        )
 
         for item in items_by_return.get(record.id, []):
             quantity = as_int(item.quantity)
-            item_value = as_float(item.unit_price) * quantity
+            if quantity <= 0:
+                continue
 
+            key = product_key(item.product_id)
+            item_value = as_float(item.unit_price) * quantity
+            condition = (
+                (item.item_condition or "").strip().lower()
+            )
+
+            returned_quantity_by_product[key] += quantity
+
+            if condition == "damaged":
+                damaged_return_value += item_value
+                damaged_entry = damaged_by_product[key]
+                damaged_entry["quantity"] += quantity
+                damaged_entry["value"] += item_value
+
+            # Revenue excludes sales tax, so deduct the returned
+            # merchandise value, not the tax-inclusive refund amount.
             net_revenue -= item_value
+
+            if return_date:
+                day_key = return_date.isoformat()
+                month_key = return_date.strftime("%Y-%m")
+
+                daily_net[day_key] -= item_value
+                monthly_net[month_key] -= item_value
+
+            # Reverse the sale's merchandise profit for returned items.
             total_profit -= item_value
 
-            day_key = return_date.isoformat()
-            month_key = return_date.strftime("%Y-%m")
-
-            daily_net[day_key] -= item_value
-            monthly_net[month_key] -= item_value
-
-            # Resellable returned goods go back into stock, so reverse
-            # their original cost of goods sold. Damaged items do not.
-            if (item.item_condition or "").strip().lower() == "resellable":
-                product = product_by_id.get(item.product_id)
-
-                original_sale = next(
-                    (s for s in sales if s.id == record.sale_id),
-                    None,
-                )
+            # If the item is resellable and restocked, reverse its
+            # original cost of goods sold. Damaged goods get no recovery.
+            if condition == "resellable":
+                original_sale = sale_by_id.get(record.sale_id)
 
                 original_cost = 0.0
                 if original_sale:
-                    for line in parse_sale_items(original_sale.items):
-                        if str(line.get("product_id")) == str(item.product_id):
-                            original_cost = as_float(
-                                line.get("cost")
-                                if line.get("cost") is not None
-                                else (product.cost if product else 0)
-                            )
-                            break
+                    original_cost = original_cost_by_sale_product.get(
+                        (original_sale.id, key), 0.0
+                    )
 
                 total_profit += original_cost * quantity
 
-    # Average order value uses net merchandise revenue and sales
-    # through the selected date, excluding sales tax.
-    selected_day_sales = daily_net.get(
-    selected_date.isoformat(),
-    0.0,
-)
+            # Adjust product-level revenue/profit for this return.
+            product_entry = product_sales.get(key)
+            if product_entry:
+                product_entry["revenue"] -= item_value
+                product_entry["profit"] -= item_value
+
+                if condition == "resellable":
+                    original_sale = sale_by_id.get(record.sale_id)
+                    original_cost = (
+                        original_cost_by_sale_product.get(
+                            (original_sale.id, key), 0.0
+                        )
+                        if original_sale
+                        else 0.0
+                    )
+                    product_entry["profit"] += original_cost * quantity
+
+    # Net sales for the selected date include refunds recorded that day.
+    selected_day_sales = daily_net.get(selected_date.isoformat(), 0.0)
+
     average_order_value = (
-        net_revenue / order_count if order_count else 0.0
+        gross_sales / order_count if order_count else 0.0
     )
 
     # Seven calendar days ending on the selected date.
@@ -320,16 +350,18 @@ def get_dashboard_summary(
         })
 
     top_products = []
-    for product_id, entry in product_sales.items():
-        sold = entry["quantity"]
-        returned = returned_quantity_by_product.get(product_id, 0)
-        net_quantity = max(0, sold - returned)
+    for key, entry in product_sales.items():
+        sold_quantity = entry["quantity"]
+        returned_quantity = returned_quantity_by_product.get(key, 0)
 
         top_products.append({
-            "product_id": product_id,
+            "product_id": (
+                int(key) if key and key.isdigit() else key
+            ),
             "name": entry["name"],
-            "quantity": net_quantity,
+            "quantity": max(0, sold_quantity - returned_quantity),
             "revenue": round(entry["revenue"], 2),
+            "profit": round(entry["profit"], 2),
         })
 
     top_products.sort(
@@ -338,11 +370,13 @@ def get_dashboard_summary(
     )
 
     damaged_products = []
-    for product_id, entry in damaged_by_product.items():
-        product = product_by_id.get(product_id)
+    for key, entry in damaged_by_product.items():
+        product = product_by_id.get(key)
 
         damaged_products.append({
-            "product_id": product_id,
+            "product_id": (
+                int(key) if key and key.isdigit() else key
+            ),
             "name": product.name if product else "Unknown product",
             "quantity": entry["quantity"],
             "value": round(entry["value"], 2),
