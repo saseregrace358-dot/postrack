@@ -69,6 +69,7 @@ type TopProduct = {
 
 type DashboardSummary = {
   selected_date: string;
+  peakHour: string;
   metrics: DashboardMetrics;
   weeklyData: DailyData[];
   monthlyTrend: MonthlyData[];
@@ -112,6 +113,7 @@ const emptyMetrics: DashboardMetrics = {
 const emptySummary = (selectedDate: string): DashboardSummary => ({
   selected_date: selectedDate,
   metrics: { ...emptyMetrics },
+  peakHour: "—",
   weeklyData: [],
   monthlyTrend: [],
   damagedProducts: [],
@@ -146,6 +148,7 @@ export function Dashboard() {
 
       setSummary({
         selected_date: data.selected_date ?? activeDate,
+        peakHour: data.peakHour ?? "—",
         metrics: {
           ...emptyMetrics,
           ...data.metrics,
@@ -240,13 +243,14 @@ export function Dashboard() {
   const damagedProducts = summary.damagedProducts;
   const topProducts = summary.topProducts;
 
-  const peakHourLabel = "—";
-  const busyDay =
-    weeklyData.length > 0
-      ? weeklyData.reduce((best, current) =>
-          current.sales > best.sales ? current : best
-        ).day
-      : "No data";
+  const peakHourLabel = summary.peakHour || "—";
+
+const busyDay =
+  weeklyData.length > 0
+    ? weeklyData.reduce((best, current) =>
+        current.sales > best.sales ? current : best
+      ).day
+    : "No data";
 
   // ================= RENDER =================
 

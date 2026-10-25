@@ -147,6 +147,7 @@ def get_dashboard_summary(
         lambda: {"quantity": 0, "value": 0.0}
     )
 
+
     # Daily and monthly figures are independent of cumulative profit.
     daily_gross = defaultdict(float)
     daily_net = defaultdict(float)
@@ -322,6 +323,41 @@ def get_dashboard_summary(
                 if condition == "resellable" and bool(item.restocked):
                     product_entry["profit"] += original_cost * quantity
 
+        # ---------------------------------------------------------
+    # Peak sales hour for the selected date.
+    # ---------------------------------------------------------
+    hourly_sales = defaultdict(float)
+
+    for sale in sales:
+        if not sale.date:
+            continue
+
+        if sale.date.date() != selected_date:
+            continue
+
+        hourly_sales[sale.date.hour] += as_float(sale.subtotal)
+
+    peak_hour = (
+        max(hourly_sales, key=hourly_sales.get)
+        if hourly_sales and max(hourly_sales.values()) > 0
+        else None
+    )
+
+    if peak_hour is None:
+        peak_hour_label = "—"
+    else:
+        next_hour = (peak_hour + 1) % 24
+
+        start_label = datetime.strptime(
+            f"{peak_hour:02d}", "%H"
+        ).strftime("%I:%M %p").lstrip("0")
+
+        end_label = datetime.strptime(
+            f"{next_hour:02d}", "%H"
+        ).strftime("%I:%M %p").lstrip("0")
+
+        peak_hour_label = f"{start_label} – {end_label}"
+
     # ---------------------------------------------------------
     # 3. Selected-day metrics.
     # ---------------------------------------------------------
@@ -440,4 +476,5 @@ def get_dashboard_summary(
         "monthlyTrend": monthly_trend,
         "damagedProducts": damaged_products[:6],
         "topProducts": top_products[:10],
+        "peakHour": peak_hour_label,
     }
