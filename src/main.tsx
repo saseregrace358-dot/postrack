@@ -8,5 +8,5 @@
   registerSW({
   immediate: true,
 });
-  createRoot(document.getElementById("root")!).render(<App />);
+  createRoot(document.getElementById("app")!).render(<App />);
   
