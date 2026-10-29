@@ -57,14 +57,23 @@ export default function PaymentSuccess() {
 
         <p className="mb-6">{message}</p>
 
-        {success && (
+       
+        {success ? (
           <button
             onClick={() => navigate("/")}
             className="rounded-lg bg-blue-600 px-6 py-3 text-white"
           >
             Continue to DGTrack POS
           </button>
+        ) : (
+          <button
+            onClick={() => navigate("/pricing")}
+            className="rounded-lg border px-6 py-3"
+          >
+            Return to Pricing
+          </button>
         )}
+
       </section>
     </main>
   );
