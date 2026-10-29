@@ -2,6 +2,11 @@
 from datetime import datetime, timedelta
 from uuid import uuid4
 import os
+import hashlib
+import hmac
+
+from fastapi import Request
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -435,4 +440,195 @@ def cancel_subscription(
     return {
         "message": "Subscription cancelled successfully.",
         "status": subscription.status,
+    }
+
+# ==========================================
+# PAYSTACK WEBHOOK
+# ==========================================
+@router.post("/webhook")
+async def paystack_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    secret = os.getenv("PAYSTACK_SECRET_KEY")
+
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="Payment provider is not configured.",
+        )
+
+    # Read the original request body for signature verification.
+    body = await request.body()
+    signature = request.headers.get("x-paystack-signature")
+
+    expected_signature = hmac.new(
+        secret.encode("utf-8"),
+        body,
+        hashlib.sha512,
+    ).hexdigest()
+
+    if (
+        not signature
+        or not hmac.compare_digest(
+            expected_signature,
+            signature,
+        )
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid webhook signature.",
+        )
+
+    try:
+        event = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook payload.",
+        )
+
+    # We only process successful transaction notifications.
+    if event.get("event") != "charge.success":
+        return {"received": True, "ignored": True}
+
+    event_data = event.get("data") or {}
+    reference = event_data.get("reference")
+
+    if not reference:
+        return {"received": True, "ignored": True}
+
+    # Find the payment created by DGTrack POS.
+    payment = (
+        db.query(Payment)
+        .filter(Payment.reference == reference)
+        .with_for_update()
+        .first()
+    )
+
+    # Unknown references must never create subscriptions.
+    if not payment:
+        return {"received": True, "ignored": True}
+
+    # Prevent duplicate notifications from activating twice.
+    if payment.status == "success":
+        return {"received": True, "already_processed": True}
+
+    if payment.status != "pending":
+        return {"received": True, "ignored": True}
+
+    # Verify the transaction directly with Paystack.
+    try:
+        response = verify_payment(reference)
+    except Exception:
+        # A server error lets Paystack retry the notification.
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to verify transaction; retry later.",
+        )
+
+    if not response or not response.get("status"):
+        raise HTTPException(
+            status_code=503,
+            detail="Transaction verification is temporarily unavailable.",
+        )
+
+    data = response.get("data") or {}
+
+    if (
+        data.get("reference") != reference
+        or data.get("status") != "success"
+    ):
+        return {"received": True, "ignored": True}
+
+    try:
+        paid_amount_kobo = int(data["amount"])
+        expected_amount_kobo = round(
+            float(payment.amount) * 100
+        )
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to validate transaction amount.",
+        )
+
+    if (
+        paid_amount_kobo != expected_amount_kobo
+        or data.get("currency") != "NGN"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction amount or currency does not match.",
+        )
+
+    plan = (
+        db.query(SubscriptionPlan)
+        .filter(SubscriptionPlan.id == payment.plan_id)
+        .first()
+    )
+
+    if not plan:
+        raise HTTPException(
+            status_code=503,
+            detail="Purchased plan is temporarily unavailable.",
+        )
+
+    now = datetime.utcnow()
+
+    try:
+        subscription = (
+            db.query(BusinessSubscription)
+            .filter(
+                BusinessSubscription.business_id
+                == payment.business_id
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if (
+            subscription
+            and subscription.status == "active"
+            and subscription.expires_at
+            and subscription.expires_at > now
+        ):
+            start_at = subscription.expires_at
+        else:
+            start_at = now
+
+        expires_at = start_at + timedelta(
+            days=plan.duration_days or 30
+        )
+
+        if subscription:
+            subscription.plan_id = plan.id
+            subscription.status = "active"
+            subscription.started_at = now
+            subscription.expires_at = expires_at
+        else:
+            subscription = BusinessSubscription(
+                business_id=payment.business_id,
+                plan_id=plan.id,
+                status="active",
+                started_at=now,
+                expires_at=expires_at,
+            )
+            db.add(subscription)
+
+        payment.status = "success"
+        payment.paid_at = now
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Subscription activation failed; retry later.",
+        )
+
+    return {
+        "received": True,
+        "payment_status": "success",
+        "subscription_status": "active",
     }
