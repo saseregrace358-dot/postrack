@@ -17,8 +17,11 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     business_id = Column(String, index=True, nullable=False)
+
     plan_id = Column(Integer, nullable=False)
+
     amount = Column(Float, nullable=False)
+
     provider = Column(String, nullable=False)
 
     reference = Column(
@@ -30,5 +33,21 @@ class Payment(Base):
 
     status = Column(String, nullable=False, default="pending")
 
-    # Only set this after successful payment verification.
-    paid_at = Column(DateTime, nullable=True, default=None)
+    # initial = normal subscription purchase
+    # renewal = automatic subscription renewal
+    payment_type = Column(
+        String,
+        nullable=False,
+        default="initial",
+    )
+
+    # Identifies the subscription expiry this renewal is for.
+    # Prevents creating multiple renewal attempts for the same period.
+    renewal_key = Column(
+        String,
+        unique=True,
+        nullable=True,
+    )
+
+    paid_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+

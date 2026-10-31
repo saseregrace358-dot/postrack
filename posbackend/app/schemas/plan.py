@@ -8,7 +8,7 @@ class PlanBase(BaseModel):
 
     max_products: int
     max_employees: int
-    max_customers: int
+    
 
     ai_enabled: bool = False
     reports_enabled: bool = False
@@ -26,7 +26,7 @@ class PlanUpdate(BaseModel):
 
     max_products: int | None = None
     max_employees: int | None = None
-    max_customers: int | None = None
+   
 
     ai_enabled: bool | None = None
     reports_enabled: bool | None = None

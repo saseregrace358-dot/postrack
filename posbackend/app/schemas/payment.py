@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 
 class PaymentRequest(BaseModel):
-    plan: str
+    plan_name: str
 
 
 class PaymentCreate(BaseModel):

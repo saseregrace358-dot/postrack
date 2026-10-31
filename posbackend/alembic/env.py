@@ -23,6 +23,8 @@ from app.models.business_settings import BusinessSettings
 from app.models.notification import Notification
 from app.models.return_item import ReturnItem
 from app.models.return_record import ReturnRecord
+from app.models.payment_method import PaymentMethod
+from app.models.subscription_renewal_settings import SubscriptionRenewalSettings
 
 target_metadata = Base.metadata
 # this is the Alembic Config object, which provides

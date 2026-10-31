@@ -11,7 +11,9 @@ class SubscriptionPlan(Base):
 
     price = Column(Float)
 
-    duration_days = Column(Integer, default=30)
+    duration_value = Column(Integer, default=1, nullable=False)
+
+    duration_unit = Column(String, default="months", nullable=False)
 
     description = Column(String)
 
@@ -21,7 +23,7 @@ class SubscriptionPlan(Base):
 
     max_employees = Column(Integer)
 
-    max_customers = Column(Integer)
+   
 
     ai_enabled = Column(Boolean, default=False)
 

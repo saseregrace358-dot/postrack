@@ -15,7 +15,7 @@ interface Plan {
 
   max_products: number;
   max_employees: number;
-  max_customers: number;
+  
 
   ai_enabled: boolean;
   reports_enabled: boolean;
@@ -200,12 +200,7 @@ useEffect(() => {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <CheckCircle size={18} className="text-green-600" />
-              <span>
-                {plan.max_customers.toLocaleString()} Customers
-              </span>
-            </div>
+            
 
             {plan.ai_enabled && (
               <div className="flex items-center gap-2">

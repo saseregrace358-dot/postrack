@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime,  ForeignKey
-
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -16,8 +15,11 @@ class BusinessSubscription(Base):
         ForeignKey("subscription_plans.id"),
         nullable=False,
     )
+
     status = Column(String, default="active")
+
     plan = relationship("SubscriptionPlan")
+
     started_at = Column(DateTime)
 
     expires_at = Column(DateTime)

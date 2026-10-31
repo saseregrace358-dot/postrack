@@ -53,7 +53,7 @@ def my_subscription(
     if not subscription:
         return {
             "status": "inactive",
-            "plan": None,
+            "plan_name": None,
             "expires_at": None,
         }
 
@@ -78,6 +78,6 @@ def my_subscription(
 
     return {
         "status": subscription.status,
-        "plan": plan.name if plan else None,
+        "plan_name": plan.name if plan else None,
         "expires_at": subscription.expires_at,
     }
