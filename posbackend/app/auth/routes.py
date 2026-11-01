@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr
 from app.auth.dependencies import get_current_user
 from app.utils.email_service import send_reset_email
 from datetime import datetime, timedelta
-
+from app.utils.email_service import send_welcome_email
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.business_subscription import BusinessSubscription
 import socket
@@ -41,7 +41,8 @@ class UserRegister(BaseModel):
     email: str
     password: str
     business_name: str
-
+    terms_accepted: bool
+    privacy_policy_accepted: bool
 
 class UserLogin(BaseModel):
     email: str
@@ -63,10 +64,29 @@ class ResetPasswordRequest(BaseModel):
 # =====================
 # REGISTER
 # =====================
-@router.post("/register")
-async def register(user: UserRegister, db: Session = Depends(get_db)):
 
-    existing = db.query(User).filter(User.email == user.email).first()
+# =====================
+# REGISTER
+# =====================
+
+
+@router.post("/register")
+async def register(
+    user: UserRegister,
+    db: Session = Depends(get_db)
+):
+
+    # Check policy acceptance
+    if not user.terms_accepted or not user.privacy_policy_accepted:
+        raise HTTPException(
+            status_code=400,
+            detail="You must accept the Terms and Conditions and Privacy Policy"
+        )
+
+    # 1. Check if email already exists
+    existing = db.query(User).filter(
+        User.email == user.email
+    ).first()
 
     if existing:
         raise HTTPException(
@@ -74,59 +94,97 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
             detail="User already exists"
         )
 
-    hashed = hash_password(user.password)
+    # 2. Find the Professional plan
+    professional_plan = (
+        db.query(SubscriptionPlan)
+        .filter(
+            SubscriptionPlan.name.ilike("Professional"),
+            SubscriptionPlan.active.is_(True)
+        )
+        .first()
+    )
 
+    if not professional_plan:
+        raise HTTPException(
+            status_code=500,
+            detail="Professional plan is unavailable"
+        )
+
+    # 3. Generate business ID
     business_id = generate_business_id(user.business_name)
 
+    # 4. Hash password
+    hashed = hash_password(user.password)
+
+    # 5. Record registration time
+    now = datetime.utcnow()
+
+    # 6. Calculate trial expiry
+    trial_expiry = now + timedelta(days=14)
+
+    # 7. Create owner account
     new_user = User(
         name=user.name,
         email=user.email,
         password=hashed,
         business_name=user.business_name,
         business_id=business_id,
-        role="owner"
+        role="owner",
+        terms_accepted_at=now,
+        terms_version="1.0",
+        privacy_policy_accepted_at=now,
+        privacy_policy_version="1.0"
     )
 
-    print("========== REGISTER ==========")
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    await send_welcome_email(
-    user.email,
-    user.name,
-    user.business_name
-)
-    print("User saved:", new_user.business_id)
-
-    free_plan = (
-        db.query(SubscriptionPlan)
-        .filter(SubscriptionPlan.name == "Free")
-        .first()
-    )
-
-    print("Free plan found:", free_plan)
-
+    # 8. Create Professional trial subscription
     subscription = BusinessSubscription(
-        business_id=new_user.business_id,
-        plan_id=free_plan.id,
-        status="active",
-        started_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(days=36500)
+        business_id=business_id,
+        plan_id=professional_plan.id,
+        status="trialing",
+        started_at=now,
+        expires_at=trial_expiry
     )
 
-    print("Subscription object created")
+    try:
+        db.add(new_user)
+        db.add(subscription)
 
-    db.add(subscription)
+        # Save both records together
+        db.commit()
 
-    print("About to commit subscription")
+        db.refresh(new_user)
+        db.refresh(subscription)
 
-    db.commit()
+    except Exception:
+        db.rollback()
 
-    print("Subscription committed!")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create your account"
+        )
+
+    # 9. Send welcome email
+    try:
+        await send_welcome_email(
+            user.email,
+            user.name,
+            user.business_name,
+            subscription.expires_at
+        )
+
+    except Exception:
+        traceback.print_exc()
+
+    # 10. Return registration details
     return {
-        "message": "User created successfully",
-        "business_id": business_id
+        "message": "Account created successfully",
+        "business_id": business_id,
+        "trial": {
+            "plan": professional_plan.name,
+            "status": subscription.status,
+            "started_at": subscription.started_at,
+            "expires_at": subscription.expires_at
+        }
     }
 
 # =====================

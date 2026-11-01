@@ -18,7 +18,8 @@ import { ArrowLeft, X } from "lucide-react";
 export function Auth({ onLogin }: AuthProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  
+  const [termsAccepted, setTermsAccepted] = useState(false);
+const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [resetCode, setResetCode] = useState("");
 const [newPassword, setNewPassword] = useState("");
@@ -168,11 +169,13 @@ localStorage.setItem("role", "employee");
     }
 
     await registerUser({
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      business_name: formData.business_name,
-    });
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        business_name: formData.business_name,
+        terms_accepted: termsAccepted,
+        privacy_policy_accepted: privacyAccepted,
+      });
     
 
     const res = await loginUser({
@@ -207,7 +210,7 @@ localStorage.setItem(
 
 toast.success("Login successful!");
 
-onLogin(res.data.access_token);
+
     onLogin(res.data.access_token);
   } catch (err: any) {
     console.log(err);
@@ -424,11 +427,53 @@ const handleForgotPassword = async () => {
                       </p>
                     )}
                   </div>
-                  {!isLogin && (
-              <p className="text-xs text-slate-500 text-center">
-                By signing up, you agree to our Terms of Service and Privacy Policy
-              </p>
-            )}
+                 {!isLogin && (
+  <div className="space-y-3 text-sm text-slate-600">
+
+    <label className="flex items-start gap-2 cursor-pointer">
+      <input
+          type="checkbox"
+          required
+          checked={termsAccepted}
+          onChange={(e) => setTermsAccepted(e.target.checked)}
+          className="mt-1"
+        />
+      <span>
+        I agree to the{" "}
+        <a
+          href="/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline"
+        >
+          Terms and Conditions
+        </a>.
+      </span>
+    </label>
+
+    <label className="flex items-start gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        required
+        checked={privacyAccepted}
+        onChange={(e) => setPrivacyAccepted(e.target.checked)}
+        className="mt-1"
+      />
+      <span>
+        I have read and acknowledge the{" "}
+        <a
+          href="/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline"
+        >
+          Privacy Policy
+        </a>.
+      </span>
+    </label>
+
+  </div>
+)}
           </form>
 
         </div>

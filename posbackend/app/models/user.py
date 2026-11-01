@@ -30,3 +30,8 @@ class User(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+    terms_accepted_at = Column(DateTime, nullable=True)
+    terms_version = Column(String, nullable=True)
+
+    privacy_policy_accepted_at = Column(DateTime, nullable=True)
+    privacy_policy_version = Column(String, nullable=True)

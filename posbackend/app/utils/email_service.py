@@ -1,5 +1,6 @@
 import os
 import sib_api_v3_sdk
+from datetime import datetime
 from sib_api_v3_sdk.rest import ApiException
 
 configuration = sib_api_v3_sdk.Configuration()
@@ -114,33 +115,70 @@ async def send_reset_email(email: str, code: str):
 # Welcome Email
 # --------------------------------------------------
 
+# --------------------------------------------------
+# Welcome Email
+# --------------------------------------------------
+
 async def send_welcome_email(
     email: str,
     name: str,
     business: str,
+    trial_expires_at: datetime,
 ):
 
+    expiry_date = trial_expires_at.strftime("%d %B %Y")
+
     html = f"""
-    <h2>Welcome to DGTrack POS 🎉</h2>
+    <div style="font-family:Arial,sans-serif;padding:25px;color:#334155">
 
-    <p>Hello <b>{name}</b>,</p>
+        <h2 style="color:#2563eb">
+            Welcome to DGTrack POS!
+        </h2>
 
-    <p>Your business <b>{business}</b> has been created successfully.</p>
+        <p>Hello <b>{name}</b>,</p>
 
-    <p>Thank you for choosing DGTrack POS.</p>
+        <p>
+            Your business <b>{business}</b> has been
+            successfully registered.
+        </p>
 
-    <hr>
+        <h3>Your free trial has started!</h3>
 
-    <p>DGTrack Team</p>
+        <p>
+            You now have <b>14 days of free access</b>
+            to the Professional plan.
+        </p>
+
+        <p>
+            <b>Trial expires:</b> {expiry_date}
+        </p>
+
+        <p>
+            You can explore your dashboard, manage products,
+            record sales and try the available Professional features.
+        </p>
+
+        <p>
+            No automatic payment will be taken when your
+            free trial expires.
+        </p>
+
+        <p>
+            Thank you for choosing DGTrack POS.
+        </p>
+
+        <hr>
+
+        <p>DGTrack POS Team</p>
+
+    </div>
     """
 
     await send_email(
         email,
-        "Welcome to DGTrack POS",
+        "Your 14-Day DGTrack POS Free Trial Has Started",
         html,
     )
-
-
 # --------------------------------------------------
 # Employee Login
 # --------------------------------------------------

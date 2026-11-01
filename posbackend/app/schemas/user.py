@@ -3,10 +3,11 @@ from datetime import datetime
 
 class UserRegister(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
     business_name: str
-    
+    terms_accepted: bool
+    privacy_policy_accepted: bool    
 
 
 class UserLogin(BaseModel):

@@ -28,7 +28,7 @@ def seed_subscription_plans(db: Session):
 
     {
         "name": "Starter",
-        "price": 5000,
+        "price": 2500,
         "duration_days": 30,
         "description": """POS
 • POS
@@ -39,7 +39,7 @@ def seed_subscription_plans(db: Session):
 """,
         "max_employees": 3,
         "max_products": 500,
-        "max_customers": 1000,
+        
         "max_sales": 1000,
         "ai_enabled": False,
         "reports_enabled": True,
@@ -49,17 +49,17 @@ def seed_subscription_plans(db: Session):
 
     {
         "name": "Professional",
-        "price": 15000,
+        "price": 5000,
         "duration_days": 30,
         "description": """Everything in Starter
 AI
 Advanced Reports
 20 Employees
 5000 Products
-10000 Customers""",
+""",
         "max_employees": 20,
         "max_products": 5000,
-        "max_customers": 10000,
+        
         "max_sales": 10000,
         "ai_enabled": True,
         "reports_enabled": True,
@@ -78,7 +78,7 @@ Unlimited Sales
 Export and backup files""",
         "max_employees": 9999,
         "max_products": 999999,
-        "max_customers": 999999,
+        
         "max_sales": 999999,
         "ai_enabled": True,
         "reports_enabled": True,

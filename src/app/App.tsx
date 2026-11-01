@@ -78,10 +78,17 @@ export default function App() {
   }
 
   if (!token) {
-  const isPaymentSuccess =
-    window.location.pathname === "/payment-success";
+  const publicPages = [
+    "/payment-success",
+    "/terms",
+    "/privacy",
+  ];
 
-  if (!isPaymentSuccess) {
+  const isPublicPage = publicPages.includes(
+    window.location.pathname
+  );
+
+  if (!isPublicPage) {
     return (
       <>
         <InstallPrompt />
@@ -91,6 +98,7 @@ export default function App() {
     );
   }
 }
+
   return (
     <AuthContext.Provider value={{ handleLogout }}>
       <ThemeProvider>
