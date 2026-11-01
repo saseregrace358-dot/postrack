@@ -7,7 +7,7 @@ import { Reports } from "./components/Reports";
 import { Settings } from "./components/Settings";
 import { Layout } from "./components/Layout";
 import { Inventory } from "./components/Inventorys";
-import Pricing from "./components/Pricing";
+
 import PaymentSuccess from "./components/PaymentSuccess";
 
 export const router = createBrowserRouter([
@@ -25,7 +25,7 @@ export const router = createBrowserRouter([
       { path: "reports", Component: Reports },
       { path: "settings", Component: Settings },
       { path: "inventory", Component: Inventory },
-      { path: "pricing", Component: Pricing },
+      
     ],
   },
 ]);
