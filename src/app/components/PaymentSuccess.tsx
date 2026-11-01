@@ -78,7 +78,7 @@ export default function PaymentSuccess() {
           </button>
         ) : status === "failed" ? (
           <button
-            onClick={() => navigate("/pricing")}
+            onClick={() => navigate("/settings")}
             className="rounded-lg border px-6 py-3"
           >
             Return to Pricing
