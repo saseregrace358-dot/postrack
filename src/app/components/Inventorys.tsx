@@ -99,6 +99,7 @@ useEffect(() => {
 
   fetchData();
 }, []);
+const LOW_STOCK_THRESHOLD = 5;
   // =========================
   // IMAGE UPLOAD
   // =========================
@@ -256,7 +257,9 @@ useEffect(() => {
 
   
 
-  const lowStock = products.filter((p) => p.stock <= 20).length;
+  const lowStock = products.filter(
+  (p) => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD
+).length;
 if (loading) {
   return (
     <div className="flex justify-center items-center h-40">
@@ -338,7 +341,7 @@ if (loading) {
           <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
             Out of Stock
           </span>
-        ) : product.stock <= 4 ? (
+        ) : product.stock <= LOW_STOCK_THRESHOLD ? (
           <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
             Low Stock
           </span>
@@ -404,7 +407,7 @@ if (loading) {
           <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
             Out of Stock
           </span>
-        ) : product.stock <= 4 ? (
+        ) : product.stock <= LOW_STOCK_THRESHOLD ? (
           <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-semibold">
             Low Stock
           </span>
