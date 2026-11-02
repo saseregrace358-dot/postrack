@@ -135,7 +135,6 @@ const total = subtotal + tax;
   const handleCheckout = () => setShowCheckout(true);
 const [processingPayment, setProcessingPayment] = useState(false);
 
-  
 const completeCheckout = async (paymentMethod: string) => {
   // Prevent double click
   if (processingPayment) return;
@@ -155,19 +154,27 @@ const completeCheckout = async (paymentMethod: string) => {
     return;
   }
 
+  // Check the business debt threshold BEFORE creating the sale
+  if (balance > debtThreshold) {
+    toast.error(
+      `Debt limit exceeded. Maximum allowed is ₦${debtThreshold.toLocaleString()}`
+    );
+    return;
+  }
+
   setProcessingPayment(true);
 
   const loading = toast.loading("Processing payment...");
 
   try {
-    // Only send information required by the backend
+    // Send only the information required by the backend
     const saleData = {
       items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
       })),
       amountPaid: paidAmount,
-      paymentMethod,
+      paymentMethod: paymentMethod,
     };
 
     const saleRes = await createSaleApi(saleData);
@@ -178,7 +185,7 @@ const completeCheckout = async (paymentMethod: string) => {
     const res = await getProducts();
     setProducts(res.data);
 
-    // Clear cart
+    // Clear cart and checkout
     setCart([]);
     setAmountPaid("");
     setShowCheckout(false);
@@ -221,7 +228,6 @@ const completeCheckout = async (paymentMethod: string) => {
     setProcessingPayment(false);
   }
 };
-
    return (
     <div className="space-y-4 pb-4">
       {/* Header */}
