@@ -469,10 +469,11 @@ const filteredSales = sales.filter((sale: Sale) => {
 
  {selectedSale.tax > 0 && (
   <div className="flex justify-between text-slate-600 dark:text-slate-400">
-    <span>Tax (7.5%)</span>
+    <span>Tax</span>
     <span>
-      ₦{selectedSale.tax.toLocaleString(undefined, {
+      ₦{Number(selectedSale.tax).toLocaleString(undefined, {
         minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       })}
     </span>
   </div>

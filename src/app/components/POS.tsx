@@ -124,48 +124,53 @@ const [taxRate, setTaxRate] = useState(0);
 
 const [debtThreshold, setDebtThreshold] = useState(0);
 
-const tax = taxEnabled ? subtotal * taxRate : 0;
-  const total = subtotal + tax;
+const tax = taxEnabled
+  ? subtotal * (Number(taxRate) / 100)
+  : 0;
+
+const total = subtotal + tax;
  const balance = total - paidAmount;
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = () => setShowCheckout(true);
 const [processingPayment, setProcessingPayment] = useState(false);
 
-  const completeCheckout = async (paymentMethod: string) => {
+  
+const completeCheckout = async (paymentMethod: string) => {
   // Prevent double click
   if (processingPayment) return;
+
+  if (cart.length === 0) {
+    toast.error("Your cart is empty.");
+    return;
+  }
+
+  if (paidAmount < 0) {
+    toast.error("Payment amount cannot be negative.");
+    return;
+  }
+
+  if (paidAmount > total) {
+    toast.error("Payment cannot exceed the total amount.");
+    return;
+  }
 
   setProcessingPayment(true);
 
   const loading = toast.loading("Processing payment...");
 
-  // Frontend debt check
-  if (balance > debtThreshold) {
-    toast.dismiss(loading);
-    setProcessingPayment(false);
-
-    toast.error(
-      `Debt limit exceeded.\nMaximum allowed is ₦${debtThreshold.toLocaleString()}`
-    );
-
-    return;
-  }
-
   try {
-    const saleRes = await createSaleApi({
+    // Only send information required by the backend
+    const saleData = {
       items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
-        price: item.price,
       })),
-      subtotal,
-      tax,
-      total,
       amountPaid: paidAmount,
-      balance,
       paymentMethod,
-    });
+    };
+
+    const saleRes = await createSaleApi(saleData);
 
     const createdSale = saleRes.data;
 
@@ -187,35 +192,36 @@ const [processingPayment, setProcessingPayment] = useState(false);
       );
     } else {
       toast(
-        `Debt Recorded\nCustomer owes ₦${createdSale.balance.toLocaleString()}`,
+        `Debt Recorded\nCustomer owes ₦${Number(
+          createdSale.balance
+        ).toLocaleString()}`,
         {
           icon: "⚠️",
         }
       );
     }
+
   } catch (err: any) {
     toast.dismiss(loading);
 
-    if (
-      err.response?.data?.detail?.includes("Insufficient stock")
-    ) {
+    const errorMessage = err.response?.data?.detail || "";
+
+    if (errorMessage.includes("Insufficient stock")) {
       toast.error("Out of Stock");
-      return;
-    }
-
-    if (
-      err.response?.data?.detail?.includes("Debt limit exceeded")
-    ) {
+    } else if (errorMessage.includes("Debt limit exceeded")) {
       toast.error("Debt limit exceeded");
-      return;
+    } else if (errorMessage.includes("Payment amount")) {
+      toast.error(errorMessage);
+    } else {
+      toast.error("Payment Failed");
+      console.error("Sale error:", err);
     }
 
-    toast.error("Payment Failed");
   } finally {
-    // Always re-enable buttons
     setProcessingPayment(false);
   }
 };
+
    return (
     <div className="space-y-4 pb-4">
       {/* Header */}

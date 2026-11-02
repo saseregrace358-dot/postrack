@@ -1,24 +1,24 @@
-from pydantic import BaseModel
-from typing import List
+
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional
+
 
 class SaleItemCreate(BaseModel):
     product_id: int
-    quantity: int
-    price: float
+    quantity: int = Field(gt=0)
 
 
 class SaleCreate(BaseModel):
-    items: List[SaleItemCreate]
-    subtotal: float
-    tax: float
-    total: float
-    amountPaid: float
-    balance: float
-    paymentMethod: str
+    items: List[SaleItemCreate] = Field(min_length=1)
+    amountPaid: float = Field(default=0, ge=0)
+    paymentMethod: str = "Cash"
+
 
 class SaleOut(BaseModel):
     id: int
     order_id: str
+
+    items: list = []
 
     subtotal: float
     tax: float
@@ -29,9 +29,7 @@ class SaleOut(BaseModel):
     paymentMethod: str
     status: str
 
-    created_by: int | None = None
-    created_by_name: str | None = None
+    created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True    
-    
+    model_config = ConfigDict(from_attributes=True)
