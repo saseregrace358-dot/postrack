@@ -70,6 +70,8 @@ type TopProduct = {
 type DashboardSummary = {
   selected_date: string;
   peakHour: string;
+  currency: string;
+  base_currency: string;
   metrics: DashboardMetrics;
   weeklyData: DailyData[];
   monthlyTrend: MonthlyData[];
@@ -79,14 +81,40 @@ type DashboardSummary = {
 
 // ================= HELPERS =================
 
-const formatCurrency = (amount: number) =>
-  `₦${Number(amount || 0).toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatCurrency = (amount: number, currency: string) => {
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+    return "—";
+  }
+
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+    }).format(Number(amount || 0));
+  } catch {
+    return "—";
+  }
+};
+
+const formatAxisCurrency = (value: number, currency: string) => {
+  if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+    return "—";
+  }
+
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(Number(value || 0));
+  } catch {
+    return "—";
+  }
+};
 
 const formatNumber = (value: number) =>
-  Number(value || 0).toLocaleString("en-NG");
+  Number(value || 0).toLocaleString();
 
 const getToday = () => {
   const now = new Date();
@@ -112,8 +140,10 @@ const emptyMetrics: DashboardMetrics = {
 
 const emptySummary = (selectedDate: string): DashboardSummary => ({
   selected_date: selectedDate,
-  metrics: { ...emptyMetrics },
   peakHour: "—",
+  currency: "",
+  base_currency: "",
+  metrics: { ...emptyMetrics },
   weeklyData: [],
   monthlyTrend: [],
   damagedProducts: [],
@@ -124,13 +154,16 @@ const emptySummary = (selectedDate: string): DashboardSummary => ({
 
 export function Dashboard() {
   const [activeDate, setActiveDate] = useState(getToday);
+
   const [summary, setSummary] = useState<DashboardSummary>(
     () => emptySummary(getToday())
   );
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // All financial calculations come from the backend.
+  // ================= LOAD DASHBOARD =================
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -146,9 +179,26 @@ export function Dashboard() {
         throw new Error("The dashboard response is incomplete.");
       }
 
+      const activeCurrency = String(data.currency || "").toUpperCase();
+      const baseCurrency = String(data.base_currency || "").toUpperCase();
+
+      if (!/^[A-Z]{3}$/.test(activeCurrency)) {
+        throw new Error(
+          "The dashboard response does not contain a valid business currency."
+        );
+      }
+
+      if (!/^[A-Z]{3}$/.test(baseCurrency)) {
+        throw new Error(
+          "The dashboard response does not contain a valid base currency."
+        );
+      }
+
       setSummary({
         selected_date: data.selected_date ?? activeDate,
         peakHour: data.peakHour ?? "—",
+        currency: activeCurrency,
+        base_currency: baseCurrency,
         metrics: {
           ...emptyMetrics,
           ...data.metrics,
@@ -168,8 +218,9 @@ export function Dashboard() {
       });
     } catch (err) {
       console.error("Unable to load dashboard:", err);
+
       setError(
-        "Unable to load dashboard data. Check your connection and try again."
+        "Unable to load dashboard data or business currency. Check your connection and try again."
       );
     } finally {
       setLoading(false);
@@ -180,12 +231,15 @@ export function Dashboard() {
     void loadDashboard();
   }, [loadDashboard]);
 
+  // ================= AUTO REFRESH =================
+
   useEffect(() => {
     const refreshEvents = [
       "returns-updated",
       "sales-updated",
       "inventory-updated",
       "products-updated",
+      "currency-updated",
     ];
 
     const handleRefresh = () => {
@@ -203,6 +257,7 @@ export function Dashboard() {
     });
 
     window.addEventListener("focus", handleRefresh);
+
     document.addEventListener(
       "visibilitychange",
       handleVisibilityChange
@@ -214,12 +269,15 @@ export function Dashboard() {
       });
 
       window.removeEventListener("focus", handleRefresh);
+
       document.removeEventListener(
         "visibilitychange",
         handleVisibilityChange
       );
     };
   }, [loadDashboard]);
+
+  // ================= DASHBOARD DATA =================
 
   const {
     totalRevenue,
@@ -233,6 +291,8 @@ export function Dashboard() {
     selectedDayOrders,
   } = summary.metrics;
 
+  const activeCurrency = summary.currency;
+
   const profitMargin =
     totalRevenue > 0
       ? (totalProfit / totalRevenue) * 100
@@ -245,20 +305,23 @@ export function Dashboard() {
 
   const peakHourLabel = summary.peakHour || "—";
 
-const busyDay =
-  weeklyData.length > 0
-    ? weeklyData.reduce((best, current) =>
-        current.sales > best.sales ? current : best
-      ).day
-    : "No data";
+  const busyDay =
+    weeklyData.length > 0
+      ? weeklyData.reduce((best, current) =>
+          current.sales > best.sales ? current : best
+        ).day
+      : "No data";
 
   // ================= RENDER =================
 
   return (
     <div className="min-w-0 space-y-5 pb-6 sm:space-y-6">
+
       {/* HEADER */}
+
       <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:w-[600px]">
+
           <div className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:px-4">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
               <Activity size={19} />
@@ -294,6 +357,7 @@ const busyDay =
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 Peak Hour
               </span>
+
               <span className="text-right text-xs font-semibold text-blue-600 dark:text-blue-400 sm:text-sm">
                 {peakHourLabel}
               </span>
@@ -303,6 +367,7 @@ const busyDay =
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 Busiest Day
               </span>
+
               <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 {busyDay}
               </span>
@@ -312,12 +377,14 @@ const busyDay =
       </div>
 
       {/* LOADING / ERROR */}
+
       {error && (
         <div
           role="alert"
           className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between"
         >
           <span>{error}</span>
+
           <button
             type="button"
             onClick={() => void loadDashboard()}
@@ -338,10 +405,12 @@ const busyDay =
       )}
 
       {/* METRIC CARDS */}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6">
+
         <MetricCard
           title="Total Revenue"
-          value={formatCurrency(totalRevenue)}
+          value={formatCurrency(totalRevenue, activeCurrency)}
           description={`Net revenue through ${activeDate}`}
           color="blue"
           icon={<DollarSign size={18} />}
@@ -349,7 +418,7 @@ const busyDay =
 
         <MetricCard
           title="Sales for Selected Date"
-          value={formatCurrency(daySales)}
+          value={formatCurrency(daySales, activeCurrency)}
           description={`${formatNumber(selectedDayOrders)} orders`}
           color="emerald"
           icon={<Activity size={18} />}
@@ -357,7 +426,7 @@ const busyDay =
 
         <MetricCard
           title="Total Profit"
-          value={formatCurrency(totalProfit)}
+          value={formatCurrency(totalProfit, activeCurrency)}
           description={`Margin: ${profitMargin.toFixed(2)}%`}
           color="violet"
           icon={<CreditCard size={18} />}
@@ -365,7 +434,7 @@ const busyDay =
 
         <MetricCard
           title="Average Order Value"
-          value={formatCurrency(averageOrderValue)}
+          value={formatCurrency(averageOrderValue, activeCurrency)}
           description={`${formatNumber(totalOrders)} orders to date`}
           color="amber"
           icon={<DollarSign size={18} />}
@@ -376,14 +445,20 @@ const busyDay =
           value={formatNumber(pendingOtherReturns)}
           description="Pending return records"
           secondaryLabel="Pending refund value"
-          secondaryValue={formatCurrency(pendingRefundAmount)}
+          secondaryValue={formatCurrency(
+            pendingRefundAmount,
+            activeCurrency
+          )}
           color="cyan"
           icon={<Package size={18} />}
         />
 
         <MetricCard
           title="Damaged Returned Goods"
-          value={formatCurrency(damagedReturnedGoods)}
+          value={formatCurrency(
+            damagedReturnedGoods,
+            activeCurrency
+          )}
           description="Recorded damaged-item value"
           color="red"
           icon={<AlertTriangle size={18} />}
@@ -391,8 +466,11 @@ const busyDay =
       </div>
 
       {/* CHARTS */}
+
       <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 xl:gap-6">
+
         {/* SALES BY DAY */}
+
         <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
           <ChartHeading
             title="Sales by Day"
@@ -412,25 +490,34 @@ const busyDay =
                   vertical={false}
                   stroke="#e2e8f0"
                 />
+
                 <XAxis
                   dataKey="day"
                   tick={{ fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
+
                 <YAxis
                   tick={{ fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
-                  width={52}
-                  tickFormatter={formatAxisCurrency}
+                  width={65}
+                  tickFormatter={(value) =>
+                    formatAxisCurrency(Number(value), activeCurrency)
+                  }
                 />
+
                 <Tooltip
                   formatter={(value) => [
-                    formatCurrency(Number(value ?? 0)),
+                    formatCurrency(
+                      Number(value ?? 0),
+                      activeCurrency
+                    ),
                     "Sales less returns",
                   ]}
                 />
+
                 <Line
                   type="monotone"
                   dataKey="sales"
@@ -446,6 +533,7 @@ const busyDay =
         </section>
 
         {/* MONTHLY SALES TREND */}
+
         <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
           <ChartHeading
             title="Monthly Sales Trend"
@@ -465,6 +553,7 @@ const busyDay =
                   vertical={false}
                   stroke="#e2e8f0"
                 />
+
                 <XAxis
                   dataKey="month"
                   tick={{ fontSize: 10 }}
@@ -472,19 +561,27 @@ const busyDay =
                   tickLine={false}
                   interval={0}
                 />
+
                 <YAxis
                   tick={{ fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
-                  width={52}
-                  tickFormatter={formatAxisCurrency}
+                  width={65}
+                  tickFormatter={(value) =>
+                    formatAxisCurrency(Number(value), activeCurrency)
+                  }
                 />
+
                 <Tooltip
                   formatter={(value) => [
-                    formatCurrency(Number(value ?? 0)),
+                    formatCurrency(
+                      Number(value ?? 0),
+                      activeCurrency
+                    ),
                     "Sales less returns",
                   ]}
                 />
+
                 <Bar
                   dataKey="sales"
                   name="Sales less returns"
@@ -498,11 +595,13 @@ const busyDay =
         </section>
 
         {/* DAMAGED RETURNS */}
+
         <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400">
               <RotateCcw size={19} />
             </div>
+
             <ChartHeading
               title="Most Returned Damaged Goods"
               description={`Damaged items through ${activeDate}`}
@@ -526,24 +625,33 @@ const busyDay =
                   horizontal={false}
                   stroke="#e2e8f0"
                 />
+
                 <XAxis
                   type="number"
                   tick={{ fontSize: 10 }}
-                  tickFormatter={formatAxisCurrency}
+                  tickFormatter={(value) =>
+                    formatAxisCurrency(Number(value), activeCurrency)
+                  }
                 />
+
                 <YAxis
                   type="category"
                   dataKey="name"
                   width={125}
                   tick={{ fontSize: 11 }}
                 />
+
                 <Tooltip
                   formatter={(value) => [
-                    formatCurrency(Number(value ?? 0)),
+                    formatCurrency(
+                      Number(value ?? 0),
+                      activeCurrency
+                    ),
                     "Returned value",
                   ]}
                   labelFormatter={(label) => `Product: ${label}`}
                 />
+
                 <Bar
                   dataKey="value"
                   name="Returned value"
@@ -557,25 +665,33 @@ const busyDay =
         </section>
 
         {/* TOP SELLING PRODUCTS */}
+
         <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-3 dark:border-slate-700 sm:p-5">
             <div className="min-w-0">
               <h3 className="font-semibold text-slate-900 dark:text-white">
                 Top Selling Products
               </h3>
+
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
                 Product performance through {activeDate}
               </p>
             </div>
+
             <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
               Top 6
             </span>
           </div>
 
           {/* MOBILE LIST */}
+
           <div className="divide-y divide-slate-100 dark:divide-slate-700 sm:hidden">
             {topProducts.map((product, index) => (
-              <details key={product.product_id ?? product.name} className="group">
+              <details
+                key={product.product_id ?? product.name}
+                className="group"
+              >
                 <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 [&::-webkit-details-marker]:hidden">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
                     <Package size={17} />
@@ -586,7 +702,7 @@ const busyDay =
                   </span>
 
                   <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                    {formatCurrency(product.revenue)}
+                    {formatCurrency(product.revenue, activeCurrency)}
                   </span>
 
                   <span className="text-slate-400">⌄</span>
@@ -597,17 +713,25 @@ const busyDay =
                     label="Qty Sold"
                     value={formatNumber(product.quantity)}
                   />
+
                   <ProductDetail
                     label="Revenue"
-                    value={formatCurrency(product.revenue)}
+                    value={formatCurrency(
+                      product.revenue,
+                      activeCurrency
+                    )}
                   />
+
                   <div className="col-span-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                     <ProductDetail
                       label="Profit"
                       value={
                         product.profit == null
                           ? "Not provided"
-                          : formatCurrency(product.profit)
+                          : formatCurrency(
+                              product.profit,
+                              activeCurrency
+                            )
                       }
                     />
                   </div>
@@ -615,12 +739,11 @@ const busyDay =
               </details>
             ))}
 
-            {topProducts.length === 0 && (
-              <EmptyProducts />
-            )}
+            {topProducts.length === 0 && <EmptyProducts />}
           </div>
 
           {/* DESKTOP TABLE */}
+
           <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
@@ -643,10 +766,12 @@ const busyDay =
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
                           <Package size={19} />
                         </div>
+
                         <div>
                           <p className="font-medium text-slate-800 dark:text-white">
                             {product.name}
                           </p>
+
                           <p className="mt-1 text-xs text-slate-500">
                             Product #{index + 1}
                           </p>
@@ -659,13 +784,19 @@ const busyDay =
                     </td>
 
                     <td className="px-5 py-4 text-right font-medium text-slate-800 dark:text-white">
-                      {formatCurrency(product.revenue)}
+                      {formatCurrency(
+                        product.revenue,
+                        activeCurrency
+                      )}
                     </td>
 
                     <td className="px-5 py-4 text-right font-semibold text-emerald-600">
                       {product.profit == null
                         ? "—"
-                        : formatCurrency(product.profit)}
+                        : formatCurrency(
+                            product.profit,
+                            activeCurrency
+                          )}
                     </td>
                   </tr>
                 ))}
@@ -738,9 +869,11 @@ function MetricCard({
         <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400 sm:text-sm">
           {title}
         </p>
+
         <h3 className="mt-2 break-words text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-lg">
           {value}
         </h3>
+
         <p className="mt-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
           {description}
         </p>
@@ -750,6 +883,7 @@ function MetricCard({
             <p className="text-[10px] text-slate-500 dark:text-slate-400 sm:text-xs">
               {secondaryLabel}
             </p>
+
             <p className="mt-1 break-words text-sm font-semibold sm:text-base">
               {secondaryValue}
             </p>
@@ -778,6 +912,7 @@ function ChartHeading({
       <h3 className="font-semibold text-slate-900 dark:text-white">
         {title}
       </h3>
+
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
         {description}
       </p>
@@ -817,15 +952,10 @@ function ProductDetail({
       <p className="text-xs text-slate-500 dark:text-slate-400">
         {label}
       </p>
+
       <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-white">
         {value}
       </p>
     </div>
   );
-}
-
-function formatAxisCurrency(value: number) {
-  return value >= 1000
-    ? `₦${(value / 1000).toFixed(0)}k`
-    : `₦${value}`;
 }

@@ -1,11 +1,18 @@
-import { useState, useEffect} from "react";
-import { Search, Plus, Minus, Trash2, ShoppingCart, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  X,
+} from "lucide-react";
+
 import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
- import toast from "react-hot-toast";
- import { getBusinessSettings } from "../../api/settings";
+import { getBusinessSettings } from "../../api/settings";
+import toast from "react-hot-toast";
 
-/* ✅ MOVE TYPES TO TOP (IMPORTANT FIX) */
 type Product = {
   id: number;
   name: string;
@@ -19,59 +26,116 @@ type CartItem = Product & {
   quantity: number;
 };
 
+const SUPPORTED_CURRENCIES = [
+  "NGN",
+  "USD",
+  "GBP",
+  "EUR",
+  "CAD",
+  "AUD",
+  "GHS",
+  "KES",
+  "ZAR",
+  "INR",
+  "JPY",
+  "CHF",
+];
 
 export function POS() {
-  /* ✅ NOW TYPES WORK PROPERLY */
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+
   const [amountPaid, setAmountPaid] = useState("");
   const paidAmount = Number(amountPaid) || 0;
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [taxRate, setTaxRate] = useState(0);
+  const [debtThreshold, setDebtThreshold] = useState(0);
 
-/* PRODUCTS */
-useEffect(() => {
+  const [activeCurrency, setActiveCurrency] = useState("");
+  const [currencyLoading, setCurrencyLoading] = useState(true);
+  const [currencyError, setCurrencyError] = useState(false);
 
+  const [processingPayment, setProcessingPayment] = useState(false);
+
+  // Load products and business settings
+  useEffect(() => {
     const fetchData = async () => {
+      try {
+        const [productResult, settingsResult] = await Promise.allSettled([
+          getProducts(),
+          getBusinessSettings(),
+        ]);
 
-        try {
-
-            const productRes = await getProducts();
-
-            setProducts(productRes.data);
-
-            const settingsRes = await getBusinessSettings();
-
-            setTaxEnabled(settingsRes.data.tax_enabled);
-
-            setTaxRate(settingsRes.data.tax_rate);
-
-            setDebtThreshold(settingsRes.data.debt_threshold);
-
-        } catch (err) {
-
-            console.log(err);
-
+        if (productResult.status === "fulfilled") {
+          setProducts(productResult.value.data);
+        } else {
+          console.error("Failed to load products:", productResult.reason);
+          toast.error("Unable to load products");
         }
 
+        if (settingsResult.status === "fulfilled") {
+          const settings = settingsResult.value.data;
+
+          setTaxEnabled(Boolean(settings.tax_enabled));
+          setTaxRate(Number(settings.tax_rate));
+          setDebtThreshold(Number(settings.debt_threshold));
+
+          const currency = String(settings.currency ?? "").toUpperCase();
+
+          if (SUPPORTED_CURRENCIES.includes(currency)) {
+            setActiveCurrency(currency);
+            setCurrencyError(false);
+          } else {
+            setActiveCurrency("");
+            setCurrencyError(true);
+          }
+        } else {
+          console.error(
+            "Failed to load business settings:",
+            settingsResult.reason
+          );
+
+          setCurrencyError(true);
+          setActiveCurrency("");
+        }
+      } finally {
+        setCurrencyLoading(false);
+      }
     };
 
     fetchData();
+  }, []);
 
-}, []);
+  // Format all monetary values using the active business currency
+  const formatMoney = (amount: number) => {
+    if (!activeCurrency) {
+      return "Currency unavailable";
+    }
 
-const categories = [
-  "All",
-  ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))
-];
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: activeCurrency,
+    }).format(Number(amount) || 0);
+  };
 
+  const categories = [
+    "All",
+    ...Array.from(
+      new Set(products.map((product) => product.category).filter(Boolean))
+    ),
+  ];
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory =
-      selectedCategory === "All" || product.category === selectedCategory;
+      selectedCategory === "All" ||
+      product.category === selectedCategory;
 
     const matchesSearch = product.name
       .toLowerCase()
@@ -81,6 +145,11 @@ const categories = [
   });
 
   const addToCart = (product: Product) => {
+    if (!activeCurrency || currencyError || currencyLoading) {
+      toast.error("Business currency is unavailable");
+      return;
+    }
+
     const existingItem = cart.find((item) => item.id === product.id);
 
     if (existingItem) {
@@ -114,140 +183,176 @@ const categories = [
 
   const clearCart = () => setCart([]);
 
+  // Sale calculations
   const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-const [taxEnabled, setTaxEnabled] = useState(false);
 
-const [taxRate, setTaxRate] = useState(0);
+  const tax = taxEnabled
+    ? subtotal * (Number(taxRate) / 100)
+    : 0;
 
-const [debtThreshold, setDebtThreshold] = useState(0);
+  const total = subtotal + tax;
+  const balance = total - paidAmount;
 
-const tax = taxEnabled
-  ? subtotal * (Number(taxRate) / 100)
-  : 0;
+  const itemCount = cart.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
 
-const total = subtotal + tax;
- const balance = total - paidAmount;
-  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  const handleCheckout = () => setShowCheckout(true);
-const [processingPayment, setProcessingPayment] = useState(false);
-
-const completeCheckout = async (paymentMethod: string) => {
-  // Prevent double click
-  if (processingPayment) return;
-
-  if (cart.length === 0) {
-    toast.error("Your cart is empty.");
-    return;
-  }
-
-  if (paidAmount < 0) {
-    toast.error("Payment amount cannot be negative.");
-    return;
-  }
-
-  if (paidAmount > total) {
-    toast.error("Payment cannot exceed the total amount.");
-    return;
-  }
-
-  // Check the business debt threshold BEFORE creating the sale
-  if (balance > debtThreshold) {
-    toast.error(
-      `Debt limit exceeded. Maximum allowed is ₦${debtThreshold.toLocaleString()}`
-    );
-    return;
-  }
-
-  setProcessingPayment(true);
-
-  const loading = toast.loading("Processing payment...");
-
-  try {
-    // Send only the information required by the backend
-    const saleData = {
-      items: cart.map((item) => ({
-        product_id: item.id,
-        quantity: item.quantity,
-      })),
-      amountPaid: paidAmount,
-      paymentMethod: paymentMethod,
-    };
-
-    const saleRes = await createSaleApi(saleData);
-
-    const createdSale = saleRes.data;
-
-    // Refresh products
-    const res = await getProducts();
-    setProducts(res.data);
-
-    // Clear cart and checkout
-    setCart([]);
-    setAmountPaid("");
-    setShowCheckout(false);
-    setShowCart(false);
-
-    toast.dismiss(loading);
-
-    if (createdSale.status === "PAID") {
-      toast.success(
-        `Payment Successful!\nOrder #${createdSale.order_id}`
-      );
-    } else {
-      toast(
-        `Debt Recorded\nCustomer owes ₦${Number(
-          createdSale.balance
-        ).toLocaleString()}`,
-        {
-          icon: "⚠️",
-        }
-      );
+  const handleCheckout = () => {
+    if (currencyLoading || currencyError || !activeCurrency) {
+      toast.error("Please check your business currency settings");
+      return;
     }
 
-  } catch (err: any) {
-    toast.dismiss(loading);
-
-    const errorMessage = err.response?.data?.detail || "";
-
-    if (errorMessage.includes("Insufficient stock")) {
-      toast.error("Out of Stock");
-    } else if (errorMessage.includes("Debt limit exceeded")) {
-      toast.error("Debt limit exceeded");
-    } else if (errorMessage.includes("Payment amount")) {
-      toast.error(errorMessage);
-    } else {
-      toast.error("Payment Failed");
-      console.error("Sale error:", err);
+    if (cart.length === 0) {
+      toast.error("Your cart is empty");
+      return;
     }
 
-  } finally {
-    setProcessingPayment(false);
-  }
-};
-   return (
+    setShowCheckout(true);
+  };
+
+  // Complete sale
+  const completeCheckout = async (paymentMethod: string) => {
+    if (processingPayment) return;
+
+    if (!activeCurrency || currencyError || currencyLoading) {
+      toast.error("Business currency is unavailable");
+      return;
+    }
+
+    if (cart.length === 0) {
+      toast.error("Your cart is empty.");
+      return;
+    }
+
+    if (paidAmount < 0) {
+      toast.error("Payment amount cannot be negative.");
+      return;
+    }
+
+    if (paidAmount > total) {
+      toast.error("Payment cannot exceed the total amount.");
+      return;
+    }
+
+    if (balance > debtThreshold) {
+      toast.error(
+        `Debt limit exceeded. Maximum allowed is ${formatMoney(debtThreshold)}`
+      );
+      return;
+    }
+
+    setProcessingPayment(true);
+
+    const loading = toast.loading("Processing payment...");
+
+    try {
+      const saleData = {
+        items: cart.map((item) => ({
+          product_id: item.id,
+          quantity: item.quantity,
+        })),
+        amountPaid: paidAmount,
+        paymentMethod,
+      };
+
+      const saleRes = await createSaleApi(saleData);
+      const createdSale = saleRes.data;
+
+      // Refresh products after successful sale
+      const res = await getProducts();
+      setProducts(res.data);
+
+      // Clear cart and checkout
+      setCart([]);
+      setAmountPaid("");
+      setShowCheckout(false);
+      setShowCart(false);
+
+      toast.dismiss(loading);
+
+      if (createdSale.status === "PAID") {
+        toast.success(
+          `Payment Successful!\nOrder #${createdSale.order_id}`
+        );
+      } else {
+        toast(
+          `Debt Recorded\nCustomer owes ${formatMoney(
+            Number(createdSale.balance)
+          )}`,
+          {
+            icon: "⚠️",
+          }
+        );
+      }
+    } catch (err: any) {
+      toast.dismiss(loading);
+
+      const errorMessage = err.response?.data?.detail || "";
+
+      if (errorMessage.includes("Insufficient stock")) {
+        toast.error("Out of Stock");
+      } else if (errorMessage.includes("Debt limit exceeded")) {
+        toast.error("Debt limit exceeded");
+      } else if (errorMessage.includes("Payment amount")) {
+        toast.error(errorMessage);
+      } else {
+        toast.error("Payment Failed");
+        console.error("Sale error:", err);
+      }
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  return (
     <div className="space-y-4 pb-4">
+
+      {/* Currency loading and error */}
+      {currencyLoading && (
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3 text-sm">
+          Loading business currency...
+        </div>
+      )}
+
+      {!currencyLoading && currencyError && (
+        <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-900/20 p-4 space-y-2">
+          <p className="font-semibold text-red-700 dark:text-red-400">
+            Business currency unavailable
+          </p>
+
+          <p className="text-sm text-red-600 dark:text-red-300">
+            Check your currency settings before recording sales.
+            No default currency has been applied.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search products..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+        <div className="relative flex-1 mr-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-slate-400" />
+
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
 
         <button
           onClick={() => setShowCart(true)}
-          className="relative bg-blue-600 text-white p-3 rounded-xl shadow-lg"
+          disabled={!activeCurrency || currencyError || currencyLoading}
+          className="relative bg-blue-600 text-white p-3 rounded-xl shadow-lg disabled:opacity-50"
         >
           <ShoppingCart className="size-6" />
+
           {itemCount > 0 && (
             <span className="absolute -top-2 -right-2 size-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
               {itemCount}
@@ -256,8 +361,13 @@ const completeCheckout = async (paymentMethod: string) => {
         </button>
       </div>
 
-      {/* Search */}
-      
+      {/* Active currency */}
+      {activeCurrency && !currencyError && (
+        <p className="text-xs text-slate-500">
+          Active currency: {activeCurrency}
+        </p>
+      )}
+
       {/* Categories */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         {categories.map((category) => (
@@ -276,34 +386,35 @@ const completeCheckout = async (paymentMethod: string) => {
       </div>
 
       {/* Products Grid */}
-<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-  {filteredProducts.map((product) => (
-    <button
-      key={product.id}
-      onClick={() => addToCart(product)}
-      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 hover:shadow-md hover:border-blue-500 transition text-left flex flex-col"
-    >
-      
-      {/* NAME */}
-      <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-3">
-        {product.name}
-      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        {filteredProducts.map((product) => (
+          <button
+            key={product.id}
+            onClick={() => addToCart(product)}
+            disabled={!activeCurrency || currencyError || currencyLoading}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 hover:shadow-md hover:border-blue-500 transition text-left flex flex-col disabled:opacity-50"
+          >
+            <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-3">
+              {product.name}
+            </h3>
 
-      {/* PRICE */}
-      <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-        ₦{product.price.toLocaleString()}
-      </p>
+            <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
+              {formatMoney(product.price)}
+            </p>
 
-      {/* STOCK */}
-      <p className="text-[10px] text-slate-500">
-        Stock: {product.stock}
-      </p>
-    </button>
-  ))}
-</div>
+            <p className="text-[10px] text-slate-500">
+              Stock: {product.stock}
+            </p>
+          </button>
+        ))}
+      </div>
+
       {/* Cart Drawer */}
       {showCart && (
-        <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowCart(false)}>
+        <div
+          className="fixed inset-0 bg-black/50 z-50"
+          onClick={() => setShowCart(false)}
+        >
           <div
             className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -313,6 +424,7 @@ const completeCheckout = async (paymentMethod: string) => {
               <h3 className="font-semibold text-lg text-slate-900 dark:text-white">
                 Cart ({itemCount} items)
               </h3>
+
               <button
                 onClick={() => setShowCart(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -326,7 +438,10 @@ const completeCheckout = async (paymentMethod: string) => {
               {cart.length === 0 ? (
                 <div className="text-center py-12">
                   <ShoppingCart className="size-16 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                  <p className="text-slate-500 dark:text-slate-400">Your cart is empty</p>
+
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Your cart is empty
+                  </p>
                 </div>
               ) : (
                 cart.map((item) => (
@@ -334,31 +449,39 @@ const completeCheckout = async (paymentMethod: string) => {
                     key={item.id}
                     className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl p-3"
                   >
-                    
                     <div className="flex-1">
                       <h4 className="font-medium text-slate-900 dark:text-white text-sm">
                         {item.name}
                       </h4>
+
                       <p className="text-blue-600 dark:text-blue-400 font-semibold">
-                        ₦{item.price.toLocaleString()}
+                        {formatMoney(item.price)}
                       </p>
                     </div>
+
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() =>
+                          updateQuantity(item.id, item.quantity - 1)
+                        }
                         className="size-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300"
                       >
                         <Minus className="size-4" />
                       </button>
+
                       <span className="w-8 text-center font-semibold text-slate-900 dark:text-white">
                         {item.quantity}
                       </span>
+
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() =>
+                          updateQuantity(item.id, item.quantity + 1)
+                        }
                         className="size-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300"
                       >
                         <Plus className="size-4" />
                       </button>
+
                       <button
                         onClick={() => removeFromCart(item.id)}
                         className="size-8 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center justify-center text-red-600 dark:text-red-400"
@@ -376,45 +499,26 @@ const completeCheckout = async (paymentMethod: string) => {
               <div className="border-t border-slate-200 dark:border-slate-800 p-4 space-y-3">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    
-                      <span>Subtotal</span>
+                    <span>Subtotal</span>
+                    <span>{formatMoney(subtotal)}</span>
+                  </div>
 
-                      <span>
+                  <div className="flex justify-between">
+                    <span>Tax</span>
+                    <span>{formatMoney(tax)}</span>
+                  </div>
 
-                      ₦{subtotal.toLocaleString()}
+                  <div className="flex justify-between font-bold">
+                    <span>Total</span>
+                    <span>{formatMoney(total)}</span>
+                  </div>
 
-                      </span>
-
-                      </div>
-
-                      <div className="flex justify-between">
-
-                      <span>Tax</span>
-
-                      <span>
-
-                      ₦{tax.toLocaleString()}
-
-                      </span>
-
-                      </div>
-
-                      <div className="flex justify-between font-bold">
-
-                      <span>Total</span>
-
-                      <span>
-
-                      ₦{total.toLocaleString()}
-
-                      </span>
-
-                      </div>
                   <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span>Total</span>
-                    <span>₦{total.toFixed(2)}</span>
+                    <span>{formatMoney(total)}</span>
                   </div>
                 </div>
+
                 <div className="flex gap-2">
                   <button
                     onClick={clearCart}
@@ -422,6 +526,7 @@ const completeCheckout = async (paymentMethod: string) => {
                   >
                     Clear
                   </button>
+
                   <button
                     onClick={handleCheckout}
                     className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg"
@@ -442,90 +547,103 @@ const completeCheckout = async (paymentMethod: string) => {
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
               Complete Payment
             </h3>
+
             <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 mb-6">
               <div className="text-center">
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Total Amount</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+                  Total Amount
+                </p>
+
                 <p className="text-3xl font-bold text-slate-900 dark:text-white">
-                  ₦{total.toFixed(2)}
+                  {formatMoney(total)}
                 </p>
               </div>
             </div>
+
             <div className="mt-4 space-y-3">
-  {/* Amount Paid Input */}
-  <div>
-    <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-      Amount Paid
-    </p>
-    <input
-      type="number"
-      value={amountPaid}
-      onChange={(e) => setAmountPaid(e.target.value)}
-      className="w-full p-3 border rounded-xl dark:bg-slate-800 dark:border-slate-700"
-      placeholder="Enter amount paid"
-    />
-  </div>
+              {/* Amount Paid */}
+              <div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+                  Amount Paid ({activeCurrency})
+                </p>
 
-  {/* Balance Display */}
-  <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl">
-    <p className="text-sm text-slate-500">Balance</p>
-    <p
-      className={`text-xl font-bold ${
-        balance >= 0 ? "text-green-600" : "text-red-600"
-      }`}
-    >
-      ₦{Math.abs(balance).toLocaleString()}
-    </p>
+                <input
+                  type="number"
+                  min="0"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  className="w-full p-3 border rounded-xl dark:bg-slate-800 dark:border-slate-700"
+                  placeholder="Enter amount paid"
+                />
+              </div>
 
-    <p className="text-xs mt-1">
-  {balance > 0 ? "DEBT (Owing)" : "Fully Paid"}
-</p>
-  </div>
-</div>
-           <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-  Select payment method:
-</p>
+              {/* Balance */}
+              <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl">
+                <p className="text-sm text-slate-500">
+                  Balance
+                </p>
 
-<div className="grid grid-cols-2 gap-3 mb-6">
-  <button
-    disabled={processingPayment}
-    onClick={() => completeCheckout("Cash")}
-    className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {processingPayment ? "Processing..." : "💵 Cash"}
-  </button>
+                <p
+                  className={`text-xl font-bold ${
+                    balance >= 0
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {formatMoney(Math.abs(balance))}
+                </p>
 
-  <button
-    disabled={processingPayment}
-    onClick={() => completeCheckout("Card")}
-    className="py-4 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-500 dark:border-blue-700 rounded-xl font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {processingPayment ? "Processing..." : "💳 Card"}
-  </button>
+                <p className="text-xs mt-1">
+                  {balance > 0 ? "DEBT (Owing)" : "Fully Paid"}
+                </p>
+              </div>
+            </div>
 
-  <button
-    disabled={processingPayment}
-    onClick={() => completeCheckout("Transfer")}
-    className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {processingPayment ? "Processing..." : "🏦 Transfer"}
-  </button>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 mt-4">
+              Select payment method:
+            </p>
 
-  <button
-    disabled={processingPayment}
-    onClick={() => completeCheckout("Mobile Money")}
-    className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {processingPayment ? "Processing..." : "📱 Mobile"}
-  </button>
-</div>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button
+                disabled={processingPayment}
+                onClick={() => completeCheckout("Cash")}
+                className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingPayment ? "Processing..." : "💵 Cash"}
+              </button>
 
-<button
-  disabled={processingPayment}
-  onClick={() => setShowCheckout(false)}
-  className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
->
-  {processingPayment ? "Processing Payment..." : "Cancel"}
-</button>
+              <button
+                disabled={processingPayment}
+                onClick={() => completeCheckout("Card")}
+                className="py-4 bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-500 dark:border-blue-700 rounded-xl font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingPayment ? "Processing..." : "💳 Card"}
+              </button>
+
+              <button
+                disabled={processingPayment}
+                onClick={() => completeCheckout("Transfer")}
+                className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingPayment ? "Processing..." : "🏦 Transfer"}
+              </button>
+
+              <button
+                disabled={processingPayment}
+                onClick={() => completeCheckout("Mobile Money")}
+                className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingPayment ? "Processing..." : "📱 Mobile"}
+              </button>
+            </div>
+
+            <button
+              disabled={processingPayment}
+              onClick={() => setShowCheckout(false)}
+              className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {processingPayment ? "Processing Payment..." : "Cancel"}
+            </button>
           </div>
         </div>
       )}
