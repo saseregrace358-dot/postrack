@@ -7,6 +7,8 @@ from sqlalchemy import (
     Float,
     DateTime,
     ForeignKey,
+    Numeric,
+    JSON,
 )
 from sqlalchemy.orm import relationship
 
@@ -34,7 +36,27 @@ class ReturnRecord(Base):
     business_id = Column(String, nullable=False, index=True)
     reason = Column(String, nullable=False)
 
+    # Stored in the business's base currency.
     refund_amount = Column(Float, nullable=False, default=0.0)
+
+    # Currency history for this return.
+    base_currency = Column(String(3), nullable=False, default="NGN")
+
+    currency_at_return = Column(
+        String(3),
+        nullable=False,
+        default="NGN",
+    )
+
+    exchange_rate_at_return = Column(
+        Numeric(20, 10),
+        nullable=False,
+        default=1,
+    )
+
+    # Original refund amounts in the currency used when the return
+    # was recorded, including item-level amounts.
+    original_amounts = Column(JSON, nullable=True)
 
     refund_status = Column(
         String,
@@ -52,7 +74,6 @@ class ReturnRecord(Base):
         default=datetime.utcnow,
     )
 
-    # Link the return record to its returned items.
     items = relationship(
         "ReturnItem",
         back_populates="return_record",
