@@ -1,7 +1,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime, timezone
 import httpx
 
@@ -31,6 +31,21 @@ def get_db():
         db.close()
 
 
+def get_currency_digits(currency: str):
+    return 0 if currency == "JPY" else 2
+
+
+def round_currency(amount, currency: str):
+    precision = Decimal("1").scaleb(
+        -get_currency_digits(currency)
+    )
+
+    return Decimal(str(amount)).quantize(
+        precision,
+        rounding=ROUND_HALF_UP
+    )
+
+
 def fetch_exchange_rate(base_currency: str, target_currency: str):
     """Fetch conversion rate from original currency to active currency."""
 
@@ -48,13 +63,13 @@ def fetch_exchange_rate(base_currency: str, target_currency: str):
         if data.get("result") != "success":
             raise HTTPException(
                 status_code=502,
-                detail="Exchange rate provider could not provide rates"
+                detail="Exchange rate provider could not provide rates."
             )
 
         if data.get("base_code") != base_currency:
             raise HTTPException(
                 status_code=502,
-                detail="Unexpected exchange rate base currency"
+                detail="Unexpected exchange rate base currency."
             )
 
         rate = data.get("rates", {}).get(target_currency)
@@ -62,7 +77,7 @@ def fetch_exchange_rate(base_currency: str, target_currency: str):
         if rate is None:
             raise HTTPException(
                 status_code=400,
-                detail="Exchange rate is unavailable for the selected currency"
+                detail="Exchange rate is unavailable for the selected currency."
             )
 
         rate = Decimal(str(rate))
@@ -70,7 +85,7 @@ def fetch_exchange_rate(base_currency: str, target_currency: str):
         if not rate.is_finite() or rate <= 0:
             raise HTTPException(
                 status_code=502,
-                detail="Invalid exchange rate received"
+                detail="Invalid exchange rate received."
             )
 
         updated_timestamp = data.get("time_last_update_unix")
@@ -96,26 +111,78 @@ def fetch_exchange_rate(base_currency: str, target_currency: str):
         )
 
 
-@router.get("")
-def get_settings(
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)
-):
+def get_existing_settings(db: Session, business_id: str):
     settings = (
         db.query(BusinessSettings)
         .filter(
-            BusinessSettings.business_id == user["business_id"]
+            BusinessSettings.business_id == business_id
         )
         .first()
     )
 
     if not settings:
-        settings = BusinessSettings(
-            business_id=user["business_id"]
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Business currency settings are missing. "
+                "Please configure your business currency before continuing."
+            )
         )
-        db.add(settings)
-        db.commit()
-        db.refresh(settings)
+
+    return settings
+
+
+def validate_settings(settings: BusinessSettings):
+    base_currency = str(settings.base_currency or "").strip().upper()
+    active_currency = str(settings.currency or "").strip().upper()
+
+    if base_currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=409,
+            detail="The business base currency is invalid."
+        )
+
+    if active_currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=409,
+            detail="The active business currency is invalid."
+        )
+
+    try:
+        rate = Decimal(str(settings.exchange_rate))
+
+    except (InvalidOperation, TypeError, ValueError):
+        raise HTTPException(
+            status_code=409,
+            detail="The business exchange rate is invalid."
+        )
+
+    if not rate.is_finite() or rate <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="The business exchange rate must be greater than zero."
+        )
+
+    if base_currency == active_currency and rate != Decimal("1"):
+        raise HTTPException(
+            status_code=409,
+            detail="The exchange rate must be 1 when both currencies match."
+        )
+
+    return base_currency, active_currency, rate
+
+
+@router.get("")
+def get_settings(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    settings = get_existing_settings(
+        db,
+        user["business_id"]
+    )
+
+    validate_settings(settings)
 
     return settings
 
@@ -126,54 +193,83 @@ def save_settings(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    settings = (
-        db.query(BusinessSettings)
-        .filter(
-            BusinessSettings.business_id == user["business_id"]
-        )
-        .first()
+    settings = get_existing_settings(
+        db,
+        user["business_id"]
     )
 
-    if not settings:
-        settings = BusinessSettings(
-            business_id=user["business_id"]
+    base_currency, old_currency, old_rate = validate_settings(settings)
+
+    # Validate tax and debt values.
+    try:
+        tax_rate = Decimal(str(payload.tax_rate))
+        debt_threshold = Decimal(str(payload.debt_threshold))
+
+        if (
+            not tax_rate.is_finite()
+            or not debt_threshold.is_finite()
+            or tax_rate < 0
+            or debt_threshold < 0
+        ):
+            raise ValueError
+
+    except (InvalidOperation, TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Tax rate and debt threshold must be valid non-negative numbers."
         )
-        db.add(settings)
-        db.flush()
 
-    # Keep the original currency unchanged.
-    base_currency = settings.base_currency
+    selected_currency = old_currency
 
-    # Only change the active currency when one is supplied.
     if payload.currency is not None:
         selected_currency = payload.currency.strip().upper()
 
         if selected_currency not in SUPPORTED_CURRENCIES:
             raise HTTPException(
                 status_code=400,
-                detail="Unsupported currency selected"
+                detail="Unsupported currency selected."
             )
 
-        if base_currency not in SUPPORTED_CURRENCIES:
-            raise HTTPException(
-                status_code=400,
-                detail="Business original currency is unsupported"
-            )
+    # Preserve the existing debt threshold's value when changing currency.
+    if selected_currency != old_currency:
 
-        if selected_currency != settings.currency:
-            rate, updated_at = fetch_exchange_rate(
-                base_currency,
+        # Convert the existing threshold back to base currency.
+        threshold_in_base = (
+            Decimal(str(settings.debt_threshold or 0)) / old_rate
+        )
+
+        # Get the new base-to-active exchange rate.
+        new_rate, updated_at = fetch_exchange_rate(
+            base_currency,
+            selected_currency
+        )
+
+        # Convert the threshold into the newly selected currency.
+        new_threshold = threshold_in_base * new_rate
+
+        settings.currency = selected_currency
+        settings.exchange_rate = new_rate
+        settings.exchange_rate_updated_at = updated_at
+
+        settings.debt_threshold = float(
+            round_currency(
+                new_threshold,
                 selected_currency
             )
+        )
 
-            settings.currency = selected_currency
-            settings.exchange_rate = rate
-            settings.exchange_rate_updated_at = updated_at
+    else:
+        # No currency change: the submitted threshold is already
+        # expressed in the current active currency.
+        settings.debt_threshold = float(
+            round_currency(
+                debt_threshold,
+                old_currency
+            )
+        )
 
-    # Preserve existing tax settings functionality.
     settings.tax_enabled = payload.tax_enabled
-    settings.tax_rate = payload.tax_rate
-    settings.debt_threshold = payload.debt_threshold
+    settings.tax_rate = float(tax_rate)
 
     try:
         db.commit()
@@ -183,7 +279,7 @@ def save_settings(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail="Unable to save business settings"
+            detail="Unable to save business settings."
         )
 
     return settings

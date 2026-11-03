@@ -35,6 +35,7 @@ def get_db():
 # CURRENCY HELPERS
 # ==========================================
 
+
 def get_currency_settings(db: Session, business_id: str):
     settings = (
         db.query(BusinessSettings)
@@ -43,29 +44,55 @@ def get_currency_settings(db: Session, business_id: str):
     )
 
     if not settings:
-        settings = BusinessSettings(
-            business_id=business_id,
-            base_currency="NGN",
-            currency="NGN",
-            exchange_rate=1
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Business currency settings are missing. "
+                "Please configure your business currency in Settings."
+            )
         )
-        db.add(settings)
-        db.commit()
-        db.refresh(settings)
+
+    base_currency = str(settings.base_currency or "").strip().upper()
+    active_currency = str(settings.currency or "").strip().upper()
+
+    if (
+        len(base_currency) != 3
+        or not base_currency.isalpha()
+        or len(active_currency) != 3
+        or not active_currency.isalpha()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The business currency configuration is invalid."
+        )
 
     try:
         rate = Decimal(str(settings.exchange_rate))
+
     except (InvalidOperation, TypeError, ValueError):
         raise HTTPException(
-            status_code=500,
-            detail="Invalid business exchange rate."
+            status_code=409,
+            detail="The business exchange rate is invalid."
         )
 
     if not rate.is_finite() or rate <= 0:
         raise HTTPException(
-            status_code=500,
-            detail="Business exchange rate must be greater than zero."
+            status_code=409,
+            detail="The business exchange rate must be greater than zero."
         )
+
+    if base_currency == active_currency and rate != Decimal("1"):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The exchange rate must be 1 when the base currency "
+                "and active currency are the same."
+            )
+        )
+
+    # Return normalized currency codes for all calculations.
+    settings.base_currency = base_currency
+    settings.currency = active_currency
 
     return settings, rate
 

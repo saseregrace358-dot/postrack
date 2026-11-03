@@ -37,33 +37,53 @@ def get_currency_settings(db: Session, business_id: str):
         .first()
     )
 
-    # Create default settings for older businesses
-    # that do not yet have a settings record.
+    # Never create currency settings automatically.
+    # The business must have selected its currency.
     if not settings:
-        settings = BusinessSettings(
-            business_id=business_id,
-            base_currency="NGN",
-            currency="NGN",
-            exchange_rate=1,
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Business currency settings are missing. "
+                "Please configure your business currency in Settings."
+            ),
         )
 
-        db.add(settings)
-        db.commit()
-        db.refresh(settings)
+    base_currency = str(settings.base_currency or "").strip().upper()
+    active_currency = str(settings.currency or "").strip().upper()
+
+    if (
+        len(base_currency) != 3
+        or not base_currency.isalpha()
+        or len(active_currency) != 3
+        or not active_currency.isalpha()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The business currency configuration is invalid.",
+        )
 
     try:
         rate = Decimal(str(settings.exchange_rate))
 
     except (InvalidOperation, TypeError, ValueError):
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail="The business exchange rate is invalid.",
         )
 
     if not rate.is_finite() or rate <= 0:
         raise HTTPException(
-            status_code=500,
+            status_code=409,
             detail="The business exchange rate must be greater than zero.",
+        )
+
+    if base_currency == active_currency and rate != Decimal("1"):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The exchange rate must be 1 when the base currency "
+                "and active currency are the same."
+            ),
         )
 
     return settings, rate
@@ -115,14 +135,14 @@ def to_active_currency(amount: float, exchange_rate: Decimal) -> float:
 # FORMAT PRODUCT RESPONSE
 # =========================
 def product_to_response(product: Product, exchange_rate: Decimal):
-    # Build a response without changing the SQLAlchemy object.
+    # Do not modify the SQLAlchemy object.
     result = {
         column.key: getattr(product, column.key)
         for column in Product.__table__.columns
     }
 
-    # Database values remain in base currency.
-    # Only the returned response uses active currency.
+    # Stored database values remain in base currency.
+    # Only the response values are converted.
     result["cost"] = to_active_currency(
         product.cost,
         exchange_rate,
@@ -239,8 +259,8 @@ def create_product(
 
     _, exchange_rate = get_currency_settings(db, business_id)
 
-    # Convert entered active-currency amounts
-    # back to the original business currency.
+    # Frontend supplies active-currency amounts.
+    # Database stores base-currency amounts.
     base_cost = to_base_currency(product.cost, exchange_rate)
     base_price = to_base_currency(product.price, exchange_rate)
 
@@ -255,8 +275,7 @@ def create_product(
         .first()
     )
 
-    # Existing products receive additional stock
-    # without consuming another product slot.
+    # Existing products receive additional stock.
     if existing:
         existing.stock += product.stock
         existing.cost = base_cost
@@ -270,7 +289,6 @@ def create_product(
 
         return product_to_response(existing, exchange_rate)
 
-    # Check subscription only when creating a new product.
     check_product_limit(db, business_id)
 
     new_product = Product(
@@ -354,7 +372,6 @@ def update_product(
 
     update_data = updated.model_dump(exclude_unset=True)
 
-    # Convert only monetary fields supplied by the frontend.
     if "cost" in update_data and update_data["cost"] is not None:
         update_data["cost"] = to_base_currency(
             update_data["cost"],
