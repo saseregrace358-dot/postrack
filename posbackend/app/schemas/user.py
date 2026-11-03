@@ -6,8 +6,10 @@ class UserRegister(BaseModel):
     email: str
     password: str
     business_name: str
+    currency: str
     terms_accepted: bool
-    privacy_policy_accepted: bool    
+    privacy_policy_accepted: bool
+        
 
 
 class UserLogin(BaseModel):

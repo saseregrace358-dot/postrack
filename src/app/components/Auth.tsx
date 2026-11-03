@@ -103,6 +103,7 @@ const handleResetPassword = async () => {
   email: "",
   password: "",
   business_name: "",
+  currency: "",
 });
   const [loading, setLoading] = useState(false);
 
@@ -173,6 +174,7 @@ localStorage.setItem("role", "employee");
         email: formData.email,
         password: formData.password,
         business_name: formData.business_name,
+        currency: formData.currency,
         terms_accepted: termsAccepted,
         privacy_policy_accepted: privacyAccepted,
       });
@@ -372,7 +374,47 @@ const handleForgotPassword = async () => {
   </div>
  )}
             </div>
+{!isLogin && (
+  <div>
+    <label className="block text-sm font-medium text-slate-700 mb-2">
+      Business Currency
+    </label>
 
+    <select
+      value={formData.currency}
+      onChange={(e) =>
+        setFormData({
+          ...formData,
+          currency: e.target.value,
+        })
+      }
+      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 bg-white"
+      required
+    >
+      <option value="" disabled>
+  Select your business currency
+      </option>
+      <option value="NGN">Nigerian Naira (₦)</option>
+      
+      <option value="USD">US Dollar ($)</option>
+      <option value="GBP">British Pound (£)</option>
+      <option value="EUR">Euro (€)</option>
+      <option value="CAD">Canadian Dollar (C$)</option>
+      <option value="AUD">Australian Dollar (A$)</option>
+      <option value="GHS">Ghanaian Cedi (GH₵)</option>
+      <option value="KES">Kenyan Shilling (KSh)</option>
+      <option value="ZAR">South African Rand (R)</option>
+      <option value="INR">Indian Rupee (₹)</option>
+      <option value="JPY">Japanese Yen (¥)</option>
+      <option value="CHF">Swiss Franc (CHF)</option>
+    </select>
+
+    <p className="text-xs text-slate-500 mt-1">
+      This will be your business's original currency.
+      You can change it later in Settings.
+    </p>
+  </div>
+)}
             {isLogin && (
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">

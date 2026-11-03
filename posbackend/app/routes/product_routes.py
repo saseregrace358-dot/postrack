@@ -1,5 +1,6 @@
 
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,10 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.product import Product
+from app.models.business_settings import BusinessSettings
 from app.models.business_subscription import BusinessSubscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.schemas.product import ProductOut, ProductUpdate, ProductCreate
 from app.auth.dependencies import get_current_user
+
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -22,6 +25,115 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class StockUpdate(BaseModel):
     stock: int
+
+
+# =========================
+# GET BUSINESS CURRENCY SETTINGS
+# =========================
+def get_currency_settings(db: Session, business_id: str):
+    settings = (
+        db.query(BusinessSettings)
+        .filter(BusinessSettings.business_id == business_id)
+        .first()
+    )
+
+    # Create default settings for older businesses
+    # that do not yet have a settings record.
+    if not settings:
+        settings = BusinessSettings(
+            business_id=business_id,
+            base_currency="NGN",
+            currency="NGN",
+            exchange_rate=1,
+        )
+
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+
+    try:
+        rate = Decimal(str(settings.exchange_rate))
+
+    except (InvalidOperation, TypeError, ValueError):
+        raise HTTPException(
+            status_code=500,
+            detail="The business exchange rate is invalid.",
+        )
+
+    if not rate.is_finite() or rate <= 0:
+        raise HTTPException(
+            status_code=500,
+            detail="The business exchange rate must be greater than zero.",
+        )
+
+    return settings, rate
+
+
+# =========================
+# CONVERT ACTIVE CURRENCY TO BASE CURRENCY
+# =========================
+def to_base_currency(amount: float, exchange_rate: Decimal) -> float:
+    try:
+        value = Decimal(str(amount))
+
+        if not value.is_finite():
+            raise ValueError
+
+        converted = value / exchange_rate
+
+        return float(converted)
+
+    except (InvalidOperation, TypeError, ValueError, ArithmeticError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid monetary amount supplied.",
+        )
+
+
+# =========================
+# CONVERT BASE CURRENCY TO ACTIVE CURRENCY
+# =========================
+def to_active_currency(amount: float, exchange_rate: Decimal) -> float:
+    try:
+        value = Decimal(str(amount))
+
+        if not value.is_finite():
+            raise ValueError
+
+        converted = value * exchange_rate
+
+        return float(converted)
+
+    except (InvalidOperation, TypeError, ValueError, ArithmeticError):
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to convert product amount.",
+        )
+
+
+# =========================
+# FORMAT PRODUCT RESPONSE
+# =========================
+def product_to_response(product: Product, exchange_rate: Decimal):
+    # Build a response without changing the SQLAlchemy object.
+    result = {
+        column.key: getattr(product, column.key)
+        for column in Product.__table__.columns
+    }
+
+    # Database values remain in base currency.
+    # Only the returned response uses active currency.
+    result["cost"] = to_active_currency(
+        product.cost,
+        exchange_rate,
+    )
+
+    result["price"] = to_active_currency(
+        product.price,
+        exchange_rate,
+    )
+
+    return result
 
 
 # =========================
@@ -45,6 +157,7 @@ def check_product_limit(db: Session, business_id: str):
     if not subscription.expires_at or subscription.expires_at <= now:
         subscription.status = "expired"
         db.commit()
+
         raise HTTPException(
             status_code=403,
             detail="Your subscription has expired. Please renew to add products.",
@@ -69,10 +182,7 @@ def check_product_limit(db: Session, business_id: str):
     )
 
     # -1 means unlimited.
-    if (
-        plan.max_products != -1
-        and product_count >= plan.max_products
-    ):
+    if plan.max_products != -1 and product_count >= plan.max_products:
         raise HTTPException(
             status_code=403,
             detail=(
@@ -92,13 +202,22 @@ def get_products(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return (
+    business_id = user["business_id"]
+
+    _, exchange_rate = get_currency_settings(db, business_id)
+
+    products = (
         db.query(Product)
-        .filter(Product.business_id == user["business_id"])
+        .filter(Product.business_id == business_id)
         .offset(skip)
         .limit(limit)
         .all()
     )
+
+    return [
+        product_to_response(product, exchange_rate)
+        for product in products
+    ]
 
 
 # =========================
@@ -118,6 +237,13 @@ def create_product(
             detail="Your account is not linked to a business.",
         )
 
+    _, exchange_rate = get_currency_settings(db, business_id)
+
+    # Convert entered active-currency amounts
+    # back to the original business currency.
+    base_cost = to_base_currency(product.cost, exchange_rate)
+    base_price = to_base_currency(product.price, exchange_rate)
+
     normalized_name = product.name.strip().lower()
 
     existing = (
@@ -129,27 +255,28 @@ def create_product(
         .first()
     )
 
-    # Existing products can receive additional stock without
-    # consuming another product slot.
+    # Existing products receive additional stock
+    # without consuming another product slot.
     if existing:
         existing.stock += product.stock
-        existing.cost = product.cost
-        existing.price = product.price
+        existing.cost = base_cost
+        existing.price = base_price
         existing.category = product.category
         existing.barcode = product.barcode
         existing.image = product.image
 
         db.commit()
         db.refresh(existing)
-        return existing
 
-    # Check the subscription only when creating a new product.
+        return product_to_response(existing, exchange_rate)
+
+    # Check subscription only when creating a new product.
     check_product_limit(db, business_id)
 
     new_product = Product(
         name=product.name,
-        cost=product.cost,
-        price=product.price,
+        cost=base_cost,
+        price=base_price,
         category=product.category,
         stock=product.stock,
         barcode=product.barcode,
@@ -163,7 +290,7 @@ def create_product(
     db.commit()
     db.refresh(new_product)
 
-    return new_product
+    return product_to_response(new_product, exchange_rate)
 
 
 # =========================
@@ -206,11 +333,13 @@ def update_product(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user["business_id"]
+
     product = (
         db.query(Product)
         .filter(
             Product.id == product_id,
-            Product.business_id == user["business_id"],
+            Product.business_id == business_id,
         )
         .first()
     )
@@ -221,10 +350,27 @@ def update_product(
             detail="Product not found",
         )
 
-    for key, value in updated.model_dump(exclude_unset=True).items():
+    _, exchange_rate = get_currency_settings(db, business_id)
+
+    update_data = updated.model_dump(exclude_unset=True)
+
+    # Convert only monetary fields supplied by the frontend.
+    if "cost" in update_data and update_data["cost"] is not None:
+        update_data["cost"] = to_base_currency(
+            update_data["cost"],
+            exchange_rate,
+        )
+
+    if "price" in update_data and update_data["price"] is not None:
+        update_data["price"] = to_base_currency(
+            update_data["price"],
+            exchange_rate,
+        )
+
+    for key, value in update_data.items():
         setattr(product, key, value)
 
     db.commit()
     db.refresh(product)
 
-    return product
+    return product_to_response(product, exchange_rate)

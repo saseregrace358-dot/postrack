@@ -18,7 +18,7 @@ class SaleOut(BaseModel):
     id: int
     order_id: str
 
-    items: list = []
+    items: list = Field(default_factory=list)
 
     subtotal: float
     tax: float
@@ -28,6 +28,11 @@ class SaleOut(BaseModel):
     balance: float
     paymentMethod: str
     status: str
+
+    base_currency: Optional[str] = None
+    currency_at_sale: Optional[str] = None
+    exchange_rate_at_sale: Optional[float] = None
+    original_amounts: Optional[dict] = None
 
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None

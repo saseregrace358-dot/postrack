@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from app.utils.email_service import send_welcome_email
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.business_subscription import BusinessSubscription
+from app.models.business_settings import BusinessSettings
 import socket
 import random
 import traceback
@@ -41,8 +42,10 @@ class UserRegister(BaseModel):
     email: str
     password: str
     business_name: str
+    currency: str 
     terms_accepted: bool
     privacy_policy_accepted: bool
+    
 
 class UserLogin(BaseModel):
     email: str
@@ -65,10 +68,6 @@ class ResetPasswordRequest(BaseModel):
 # REGISTER
 # =====================
 
-# =====================
-# REGISTER
-# =====================
-
 
 @router.post("/register")
 async def register(
@@ -76,14 +75,28 @@ async def register(
     db: Session = Depends(get_db)
 ):
 
-    # Check policy acceptance
+    # 1. Check policy acceptance
     if not user.terms_accepted or not user.privacy_policy_accepted:
         raise HTTPException(
             status_code=400,
             detail="You must accept the Terms and Conditions and Privacy Policy"
         )
 
-    # 1. Check if email already exists
+    # 2. Validate selected currency
+    supported_currencies = {
+        "NGN", "USD", "GBP", "EUR", "CAD", "AUD",
+        "GHS", "KES", "ZAR", "INR", "JPY", "CHF"
+    }
+
+    selected_currency = user.currency.strip().upper()
+
+    if selected_currency not in supported_currencies:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported currency selected"
+        )
+
+    # 3. Check whether email already exists
     existing = db.query(User).filter(
         User.email == user.email
     ).first()
@@ -94,7 +107,7 @@ async def register(
             detail="User already exists"
         )
 
-    # 2. Find the Professional plan
+    # 4. Find the Professional plan
     professional_plan = (
         db.query(SubscriptionPlan)
         .filter(
@@ -110,19 +123,19 @@ async def register(
             detail="Professional plan is unavailable"
         )
 
-    # 3. Generate business ID
+    # 5. Generate business ID
     business_id = generate_business_id(user.business_name)
 
-    # 4. Hash password
+    # 6. Hash password
     hashed = hash_password(user.password)
 
-    # 5. Record registration time
+    # 7. Record registration time
     now = datetime.utcnow()
 
-    # 6. Calculate trial expiry
+    # 8. Calculate trial expiry
     trial_expiry = now + timedelta(days=14)
 
-    # 7. Create owner account
+    # 9. Create owner account
     new_user = User(
         name=user.name,
         email=user.email,
@@ -136,7 +149,7 @@ async def register(
         privacy_policy_version="1.0"
     )
 
-    # 8. Create Professional trial subscription
+    # 10. Create Professional trial subscription
     subscription = BusinessSubscription(
         business_id=business_id,
         plan_id=professional_plan.id,
@@ -145,25 +158,38 @@ async def register(
         expires_at=trial_expiry
     )
 
+    # 11. Create business settings with selected currency
+    business_settings = BusinessSettings(
+        business_id=business_id,
+        base_currency=selected_currency,
+        currency=selected_currency,
+        exchange_rate=1,
+        exchange_rate_updated_at=None
+    )
+
+    # 12. Save all three records in one transaction
     try:
         db.add(new_user)
         db.add(subscription)
+        db.add(business_settings)
 
-        # Save both records together
         db.commit()
 
         db.refresh(new_user)
         db.refresh(subscription)
+        db.refresh(business_settings)
 
     except Exception:
         db.rollback()
+
+        traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
             detail="Unable to create your account"
         )
 
-    # 9. Send welcome email
+    # 13. Send welcome email
     try:
         await send_welcome_email(
             user.email,
@@ -175,10 +201,11 @@ async def register(
     except Exception:
         traceback.print_exc()
 
-    # 10. Return registration details
+    # 14. Return registration details
     return {
         "message": "Account created successfully",
         "business_id": business_id,
+        "currency": selected_currency,
         "trial": {
             "plan": professional_plan.name,
             "status": subscription.status,
