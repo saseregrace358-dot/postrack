@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -162,16 +162,45 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const requestIdRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
+  const lastRefreshRef = useRef(0);
+
   // ================= LOAD DASHBOARD =================
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (force = false) => {
+    // Avoid unnecessary repeated refreshes.
+    const now = Date.now();
+
+    if (!force && now - lastRefreshRef.current < 1000) {
+      return;
+    }
+
+    lastRefreshRef.current = now;
+
+    // Cancel any older dashboard request.
+    controllerRef.current?.abort();
+
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    const currentRequestId = ++requestIdRef.current;
+
     setLoading(true);
     setError("");
 
     try {
       const response = await api.get("/dashboard/summary", {
-        params: { selected_date: activeDate },
+        params: {
+          selected_date: activeDate,
+        },
+        signal: controller.signal,
       });
+
+      // Ignore responses from outdated requests.
+      if (currentRequestId !== requestIdRef.current) {
+        return;
+      }
 
       const data = response.data as DashboardSummary;
 
@@ -216,19 +245,39 @@ export function Dashboard() {
           ? data.topProducts
           : [],
       });
-    } catch (err) {
+    } catch (err: unknown) {
+      // Cancelled requests are expected when dates change.
+      if (
+        controller.signal.aborted ||
+        (err instanceof Error && err.name === "CanceledError")
+      ) {
+        return;
+      }
+
+      if (currentRequestId !== requestIdRef.current) {
+        return;
+      }
+
       console.error("Unable to load dashboard:", err);
 
       setError(
         "Unable to load dashboard data or business currency. Check your connection and try again."
       );
     } finally {
-      setLoading(false);
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [activeDate]);
 
+  // ================= INITIAL LOAD / DATE CHANGE =================
+
   useEffect(() => {
-    void loadDashboard();
+    void loadDashboard(true);
+
+    return () => {
+      controllerRef.current?.abort();
+    };
   }, [loadDashboard]);
 
   // ================= AUTO REFRESH =================
@@ -387,7 +436,7 @@ export function Dashboard() {
 
           <button
             type="button"
-            onClick={() => void loadDashboard()}
+            onClick={() => void loadDashboard(true)}
             className="self-start rounded-lg border border-red-300 px-3 py-2 font-semibold hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/50 sm:self-auto"
           >
             Retry

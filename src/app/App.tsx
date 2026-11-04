@@ -1,47 +1,77 @@
-
 import { useState, useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
+
 import { router } from "./routes";
 import { Splash } from "./components/Splash";
 import { Auth } from "./components/Auth";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AuthContext } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
+import { BusinessSettingsProvider } from "./context/BusinessSettingsContext";
 import { Toaster } from "react-hot-toast";
 import { InstallPrompt } from "./components/InstallPrompt";
-import PaymentSuccess from "./components/PaymentSuccess";
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-  const [token, setToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    const storedToken =
+  // Restore the existing session immediately.
+  const [token, setToken] = useState<string | null>(() => {
+    return (
       localStorage.getItem("token") ||
-      sessionStorage.getItem("token");
+      sessionStorage.getItem("token")
+    );
+  });
 
-    setToken(storedToken);
+  // Splash is displayed only during initial application startup.
+  const [showSplash, setShowSplash] = useState(true);
 
+  const publicPages = [
+    "/payment-success",
+    "/terms",
+    "/privacy",
+  ];
+
+  // Clear authentication information from both storage locations.
+  const clearAuthData = () => {
+    const authKeys = [
+      "token",
+      "user",
+      "role",
+      "permissions",
+    ];
+
+    authKeys.forEach((key) => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
+  };
+
+  // Return the application to the login page.
+  const returnToLogin = () => {
+    clearAuthData();
+
+    window.history.replaceState({}, "", "/");
+
+    setToken(null);
+    setShowSplash(false);
+  };
+
+  // Listen for expired sessions.
+  useEffect(() => {
     const handleSessionExpired = () => {
-      localStorage.removeItem("token");
-      sessionStorage.removeItem("token");
-
-      localStorage.removeItem("user");
-      sessionStorage.removeItem("user");
-
-      localStorage.removeItem("role");
-      sessionStorage.removeItem("role");
-
-      localStorage.removeItem("permissions");
-      sessionStorage.removeItem("permissions");
-
-      setToken(null);
+      returnToLogin();
     };
 
     window.addEventListener(
       "session-expired",
       handleSessionExpired
     );
+
+    const isPublicPage = publicPages.includes(
+      window.location.pathname
+    );
+
+    if (!token && !isPublicPage) {
+      window.history.replaceState({}, "", "/");
+    }
 
     return () => {
       window.removeEventListener(
@@ -51,44 +81,32 @@ export default function App() {
     };
   }, []);
 
+  // Called after successful login.
   const handleLogin = (newToken: string) => {
     setToken(newToken);
+    setShowSplash(false);
   };
 
+  // Called when the user logs out.
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    sessionStorage.removeItem("token");
-
-    localStorage.removeItem("user");
-    sessionStorage.removeItem("user");
-
-    localStorage.removeItem("role");
-    sessionStorage.removeItem("role");
-
-    localStorage.removeItem("permissions");
-    sessionStorage.removeItem("permissions");
-
-    setToken(null);
+    returnToLogin();
   };
 
+  // Initial splash screen only.
   if (showSplash) {
     return (
-      <Splash onComplete={() => setShowSplash(false)} />
+      <Splash
+        onComplete={() => setShowSplash(false)}
+      />
     );
   }
-
-  if (!token) {
-  const publicPages = [
-    "/payment-success",
-    "/terms",
-    "/privacy",
-  ];
 
   const isPublicPage = publicPages.includes(
     window.location.pathname
   );
 
-  if (!isPublicPage) {
+  // Show login when there is no token and the page is protected.
+  if (!token && !isPublicPage) {
     return (
       <>
         <InstallPrompt />
@@ -97,45 +115,46 @@ export default function App() {
       </>
     );
   }
-}
 
   return (
-    <AuthContext.Provider value={{ handleLogout }}>
-      <ThemeProvider>
-        <NotificationProvider>
-          <Toaster
-            position="top-center"
-            reverseOrder={false}
-            containerStyle={{
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-            }}
-            toastOptions={{
-              duration: 2500,
+  <AuthContext.Provider value={{ handleLogout }}>
+    <ThemeProvider>
+      <NotificationProvider>
+        <Toaster
+          position="top-center"
+          reverseOrder={false}
+          containerStyle={{
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+          toastOptions={{
+            duration: 2500,
+            style: {
+              borderRadius: "12px",
+              padding: "16px",
+              fontSize: "15px",
+            },
+            success: {
               style: {
-                borderRadius: "12px",
-                padding: "16px",
-                fontSize: "15px",
+                background: "#16a34a",
+                color: "#fff",
               },
-              success: {
-                style: {
-                  background: "#16a34a",
-                  color: "#fff",
-                },
+            },
+            error: {
+              style: {
+                background: "#dc2626",
+                color: "#fff",
               },
-              error: {
-                style: {
-                  background: "#dc2626",
-                  color: "#fff",
-                },
-              },
-            }}
-          />
+            },
+          }}
+        />
 
+        <BusinessSettingsProvider>
           <RouterProvider router={router} />
-        </NotificationProvider>
-      </ThemeProvider>
-    </AuthContext.Provider>
-  );
+        </BusinessSettingsProvider>
+      </NotificationProvider>
+    </ThemeProvider>
+  </AuthContext.Provider>
+);
 }

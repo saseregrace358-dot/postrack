@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   Search,
@@ -10,7 +11,8 @@ import {
 
 import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
-import { getBusinessSettings } from "../../api/settings";
+import { useBusinessSettings } from "../context/BusinessSettingsContext";
+
 import toast from "react-hot-toast";
 
 type Product = {
@@ -26,24 +28,23 @@ type CartItem = Product & {
   quantity: number;
 };
 
-const SUPPORTED_CURRENCIES = [
-  "NGN",
-  "USD",
-  "GBP",
-  "EUR",
-  "CAD",
-  "AUD",
-  "GHS",
-  "KES",
-  "ZAR",
-  "INR",
-  "JPY",
-  "CHF",
-];
-
 export function POS() {
+  const {
+    settings,
+    currency: activeCurrency,
+    taxEnabled,
+    taxRate,
+    debtThreshold,
+    loading: currencyLoading,
+    error: currencyError,
+    refreshSettings,
+  } = useBusinessSettings();
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
@@ -54,81 +55,76 @@ export function POS() {
   const [amountPaid, setAmountPaid] = useState("");
   const paidAmount = Number(amountPaid) || 0;
 
-  const [taxEnabled, setTaxEnabled] = useState(false);
-  const [taxRate, setTaxRate] = useState(0);
-  const [debtThreshold, setDebtThreshold] = useState(0);
-
-  const [activeCurrency, setActiveCurrency] = useState("");
-  const [currencyLoading, setCurrencyLoading] = useState(true);
-  const [currencyError, setCurrencyError] = useState(false);
-
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Load products and business settings
+  // Load products independently from business settings.
+  // POS can display products while the settings context loads.
+  const loadProducts = async () => {
+    try {
+      setProductsError(false);
+
+      const response = await getProducts();
+
+      setProducts(response.data);
+    } catch (error) {
+      console.error("Failed to load products:", error);
+
+      setProductsError(true);
+      toast.error("Unable to load products");
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [productResult, settingsResult] = await Promise.allSettled([
-          getProducts(),
-          getBusinessSettings(),
-        ]);
-
-        if (productResult.status === "fulfilled") {
-          setProducts(productResult.value.data);
-        } else {
-          console.error("Failed to load products:", productResult.reason);
-          toast.error("Unable to load products");
-        }
-
-        if (settingsResult.status === "fulfilled") {
-          const settings = settingsResult.value.data;
-
-          setTaxEnabled(Boolean(settings.tax_enabled));
-          setTaxRate(Number(settings.tax_rate));
-          setDebtThreshold(Number(settings.debt_threshold));
-
-          const currency = String(settings.currency ?? "").toUpperCase();
-
-          if (SUPPORTED_CURRENCIES.includes(currency)) {
-            setActiveCurrency(currency);
-            setCurrencyError(false);
-          } else {
-            setActiveCurrency("");
-            setCurrencyError(true);
-          }
-        } else {
-          console.error(
-            "Failed to load business settings:",
-            settingsResult.reason
-          );
-
-          setCurrencyError(true);
-          setActiveCurrency("");
-        }
-      } finally {
-        setCurrencyLoading(false);
-      }
-    };
-
-    fetchData();
+    loadProducts();
   }, []);
 
-  // Format all monetary values using the active business currency
+  // Refresh settings when the currency is changed elsewhere.
+  useEffect(() => {
+    const handleCurrencyUpdated = () => {
+      refreshSettings().catch(() => {
+        // Context exposes the refresh error.
+      });
+    };
+
+    window.addEventListener(
+      "currency-updated",
+      handleCurrencyUpdated
+    );
+
+    return () => {
+      window.removeEventListener(
+        "currency-updated",
+        handleCurrencyUpdated
+      );
+    };
+  }, [refreshSettings]);
+
+  // Format monetary values using the active business currency.
   const formatMoney = (amount: number) => {
     if (!activeCurrency) {
       return "Currency unavailable";
     }
 
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: activeCurrency,
-    }).format(Number(amount) || 0);
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: activeCurrency,
+      }).format(Number(amount) || 0);
+    } catch {
+      return "Currency unavailable";
+    }
   };
 
   const categories = [
     "All",
     ...Array.from(
-      new Set(products.map((product) => product.category).filter(Boolean))
+      new Set(
+        products
+          .map((product) => product.category)
+          .filter(Boolean)
+      )
     ),
   ];
 
@@ -145,53 +141,92 @@ export function POS() {
   });
 
   const addToCart = (product: Product) => {
-    if (!activeCurrency || currencyError || currencyLoading) {
+    if (
+      !settings ||
+      currencyLoading ||
+      currencyError ||
+      !activeCurrency
+    ) {
       toast.error("Business currency is unavailable");
       return;
     }
 
-    const existingItem = cart.find((item) => item.id === product.id);
+    if (product.stock <= 0) {
+      toast.error("This product is out of stock");
+      return;
+    }
+
+    const existingItem = cart.find(
+      (item) => item.id === product.id
+    );
 
     if (existingItem) {
-      setCart(
-        cart.map((item) =>
+      if (existingItem.quantity >= product.stock) {
+        toast.error("Insufficient stock");
+        return;
+      }
+
+      setCart((currentCart) =>
+        currentCart.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
             : item
         )
       );
     } else {
-      setCart([...cart, { ...product, quantity: 1 }]);
+      setCart((currentCart) => [
+        ...currentCart,
+        { ...product, quantity: 1 },
+      ]);
     }
   };
 
   const updateQuantity = (id: number, quantity: number) => {
     if (quantity <= 0) {
-      setCart(cart.filter((item) => item.id !== id));
-    } else {
-      setCart(
-        cart.map((item) =>
-          item.id === id ? { ...item, quantity } : item
-        )
+      setCart((currentCart) =>
+        currentCart.filter((item) => item.id !== id)
       );
+      return;
     }
+
+    const product = products.find((item) => item.id === id);
+
+    if (product && quantity > product.stock) {
+      toast.error("Insufficient stock");
+      return;
+    }
+
+    setCart((currentCart) =>
+      currentCart.map((item) =>
+        item.id === id
+          ? { ...item, quantity }
+          : item
+      )
+    );
   };
 
   const removeFromCart = (id: number) => {
-    setCart(cart.filter((item) => item.id !== id));
+    setCart((currentCart) =>
+      currentCart.filter((item) => item.id !== id)
+    );
   };
 
   const clearCart = () => setCart([]);
 
-  // Sale calculations
+  // Sale calculations use shared business settings.
   const subtotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) =>
+      sum + item.price * item.quantity,
     0
   );
 
-  const tax = taxEnabled
-    ? subtotal * (Number(taxRate) / 100)
-    : 0;
+  const tax =
+    taxEnabled && taxRate !== null
+      ? subtotal * (taxRate / 100)
+      : 0;
 
   const total = subtotal + tax;
   const balance = total - paidAmount;
@@ -202,8 +237,15 @@ export function POS() {
   );
 
   const handleCheckout = () => {
-    if (currencyLoading || currencyError || !activeCurrency) {
-      toast.error("Please check your business currency settings");
+    if (
+      !settings ||
+      currencyLoading ||
+      currencyError ||
+      !activeCurrency
+    ) {
+      toast.error(
+        "Please check your business currency settings"
+      );
       return;
     }
 
@@ -212,14 +254,24 @@ export function POS() {
       return;
     }
 
+    if (debtThreshold === null) {
+      toast.error("Debt threshold is unavailable");
+      return;
+    }
+
     setShowCheckout(true);
   };
 
-  // Complete sale
+  // Complete sale.
   const completeCheckout = async (paymentMethod: string) => {
     if (processingPayment) return;
 
-    if (!activeCurrency || currencyError || currencyLoading) {
+    if (
+      !settings ||
+      !activeCurrency ||
+      currencyError ||
+      currencyLoading
+    ) {
       toast.error("Business currency is unavailable");
       return;
     }
@@ -229,7 +281,12 @@ export function POS() {
       return;
     }
 
-    if (paidAmount < 0) {
+    if (debtThreshold === null) {
+      toast.error("Debt threshold is unavailable.");
+      return;
+    }
+
+    if (!Number.isFinite(paidAmount) || paidAmount < 0) {
       toast.error("Payment amount cannot be negative.");
       return;
     }
@@ -241,7 +298,9 @@ export function POS() {
 
     if (balance > debtThreshold) {
       toast.error(
-        `Debt limit exceeded. Maximum allowed is ${formatMoney(debtThreshold)}`
+        `Debt limit exceeded. Maximum allowed is ${formatMoney(
+          debtThreshold
+        )}`
       );
       return;
     }
@@ -263,11 +322,22 @@ export function POS() {
       const saleRes = await createSaleApi(saleData);
       const createdSale = saleRes.data;
 
-      // Refresh products after successful sale
-      const res = await getProducts();
-      setProducts(res.data);
+      // Refresh product stock after a successful sale.
+      try {
+        const response = await getProducts();
+        setProducts(response.data);
+        setProductsError(false);
+      } catch (error) {
+        console.error(
+          "Sale succeeded, but product refresh failed:",
+          error
+        );
 
-      // Clear cart and checkout
+        toast.error(
+          "Sale completed, but product stock could not be refreshed."
+        );
+      }
+
       setCart([]);
       setAmountPaid("");
       setShowCheckout(false);
@@ -292,13 +362,18 @@ export function POS() {
     } catch (err: any) {
       toast.dismiss(loading);
 
-      const errorMessage = err.response?.data?.detail || "";
+      const errorMessage =
+        err?.response?.data?.detail || "";
 
       if (errorMessage.includes("Insufficient stock")) {
         toast.error("Out of Stock");
-      } else if (errorMessage.includes("Debt limit exceeded")) {
+      } else if (
+        errorMessage.includes("Debt limit exceeded")
+      ) {
         toast.error("Debt limit exceeded");
-      } else if (errorMessage.includes("Payment amount")) {
+      } else if (
+        errorMessage.includes("Payment amount")
+      ) {
         toast.error(errorMessage);
       } else {
         toast.error("Payment Failed");
@@ -313,13 +388,13 @@ export function POS() {
     <div className="space-y-4 pb-4">
 
       {/* Currency loading and error */}
-      {currencyLoading && (
+      {currencyLoading && !settings && (
         <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3 text-sm">
           Loading business currency...
         </div>
       )}
 
-      {!currencyLoading && currencyError && (
+      {!currencyLoading && !settings && currencyError && (
         <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-900/20 p-4 space-y-2">
           <p className="font-semibold text-red-700 dark:text-red-400">
             Business currency unavailable
@@ -329,6 +404,35 @@ export function POS() {
             Check your currency settings before recording sales.
             No default currency has been applied.
           </p>
+
+          <button
+            onClick={() => {
+              refreshSettings().catch(() => {
+                toast.error(
+                  "Unable to refresh business settings"
+                );
+              });
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Product loading error */}
+      {productsError && (
+        <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-900/20 p-4 space-y-2">
+          <p className="text-sm text-red-600 dark:text-red-300">
+            Unable to load products.
+          </p>
+
+          <button
+            onClick={loadProducts}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+          >
+            Retry Products
+          </button>
         </div>
       )}
 
@@ -348,7 +452,7 @@ export function POS() {
 
         <button
           onClick={() => setShowCart(true)}
-          disabled={!activeCurrency || currencyError || currencyLoading}
+          disabled={!settings || currencyLoading || !!currencyError}
           className="relative bg-blue-600 text-white p-3 rounded-xl shadow-lg disabled:opacity-50"
         >
           <ShoppingCart className="size-6" />
@@ -362,7 +466,7 @@ export function POS() {
       </div>
 
       {/* Active currency */}
-      {activeCurrency && !currencyError && (
+      {activeCurrency && (
         <p className="text-xs text-slate-500">
           Active currency: {activeCurrency}
         </p>
@@ -386,28 +490,44 @@ export function POS() {
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-        {filteredProducts.map((product) => (
-          <button
-            key={product.id}
-            onClick={() => addToCart(product)}
-            disabled={!activeCurrency || currencyError || currencyLoading}
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 hover:shadow-md hover:border-blue-500 transition text-left flex flex-col disabled:opacity-50"
-          >
-            <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-3">
-              {product.name}
-            </h3>
+      {productsLoading ? (
+        <div className="text-center py-10 text-slate-500">
+          Loading products...
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {filteredProducts.map((product) => (
+            <button
+              key={product.id}
+              onClick={() => addToCart(product)}
+              disabled={
+                !settings ||
+                currencyLoading ||
+                !!currencyError
+              }
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 hover:shadow-md hover:border-blue-500 transition text-left flex flex-col disabled:opacity-50"
+            >
+              <h3 className="text-xs font-medium text-slate-900 dark:text-white line-clamp-3">
+                {product.name}
+              </h3>
 
-            <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-              {formatMoney(product.price)}
-            </p>
+              <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                {formatMoney(product.price)}
+              </p>
 
-            <p className="text-[10px] text-slate-500">
-              Stock: {product.stock}
+              <p className="text-[10px] text-slate-500">
+                Stock: {product.stock}
+              </p>
+            </button>
+          ))}
+
+          {filteredProducts.length === 0 && (
+            <p className="col-span-full text-center py-8 text-slate-500">
+              No products found.
             </p>
-          </button>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Cart Drawer */}
       {showCart && (
@@ -462,7 +582,10 @@ export function POS() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() =>
-                          updateQuantity(item.id, item.quantity - 1)
+                          updateQuantity(
+                            item.id,
+                            item.quantity - 1
+                          )
                         }
                         className="size-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300"
                       >
@@ -475,7 +598,10 @@ export function POS() {
 
                       <button
                         onClick={() =>
-                          updateQuantity(item.id, item.quantity + 1)
+                          updateQuantity(
+                            item.id,
+                            item.quantity + 1
+                          )
                         }
                         className="size-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300"
                       >
@@ -506,11 +632,6 @@ export function POS() {
                   <div className="flex justify-between">
                     <span>Tax</span>
                     <span>{formatMoney(tax)}</span>
-                  </div>
-
-                  <div className="flex justify-between font-bold">
-                    <span>Total</span>
-                    <span>{formatMoney(total)}</span>
                   </div>
 
                   <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700">
@@ -561,7 +682,6 @@ export function POS() {
             </div>
 
             <div className="mt-4 space-y-3">
-              {/* Amount Paid */}
               <div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
                   Amount Paid ({activeCurrency})
@@ -571,7 +691,9 @@ export function POS() {
                   type="number"
                   min="0"
                   value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
+                  onChange={(e) =>
+                    setAmountPaid(e.target.value)
+                  }
                   className="w-full p-3 border rounded-xl dark:bg-slate-800 dark:border-slate-700"
                   placeholder="Enter amount paid"
                 />
@@ -630,7 +752,9 @@ export function POS() {
 
               <button
                 disabled={processingPayment}
-                onClick={() => completeCheckout("Mobile Money")}
+                onClick={() =>
+                  completeCheckout("Mobile Money")
+                }
                 className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingPayment ? "Processing..." : "📱 Mobile"}
@@ -642,7 +766,9 @@ export function POS() {
               onClick={() => setShowCheckout(false)}
               className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {processingPayment ? "Processing Payment..." : "Cancel"}
+              {processingPayment
+                ? "Processing Payment..."
+                : "Cancel"}
             </button>
           </div>
         </div>

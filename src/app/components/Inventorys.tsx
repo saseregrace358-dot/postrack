@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -14,7 +15,7 @@ import {
   updateProductApi,
 } from "../../api/products";
 
-import { getBusinessSettings } from "../../api/settings";
+import { useBusinessSettings } from "../context/BusinessSettingsContext";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { Metric } from "./ui/Metric";
 import { supabase } from "../../lib/supabase";
@@ -46,22 +47,15 @@ type NewProduct = {
   barcode: string;
 };
 
-const SUPPORTED_CURRENCIES = [
-  "NGN",
-  "USD",
-  "GBP",
-  "EUR",
-  "CAD",
-  "AUD",
-  "GHS",
-  "KES",
-  "ZAR",
-  "INR",
-  "JPY",
-  "CHF",
-];
-
 export function Inventory() {
+  const {
+    settings,
+    currency: activeCurrency,
+    loading: currencyLoading,
+    error: currencySettingsError,
+    refreshSettings,
+  } = useBusinessSettings();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -79,10 +73,9 @@ export function Inventory() {
   const [gallery, setGallery] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [productsError, setProductsError] = useState(false);
 
-  // Business currency
-  const [activeCurrency, setActiveCurrency] = useState("");
-  const [currencyError, setCurrencyError] = useState(false);
+  const currencyError = !settings && !!currencySettingsError;
 
   const [newProduct, setNewProduct] = useState<NewProduct>({
     name: "",
@@ -111,67 +104,55 @@ export function Inventory() {
     "Accessories",
   ];
 
-  // Format money using the active business currency
+  const LOW_STOCK_THRESHOLD = 5;
+
+  // Load products independently from business settings.
+  const loadProducts = useCallback(async () => {
+    try {
+      setProductsError(false);
+
+      const response = await getProducts();
+
+      setProducts(response.data);
+    } catch (error) {
+      console.error("Failed to load products:", error);
+
+      setProductsError(true);
+      toast.error("Unable to load products");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Format money using the shared active business currency.
   const formatMoney = (amount: number) => {
     if (!activeCurrency) {
       return "Currency unavailable";
     }
 
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: activeCurrency,
-    }).format(Number(amount) || 0);
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: activeCurrency,
+      }).format(Number(amount) || 0);
+    } catch {
+      return "Currency unavailable";
+    }
   };
 
-  // Load products and currency settings
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [productResult, settingsResult] = await Promise.allSettled([
-          getProducts(),
-          getBusinessSettings(),
-        ]);
-
-        if (productResult.status === "fulfilled") {
-          setProducts(productResult.value.data);
-        } else {
-          console.error(
-            "Failed to load products:",
-            productResult.reason
-          );
-          toast.error("Unable to load products");
-        }
-
-        if (settingsResult.status === "fulfilled") {
-          const currency = String(
-            settingsResult.value.data.currency ?? ""
-          ).toUpperCase();
-
-          if (SUPPORTED_CURRENCIES.includes(currency)) {
-            setActiveCurrency(currency);
-            setCurrencyError(false);
-          } else {
-            setActiveCurrency("");
-            setCurrencyError(true);
-          }
-        } else {
-          console.error(
-            "Failed to load business currency:",
-            settingsResult.reason
-          );
-
-          setActiveCurrency("");
-          setCurrencyError(true);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const LOW_STOCK_THRESHOLD = 5;
+  // Retry loading business settings.
+  const retrySettings = async () => {
+    try {
+      await refreshSettings();
+      toast.success("Business settings refreshed");
+    } catch {
+      toast.error("Unable to load business settings");
+    }
+  };
 
   // Image upload preview
   const handleImageUpload = (file: File) => {
@@ -208,7 +189,7 @@ export function Inventory() {
           });
         },
         () => {
-          // Ignore scan noise
+          // Ignore scan noise.
         }
       );
     }, 300);
@@ -230,7 +211,12 @@ export function Inventory() {
   const addProduct = async () => {
     if (saving) return;
 
-    if (!activeCurrency || currencyError) {
+    if (
+      !settings ||
+      !activeCurrency ||
+      currencyLoading ||
+      currencyError
+    ) {
       toast.error("Business currency is unavailable");
       return;
     }
@@ -249,6 +235,22 @@ export function Inventory() {
       return;
     }
 
+    const cost = Number(newProduct.cost);
+    const price = Number(newProduct.price);
+    const stock = Number(newProduct.stock);
+
+    if (
+      !Number.isFinite(cost) ||
+      !Number.isFinite(price) ||
+      !Number.isFinite(stock) ||
+      cost < 0 ||
+      price < 0 ||
+      stock < 0
+    ) {
+      toast.error("Enter valid non-negative product values");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -264,28 +266,28 @@ export function Inventory() {
         imageUrl = data.publicUrl;
       }
 
-      const res = await createProduct({
+      const response = await createProduct({
         name: newProduct.name,
-        cost: Number(newProduct.cost),
-        price: Number(newProduct.price),
+        cost,
+        price,
         category: newProduct.category,
-        stock: Number(newProduct.stock),
+        stock,
         barcode: newProduct.barcode,
         image: imageUrl,
       });
 
       setProducts((prev) => {
         const index = prev.findIndex(
-          (product) => product.id === res.data.id
+          (product) => product.id === response.data.id
         );
 
         if (index >= 0) {
           const updated = [...prev];
-          updated[index] = res.data;
+          updated[index] = response.data;
           return updated;
         }
 
-        return [...prev, res.data];
+        return [...prev, response.data];
       });
 
       setNewProduct({
@@ -315,10 +317,31 @@ export function Inventory() {
 
   // Update product
   const handleUpdateProduct = async () => {
-    if (!editProduct) return;
+    if (!editProduct || saving) return;
 
-    if (!activeCurrency || currencyError) {
+    if (
+      !settings ||
+      !activeCurrency ||
+      currencyLoading ||
+      currencyError
+    ) {
       toast.error("Business currency is unavailable");
+      return;
+    }
+
+    const cost = Number(editProduct.cost);
+    const price = Number(editProduct.price);
+    const stock = Number(editProduct.stock);
+
+    if (
+      !Number.isFinite(cost) ||
+      !Number.isFinite(price) ||
+      !Number.isFinite(stock) ||
+      cost < 0 ||
+      price < 0 ||
+      stock < 0
+    ) {
+      toast.error("Enter valid non-negative product values");
       return;
     }
 
@@ -327,16 +350,15 @@ export function Inventory() {
 
       await updateProductApi(editProduct.id, {
         name: editProduct.name,
-        cost: Number(editProduct.cost),
-        price: Number(editProduct.price),
+        cost,
+        price,
         category: editProduct.category,
-        stock: Number(editProduct.stock),
+        stock,
         image: editProduct.image,
         barcode: editProduct.barcode,
       });
 
-      const res = await getProducts();
-      setProducts(res.data);
+      await loadProducts();
 
       setEditProduct(null);
       setShowEditModal(false);
@@ -382,17 +404,59 @@ export function Inventory() {
   return (
     <div className="p-1 space-y-4">
 
+      {/* Currency loading */}
+      {currencyLoading && !settings && (
+        <div className="border border-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Loading business currency...
+          </p>
+        </div>
+      )}
+
       {/* Currency warning */}
       {currencyError && (
-        <div className="border border-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+        <div className="border border-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 space-y-2">
           <p className="text-sm font-medium text-red-700 dark:text-red-400">
             Business currency unavailable
           </p>
 
-          <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+          <p className="text-xs text-red-600 dark:text-red-300">
             Check your business currency settings before adding or
             editing products. No default currency has been applied.
           </p>
+
+          <button
+            onClick={retrySettings}
+            className="px-3 py-2 bg-blue-600 text-white text-xs rounded-lg"
+          >
+            Retry Settings
+          </button>
+        </div>
+      )}
+
+      {/* Settings refresh warning */}
+      {settings && currencySettingsError && (
+        <div className="border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
+          <p className="text-xs text-yellow-700 dark:text-yellow-300">
+            Unable to refresh settings. Previously loaded business
+            settings are still being used.
+          </p>
+        </div>
+      )}
+
+      {/* Product loading error */}
+      {productsError && (
+        <div className="border border-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 space-y-2">
+          <p className="text-sm text-red-700 dark:text-red-400">
+            Unable to load products.
+          </p>
+
+          <button
+            onClick={loadProducts}
+            className="px-3 py-2 bg-blue-600 text-white text-xs rounded-lg"
+          >
+            Retry Products
+          </button>
         </div>
       )}
 
@@ -400,7 +464,12 @@ export function Inventory() {
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <button
           onClick={() => setShowAddModal(true)}
-          disabled={currencyError || !activeCurrency}
+          disabled={
+            !settings ||
+            currencyLoading ||
+            currencyError ||
+            !activeCurrency
+          }
           className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus size={18} />
@@ -570,7 +639,11 @@ export function Inventory() {
                         setEditProduct(product);
                         setShowEditModal(true);
                       }}
-                      disabled={currencyError || !activeCurrency}
+                      disabled={
+                        !settings ||
+                        currencyError ||
+                        !activeCurrency
+                      }
                       className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                       Edit Product
@@ -591,7 +664,7 @@ export function Inventory() {
       </div>
 
       {/* Empty state */}
-      {filteredProducts.length === 0 && (
+      {filteredProducts.length === 0 && !productsError && (
         <div className="text-center py-10">
           <Package className="mx-auto text-gray-400" />
           <p>No products found</p>
@@ -734,9 +807,14 @@ export function Inventory() {
 
               <button
                 onClick={addProduct}
-                disabled={saving || currencyError}
+                disabled={
+                  saving ||
+                  !settings ||
+                  currencyLoading ||
+                  currencyError
+                }
                 className={`px-6 py-2 rounded text-white ${
-                  saving || currencyError
+                  saving || !settings || currencyError
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700"
                 }`}
@@ -878,7 +956,12 @@ export function Inventory() {
 
               <button
                 onClick={handleUpdateProduct}
-                disabled={saving || currencyError}
+                disabled={
+                  saving ||
+                  !settings ||
+                  currencyLoading ||
+                  currencyError
+                }
                 className="px-6 py-2 bg-green-600 text-white rounded disabled:opacity-50"
               >
                 {saving ? "Updating..." : "Update Product"}

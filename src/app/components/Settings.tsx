@@ -1,10 +1,15 @@
+
 import { useState, useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
+import toast from "react-hot-toast";
 
 import { useTheme } from "../context/ThemeContext";
+import { useBusinessSettings } from "../context/BusinessSettingsContext";
 
 import { NotificationSettings } from "./settings/NotificationSettings";
 import StaffManagement from "./settings/StaffManagement";
+import BillingSettings from "./settings/BillingSettings";
+import ReturnItems from "./settings/return";
 
 import {
   exportProductsCsv,
@@ -14,14 +19,7 @@ import {
   exportDashboardPdf,
 } from "../../api/export";
 
-import {
-  getBusinessSettings,
-  saveBusinessSettings,
-} from "../../api/settings";
-
-import toast from "react-hot-toast";
-import BillingSettings from "./settings/BillingSettings";
-import ReturnItems from "./settings/return";
+import { saveBusinessSettings } from "../../api/settings";
 
 const SUPPORTED_CURRENCIES = [
   { code: "NGN", name: "Nigerian Naira" },
@@ -41,21 +39,24 @@ const SUPPORTED_CURRENCIES = [
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
 
+  const {
+    settings,
+    loading: loadingSettings,
+    error: settingsError,
+    refreshSettings,
+  } = useBusinessSettings();
+
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxRate, setTaxRate] = useState("");
   const [debtThreshold, setDebtThreshold] = useState("");
 
   const [savingTax, setSavingTax] = useState(false);
   const [savingDebt, setSavingDebt] = useState(false);
+  const [savingCurrency, setSavingCurrency] = useState(false);
 
   const [baseCurrency, setBaseCurrency] = useState("");
   const [activeCurrency, setActiveCurrency] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
-
-  const [loadingSettings, setLoadingSettings] = useState(true);
-  const [savingCurrency, setSavingCurrency] = useState(false);
-
-  const [currencyError, setCurrencyError] = useState(false);
 
   const [showBilling, setShowBilling] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
@@ -63,8 +64,25 @@ export function Settings() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Synchronize the editable form fields with shared business settings.
+  useEffect(() => {
+    if (!settings) return;
+
+    setTaxEnabled(settings.tax_enabled);
+    setTaxRate(String(settings.tax_rate));
+    setDebtThreshold(String(settings.debt_threshold));
+
+    setBaseCurrency(settings.base_currency);
+    setActiveCurrency(settings.currency);
+    setExchangeRate(String(settings.exchange_rate));
+  }, [settings]);
+
+  const currencyError = !settings && !!settingsError;
+
   const toggleSection = (section: string) => {
-    setExpanded((current) => current === section ? null : section);
+    setExpanded((current) =>
+      current === section ? null : section
+    );
   };
 
   const downloadFile = (blob: Blob, filename: string) => {
@@ -81,52 +99,43 @@ export function Settings() {
     window.URL.revokeObjectURL(url);
   };
 
-  const loadSettings = async () => {
+  const validateSettingsInputs = () => {
+    if (!settings) {
+      toast.error("Business settings are not available yet.");
+      return false;
+    }
+
+    if (
+      taxRate.trim() === "" ||
+      debtThreshold.trim() === "" ||
+      !Number.isFinite(Number(taxRate)) ||
+      !Number.isFinite(Number(debtThreshold)) ||
+      Number(taxRate) < 0 ||
+      Number(debtThreshold) < 0
+    ) {
+      toast.error(
+        "Enter valid tax and debt threshold values."
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  // Retry the initial settings request.
+  const retrySettings = async () => {
     try {
-      setLoadingSettings(true);
-      setCurrencyError(false);
-
-      const res = await getBusinessSettings();
-      const data = res.data;
-
-      setTaxEnabled(Boolean(data.tax_enabled));
-      setTaxRate(String(data.tax_rate ?? ""));
-      setDebtThreshold(String(data.debt_threshold ?? ""));
-
-      const base = String(data.base_currency ?? "").toUpperCase();
-      const active = String(data.currency ?? "").toUpperCase();
-      const rate = String(data.exchange_rate ?? "");
-
-      if (
-        !SUPPORTED_CURRENCIES.some((item) => item.code === base) ||
-        !SUPPORTED_CURRENCIES.some((item) => item.code === active) ||
-        !rate ||
-        !Number.isFinite(Number(rate)) ||
-        Number(rate) <= 0
-      ) {
-        setBaseCurrency("");
-        setActiveCurrency("");
-        setExchangeRate("");
-        setCurrencyError(true);
-      } else {
-        setBaseCurrency(base);
-        setActiveCurrency(active);
-        setExchangeRate(rate);
-      }
-    } catch (error) {
-      console.error("Failed to load business settings:", error);
-      setCurrencyError(true);
+      await refreshSettings();
+      toast.success("Business settings loaded");
+    } catch {
       toast.error("Unable to load business settings");
-    } finally {
-      setLoadingSettings(false);
     }
   };
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
+  // Save tax settings.
   const saveTaxSettings = async () => {
+    if (!validateSettingsInputs()) return;
+
     try {
       setSavingTax(true);
 
@@ -137,15 +146,30 @@ export function Settings() {
       );
 
       toast.success("Tax settings saved");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to save tax settings");
+
+      // Refresh shared settings without treating a refresh failure
+      // as a failed save.
+      try {
+        await refreshSettings();
+      } catch {
+        // The context displays the refresh warning.
+      }
+    } catch (error: any) {
+      console.error("Failed to save tax settings:", error);
+
+      toast.error(
+        error?.response?.data?.detail ||
+        "Failed to save tax settings"
+      );
     } finally {
       setSavingTax(false);
     }
   };
 
+  // Save debt threshold.
   const saveDebtThreshold = async () => {
+    if (!validateSettingsInputs()) return;
+
     try {
       setSavingDebt(true);
 
@@ -156,24 +180,41 @@ export function Settings() {
       );
 
       toast.success("Debt threshold saved");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to save debt threshold");
+
+      try {
+        await refreshSettings();
+      } catch {
+        // The context displays the refresh warning.
+      }
+    } catch (error: any) {
+      console.error("Failed to save debt threshold:", error);
+
+      toast.error(
+        error?.response?.data?.detail ||
+        "Failed to save debt threshold"
+      );
     } finally {
       setSavingDebt(false);
     }
   };
 
+  // Save active display currency.
   const saveCurrencySettings = async () => {
-    if (!activeCurrency) {
-      toast.error("Please select a currency");
+    if (!settings) {
+      toast.error("Business settings are not available.");
       return;
     }
 
-    if (!SUPPORTED_CURRENCIES.some((item) => item.code === activeCurrency)) {
+    if (
+      !SUPPORTED_CURRENCIES.some(
+        (item) => item.code === activeCurrency
+      )
+    ) {
       toast.error("Please select a supported currency");
       return;
     }
+
+    if (!validateSettingsInputs()) return;
 
     try {
       setSavingCurrency(true);
@@ -185,9 +226,18 @@ export function Settings() {
         activeCurrency
       );
 
-      await loadSettings();
-
       toast.success("Currency settings saved");
+
+      // Notify components such as Dashboard that depend on this event.
+      window.dispatchEvent(
+        new Event("currency-updated")
+      );
+
+      try {
+        await refreshSettings();
+      } catch {
+        // The context displays the refresh warning.
+      }
     } catch (error: any) {
       console.error("Currency update failed:", error);
 
@@ -201,28 +251,53 @@ export function Settings() {
   };
 
   const handleExportProductsCsv = async () => {
-    const res = await exportProductsCsv();
-    downloadFile(res.data, "products.csv");
+    try {
+      const res = await exportProductsCsv();
+      downloadFile(res.data, "products.csv");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export products CSV");
+    }
   };
 
   const handleExportProductsPdf = async () => {
-    const res = await exportProductsPdf();
-    downloadFile(res.data, "products.pdf");
+    try {
+      const res = await exportProductsPdf();
+      downloadFile(res.data, "products.pdf");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export products PDF");
+    }
   };
 
   const handleExportSalesCsv = async () => {
-    const res = await exportSalesCsv();
-    downloadFile(res.data, "sales.csv");
+    try {
+      const res = await exportSalesCsv();
+      downloadFile(res.data, "sales.csv");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export sales CSV");
+    }
   };
 
   const handleExportSalesPdf = async () => {
-    const res = await exportSalesPdf();
-    downloadFile(res.data, "sales.pdf");
+    try {
+      const res = await exportSalesPdf();
+      downloadFile(res.data, "sales.pdf");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export sales PDF");
+    }
   };
 
   const handleExportDashboardPdf = async () => {
-    const res = await exportDashboardPdf();
-    downloadFile(res.data, "dashboard-summary.pdf");
+    try {
+      const res = await exportDashboardPdf();
+      downloadFile(res.data, "dashboard-summary.pdf");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export dashboard summary");
+    }
   };
 
   if (showStaffManagement) {
@@ -252,13 +327,27 @@ export function Settings() {
   return (
     <div className="space-y-6 pb-20">
 
+      {/* Settings refresh warning */}
+      {settings && settingsError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        >
+          The latest settings refresh failed. Your previously
+          loaded settings are still available.
+        </div>
+      )}
+
       {/* Theme */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border">
         <button
           onClick={toggleTheme}
           className="w-full flex justify-between p-4"
         >
-          <span>{theme === "dark" ? "Dark" : "Light"} Mode</span>
+          <span>
+            {theme === "dark" ? "Dark" : "Light"} Mode
+          </span>
+
           {theme === "dark" ? <Moon /> : <Sun />}
         </button>
       </div>
@@ -286,13 +375,16 @@ export function Settings() {
           className="w-full flex justify-between items-center p-4"
         >
           <span>Currency Settings</span>
-          <span>{expanded === "currency" ? "−" : "+"}</span>
+
+          <span>
+            {expanded === "currency" ? "−" : "+"}
+          </span>
         </button>
 
         {expanded === "currency" && (
           <div className="border-t dark:border-slate-700 p-4 space-y-4">
 
-            {loadingSettings ? (
+            {loadingSettings && !settings ? (
               <p className="text-sm text-gray-500">
                 Loading currency settings...
               </p>
@@ -304,13 +396,13 @@ export function Settings() {
                 </p>
 
                 <button
-                  onClick={loadSettings}
+                  onClick={retrySettings}
                   className="w-full py-2 bg-blue-600 text-white rounded-lg"
                 >
                   Retry
                 </button>
               </div>
-            ) : (
+            ) : settings ? (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -322,8 +414,9 @@ export function Settings() {
                   </div>
 
                   <p className="text-xs text-gray-500 mt-1">
-                    This is the currency in which your original business
-                    records are stored. It cannot be changed here.
+                    This is the currency in which your original
+                    business records are stored. It cannot be
+                    changed here.
                   </p>
                 </div>
 
@@ -334,7 +427,9 @@ export function Settings() {
 
                   <select
                     value={activeCurrency}
-                    onChange={(e) => setActiveCurrency(e.target.value)}
+                    onChange={(e) =>
+                      setActiveCurrency(e.target.value)
+                    }
                     className="w-full border dark:border-slate-600 rounded-lg p-3 bg-white dark:bg-slate-800"
                   >
                     <option value="" disabled>
@@ -342,7 +437,10 @@ export function Settings() {
                     </option>
 
                     {SUPPORTED_CURRENCIES.map((item) => (
-                      <option key={item.code} value={item.code}>
+                      <option
+                        key={item.code}
+                        value={item.code}
+                      >
                         {item.code} - {item.name}
                       </option>
                     ))}
@@ -359,8 +457,8 @@ export function Settings() {
                   </p>
 
                   <p className="text-xs text-gray-500 mt-1">
-                    Your existing transaction records keep their original
-                    currency and exchange-rate history.
+                    Your existing transaction records keep their
+                    original currency and exchange-rate history.
                   </p>
                 </div>
 
@@ -368,15 +466,17 @@ export function Settings() {
                   onClick={saveCurrencySettings}
                   disabled={
                     savingCurrency ||
-                    !activeCurrency ||
-                    activeCurrency === ""
+                    loadingSettings ||
+                    !activeCurrency
                   }
                   className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:bg-blue-400 disabled:cursor-not-allowed"
                 >
-                  {savingCurrency ? "Updating Currency..." : "Save Currency"}
+                  {savingCurrency
+                    ? "Updating Currency..."
+                    : "Save Currency"}
                 </button>
               </>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -393,37 +493,52 @@ export function Settings() {
             <input
               type="checkbox"
               checked={taxEnabled}
+              disabled={!settings}
               onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setTaxEnabled(e.target.checked)}
+              onChange={(e) =>
+                setTaxEnabled(e.target.checked)
+              }
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-600"></div>
+
+            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-600 peer-disabled:opacity-50"></div>
+
             <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
           </label>
         </button>
 
         {expanded === "tax" && (
           <div className="border-t p-4 space-y-3">
-            <label className="text-sm font-medium">
-              Tax Percentage (%)
-            </label>
+            {!settings ? (
+              <p className="text-sm text-gray-500">
+                Business settings are not available.
+              </p>
+            ) : (
+              <>
+                <label className="text-sm font-medium">
+                  Tax Percentage (%)
+                </label>
 
-            <input
-              type="number"
-              min="0"
-              value={taxRate}
-              onChange={(e) => setTaxRate(e.target.value)}
-              className="w-full border rounded-lg p-2"
-              placeholder="7.5"
-            />
+                <input
+                  type="number"
+                  min="0"
+                  value={taxRate}
+                  onChange={(e) =>
+                    setTaxRate(e.target.value)
+                  }
+                  className="w-full border rounded-lg p-2"
+                  placeholder="7.5"
+                />
 
-            <button
-              onClick={saveTaxSettings}
-              disabled={savingTax}
-              className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:bg-blue-400 disabled:cursor-not-allowed"
-            >
-              {savingTax ? "Saving..." : "Save"}
-            </button>
+                <button
+                  onClick={saveTaxSettings}
+                  disabled={savingTax || loadingSettings}
+                  className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:bg-blue-400 disabled:cursor-not-allowed"
+                >
+                  {savingTax ? "Saving..." : "Save"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -435,31 +550,44 @@ export function Settings() {
           className="w-full flex justify-between p-4"
         >
           <span>Debt Threshold</span>
-          <span>{expanded === "debt" ? "−" : "+"}</span>
+
+          <span>
+            {expanded === "debt" ? "−" : "+"}
+          </span>
         </button>
 
         {expanded === "debt" && (
           <div className="border-t p-4 space-y-3">
-            <label className="text-sm font-medium">
-              Debt Threshold ({activeCurrency || "Currency not set"})
-            </label>
+            {!settings ? (
+              <p className="text-sm text-gray-500">
+                Business settings are not available.
+              </p>
+            ) : (
+              <>
+                <label className="text-sm font-medium">
+                  Debt Threshold ({activeCurrency})
+                </label>
 
-            <input
-              type="number"
-              min="0"
-              value={debtThreshold}
-              onChange={(e) => setDebtThreshold(e.target.value)}
-              className="w-full border rounded-lg p-2"
-              placeholder="50000"
-            />
+                <input
+                  type="number"
+                  min="0"
+                  value={debtThreshold}
+                  onChange={(e) =>
+                    setDebtThreshold(e.target.value)
+                  }
+                  className="w-full border rounded-lg p-2"
+                  placeholder="50000"
+                />
 
-            <button
-              onClick={saveDebtThreshold}
-              disabled={savingDebt}
-              className="w-full py-2 bg-red-600 text-white rounded-lg disabled:bg-red-400 disabled:cursor-not-allowed"
-            >
-              {savingDebt ? "Saving..." : "Save"}
-            </button>
+                <button
+                  onClick={saveDebtThreshold}
+                  disabled={savingDebt || loadingSettings}
+                  className="w-full py-2 bg-red-600 text-white rounded-lg disabled:bg-red-400 disabled:cursor-not-allowed"
+                >
+                  {savingDebt ? "Saving..." : "Save"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -475,14 +603,17 @@ export function Settings() {
         </button>
       </div>
 
-      {/* Export */}
+      {/* Export & Reports */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border">
         <button
           onClick={() => toggleSection("export")}
           className="w-full flex justify-between p-4"
         >
           <span>Export & Reports</span>
-          <span>{expanded === "export" ? "−" : "+"}</span>
+
+          <span>
+            {expanded === "export" ? "−" : "+"}
+          </span>
         </button>
 
         {expanded === "export" && (

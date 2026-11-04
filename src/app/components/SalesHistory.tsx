@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ShoppingCart,
   Package,
@@ -7,14 +7,16 @@ import {
   Receipt,
   X,
 } from "lucide-react";
+
 import {
   getSalesApi,
   addPaymentApi,
 } from "../../api/sales";
-import { getBusinessSettings } from "../../api/settings";
+
+import { getReturnsApi } from "../../api/returns";
+import { useBusinessSettings } from "../context/BusinessSettingsContext";
 import toast from "react-hot-toast";
 import { Metric } from "./ui/Metric";
-import { getReturnsApi } from "../../api/returns";
 
 type CartItem = {
   id?: number;
@@ -55,6 +57,13 @@ type Sale = {
 };
 
 export function SalesHistory() {
+  const {
+    currency: activeCurrency,
+    loading: currencyLoading,
+    error: settingsError,
+    refreshSettings,
+  } = useBusinessSettings();
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [filterPeriod, setFilterPeriod] = useState("all");
@@ -62,13 +71,14 @@ export function SalesHistory() {
   const [searchTerm, setSearchTerm] = useState("");
   const [returnTotals, setReturnTotals] = useState<Record<string, number>>({});
   const [addingPayment, setAddingPayment] = useState(false);
-  const [activeCurrency, setActiveCurrency] = useState("");
-  const [currencyLoading, setCurrencyLoading] = useState(true);
-  const [currencyError, setCurrencyError] = useState(false);
+  const [loadingSales, setLoadingSales] = useState(true);
 
+  const currencyUnavailable = !currencyLoading && !activeCurrency;
+
+  // Format monetary values using the shared business currency.
   const formatMoney = (
     amount: number,
-    currency: string = activeCurrency
+    currency: string | null = activeCurrency
   ) => {
     if (!currency || !/^[A-Z]{3}$/.test(currency)) {
       return "Currency unavailable";
@@ -86,32 +96,8 @@ export function SalesHistory() {
     }
   };
 
-  const loadCurrency = async () => {
-    try {
-      setCurrencyLoading(true);
-      setCurrencyError(false);
-
-      const response = await getBusinessSettings();
-      const currency = String(response.data?.currency ?? "")
-        .trim()
-        .toUpperCase();
-
-      if (!/^[A-Z]{3}$/.test(currency)) {
-        throw new Error("Business currency is missing or invalid.");
-      }
-
-      setActiveCurrency(currency);
-    } catch (error) {
-      console.error("Failed to load business currency:", error);
-      setActiveCurrency("");
-      setCurrencyError(true);
-      toast.error("Could not load your business currency.");
-    } finally {
-      setCurrencyLoading(false);
-    }
-  };
-
-  const loadSales = async (): Promise<Sale[]> => {
+  // Load sales and returns independently of currency settings.
+  const loadSales = useCallback(async (): Promise<Sale[]> => {
     try {
       const salesRes = await getSalesApi();
 
@@ -145,6 +131,21 @@ export function SalesHistory() {
       console.error("Failed to load sales:", error);
       toast.error("Could not load sales history.");
       return [];
+    } finally {
+      setLoadingSales(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSales();
+  }, [loadSales]);
+
+  const retryCurrency = async () => {
+    try {
+      await refreshSettings();
+    } catch (error) {
+      console.error("Failed to refresh business settings:", error);
+      toast.error("Unable to load business currency. Please try again.");
     }
   };
 
@@ -160,12 +161,15 @@ export function SalesHistory() {
       getNetTotal(sale) - Number(sale.amountPaid ?? 0)
     );
 
-  useEffect(() => {
-    loadCurrency();
-    loadSales();
-  }, []);
+  const addPayment = async (
+    saleId: number | string,
+    amount: number
+  ) => {
+    if (!activeCurrency) {
+      toast.error("Business currency is unavailable.");
+      return;
+    }
 
-  const addPayment = async (saleId: number | string, amount: number) => {
     if (!amount || amount <= 0) {
       toast.error("Enter a valid payment amount.");
       return;
@@ -286,30 +290,45 @@ export function SalesHistory() {
     );
   };
 
-  if (currencyLoading) {
-    return (
-      <div className="p-6 text-center text-slate-500">
-        Loading business currency...
-      </div>
-    );
-  }
-
-  if (currencyError || !activeCurrency) {
-    return (
-      <div className="p-6 text-center text-red-600">
-        Business currency is unavailable. Please check your business settings and try again.
-        <button
-          onClick={loadCurrency}
-          className="block mx-auto mt-3 rounded-lg bg-blue-600 px-4 py-2 text-white"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4 pb-4">
+
+      {/* Currency status */}
+      {currencyLoading && (
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-700 dark:text-blue-300">
+          Loading business currency...
+        </div>
+      )}
+
+      {currencyUnavailable && (
+        <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-900/20 p-4 space-y-2">
+          <p className="font-semibold text-red-700 dark:text-red-400">
+            Business currency unavailable
+          </p>
+
+          <p className="text-sm text-red-600 dark:text-red-300">
+            Check your business currency settings before viewing monetary
+            values or recording payments. No default currency has been applied.
+          </p>
+
+          <button
+            onClick={retryCurrency}
+            disabled={currencyLoading}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Sales loading */}
+      {loadingSales && (
+        <div className="p-4 text-center text-slate-500">
+          Loading sales history...
+        </div>
+      )}
+
+      {/* Summary metrics */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="col-span-2 lg:col-span-1">
           <Metric
@@ -332,6 +351,7 @@ export function SalesHistory() {
         />
       </div>
 
+      {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         {[
           { value: "all", label: "All Time" },
@@ -353,6 +373,7 @@ export function SalesHistory() {
         ))}
       </div>
 
+      {/* Search */}
       <div className="mb-4">
         <input
           type="text"
@@ -363,13 +384,16 @@ export function SalesHistory() {
         />
       </div>
 
+      {/* Sales list */}
       <div className="space-y-3">
-        {filteredSales.length === 0 ? (
+        {filteredSales.length === 0 && !loadingSales ? (
           <div className="text-center py-12">
             <Receipt className="size-16 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+
             <p className="text-slate-500 dark:text-slate-400">
               No sales found
             </p>
+
             <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
               Start selling to see transactions here
             </p>
@@ -386,6 +410,7 @@ export function SalesHistory() {
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {sale.order_id}
                   </p>
+
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {formatDate(sale.date)}
                   </p>
@@ -417,6 +442,7 @@ export function SalesHistory() {
                       <span className="text-slate-600 dark:text-slate-400">
                         Sold By:
                       </span>
+
                       <span className="font-medium text-slate-900 dark:text-white">
                         {sale.created_by_name}
                       </span>
@@ -429,6 +455,7 @@ export function SalesHistory() {
         )}
       </div>
 
+      {/* Receipt modal */}
       {selectedSale && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -456,9 +483,11 @@ export function SalesHistory() {
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                   BizTrack POS
                 </h2>
+
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Your Business Name
                 </p>
+
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
                   123 Main St, City
                 </p>
@@ -469,6 +498,7 @@ export function SalesHistory() {
                   <span className="text-slate-600 dark:text-slate-400">
                     Order ID:
                   </span>
+
                   <span className="font-medium text-slate-900 dark:text-white">
                     {selectedSale.order_id}
                   </span>
@@ -478,6 +508,7 @@ export function SalesHistory() {
                   <span className="text-slate-600 dark:text-slate-400">
                     Date:
                   </span>
+
                   <span className="font-medium text-slate-900 dark:text-white">
                     {formatDate(selectedSale.date)}
                   </span>
@@ -487,6 +518,7 @@ export function SalesHistory() {
                   <span className="text-slate-600 dark:text-slate-400">
                     Payment Method:
                   </span>
+
                   <span className="font-medium text-slate-900 dark:text-white">
                     {selectedSale.paymentMethod}
                   </span>
@@ -496,6 +528,7 @@ export function SalesHistory() {
                   <span className="text-slate-600 dark:text-slate-400">
                     Status:
                   </span>
+
                   <span
                     className={`font-semibold ${
                       selectedSale.status === "PAID"
@@ -508,6 +541,7 @@ export function SalesHistory() {
                 </div>
               </div>
 
+              {/* Items */}
               <div className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4">
                 <div className="space-y-3">
                   {selectedSale.items.map((item, index) => (
@@ -519,6 +553,7 @@ export function SalesHistory() {
                         <p className="font-medium text-slate-900 dark:text-white">
                           {item.name}
                         </p>
+
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {item.quantity} × {formatMoney(item.price)}
                         </p>
@@ -532,6 +567,7 @@ export function SalesHistory() {
                 </div>
               </div>
 
+              {/* Sale totals */}
               <div className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4 space-y-2 text-sm">
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Subtotal</span>
@@ -565,6 +601,7 @@ export function SalesHistory() {
                 </div>
               </div>
 
+              {/* Payments */}
               <div className="border-t mt-2 pt-2">
                 <p className="font-semibold text-sm">Payments</p>
 
@@ -578,28 +615,31 @@ export function SalesHistory() {
                         ? formatDate(payment.date)
                         : "Payment"}
                     </span>
+
                     <span>{formatMoney(payment.amount)}</span>
                   </div>
                 ))}
               </div>
 
+              {/* Add payment */}
               {(selectedSale.status === "DEBT" ||
                 selectedSale.status === "PARTIAL") && (
                 <div className="border-t mt-3 pt-3">
                   <input
                     type="number"
                     min="0"
-                    placeholder={`Enter payment (${activeCurrency})`}
+                    placeholder={`Enter payment (${activeCurrency || "currency unavailable"})`}
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value)}
-                    className="w-full p-2 border rounded"
+                    disabled={!activeCurrency || addingPayment}
+                    className="w-full p-2 border rounded disabled:opacity-50"
                   />
 
                   <button
                     onClick={() =>
                       addPayment(selectedSale.id, Number(payAmount))
                     }
-                    disabled={addingPayment}
+                    disabled={addingPayment || !activeCurrency}
                     className="w-full mt-2 bg-blue-600 text-white p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {addingPayment ? "Adding..." : "Add Payment"}
@@ -607,6 +647,7 @@ export function SalesHistory() {
                 </div>
               )}
 
+              {/* Balance summary */}
               <div className="border-t mt-3 pt-2 text-sm">
                 <p>Net Total: {formatMoney(getNetTotal(selectedSale))}</p>
                 <p>Paid: {formatMoney(totalPaid)}</p>
@@ -617,6 +658,7 @@ export function SalesHistory() {
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Thank you for your business!
                 </p>
+
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                   Powered by BizTrack POS
                 </p>
