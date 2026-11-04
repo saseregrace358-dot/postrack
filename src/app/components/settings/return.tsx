@@ -20,6 +20,7 @@ import {
 
 import { getProducts } from "../../../api/products";
 import { getSalesApi } from "../../../api/sales";
+import { useBusinessSettings } from "../../context/BusinessSettingsContext";
 
 type Product = {
   id: number;
@@ -127,12 +128,6 @@ const getDateKey = (value?: string) => {
   ].join("-");
 };
 
-const money = (value: number) =>
-  `₦${Number(value || 0).toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
 const getApiError = (err: unknown, fallback: string) => {
   const error = err as {
     response?: {
@@ -172,10 +167,35 @@ function flattenReturns(returns: SavedReturn[]): ReturnRecord[] {
       date: record.created_at ?? record.returned_at ?? "",
       restocked: item.restocked ?? false,
       refund_status: record.refund_status ?? "PENDING",
-     })),
+    })),
   );
 }
+
 export default function ReturnItems({ onBack }: ReturnItemsProps) {
+  const { currency: activeCurrency } = useBusinessSettings();
+
+  // Format amounts using the business's currently selected currency.
+  const money = useCallback(
+    (value: number) => {
+      if (!activeCurrency) {
+        return "Currency unavailable";
+      }
+
+      try {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: activeCurrency,
+          currencyDisplay: "narrowSymbol",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(Number(value) || 0);
+      } catch {
+        return "Currency unavailable";
+      }
+    },
+    [activeCurrency],
+  );
+
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
@@ -188,17 +208,18 @@ export default function ReturnItems({ onBack }: ReturnItemsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState("");
 
-const filteredReturns = useMemo(
-  () =>
-    returns.filter(
-      (record) =>
-        !dateFilter ||
-        getDateKey(record.date) === dateFilter
-    ),
-  [returns, dateFilter]
-);
+  const filteredReturns = useMemo(
+    () =>
+      returns.filter(
+        (record) =>
+          !dateFilter || getDateKey(record.date) === dateFilter,
+      ),
+    [returns, dateFilter],
+  );
+
   const [refundStatus, setRefundStatus] =
     useState<RefundStatus>("PENDING");
+
   const [updatingReturnId, setUpdatingReturnId] =
     useState<string | null>(null);
 
@@ -231,7 +252,7 @@ const filteredReturns = useMemo(
       !Array.isArray(returnsData)
     ) {
       throw new Error(
-        "The server returned an unexpected sales, inventory, or returns response."
+        "The server returned an unexpected sales, inventory, or returns response.",
       );
     }
 
@@ -241,7 +262,7 @@ const filteredReturns = useMemo(
       (salesData as Sale[]).map((sale) => ({
         ...sale,
         items: Array.isArray(sale.items) ? sale.items : [],
-      }))
+      })),
     );
 
     setReturns(flattenReturns(returnsData as SavedReturn[]));
@@ -261,8 +282,8 @@ const filteredReturns = useMemo(
           setPageError(
             getApiError(
               err,
-              "Unable to load return history, sales, and inventory."
-            )
+              "Unable to load return history, sales, and inventory.",
+            ),
           );
         }
       } finally {
@@ -278,12 +299,13 @@ const filteredReturns = useMemo(
   }, [loadData]);
 
   const selectedSale = sales.find(
-    (sale) => String(sale.id) === selectedSaleId
+    (sale) => String(sale.id) === selectedSaleId,
   );
 
   // Backend returns are tracked by product_id, not sale-line id.
   const selectedSaleItem = selectedSale?.items.find(
-    (item) => String(getSaleProductId(item) ?? "") === selectedProductId
+    (item) =>
+      String(getSaleProductId(item) ?? "") === selectedProductId,
   );
 
   const selectedProductIdNumber = selectedSaleItem
@@ -291,7 +313,7 @@ const filteredReturns = useMemo(
     : NaN;
 
   const selectedInventoryProduct = products.find(
-    (product) => product.id === selectedProductIdNumber
+    (product) => product.id === selectedProductIdNumber,
   );
 
   const filteredSales = useMemo(() => {
@@ -304,33 +326,32 @@ const filteredReturns = useMemo(
         sale.created_at ?? ""
       }`
         .toLowerCase()
-        .includes(search)
+        .includes(search),
     );
   }, [sales, saleSearch]);
 
- 
   // Count saved returns against the original product in the sale.
   const returnedQuantityForProduct = (
     saleId: string | number,
-    productId: string | number
+    productId: string | number,
   ) =>
     returns
       .filter(
         (record) =>
           record.sale_id === String(saleId) &&
-          String(record.product_id) === String(productId)
+          String(record.product_id) === String(productId),
       )
       .reduce((sum, record) => sum + record.quantity, 0);
 
   // Count all matching sale lines when calculating remaining quantity.
   const soldQuantityForProduct = (
     sale: Sale,
-    productId: string | number
+    productId: string | number,
   ) =>
     sale.items
       .filter(
         (item) =>
-          String(getSaleProductId(item) ?? "") === String(productId)
+          String(getSaleProductId(item) ?? "") === String(productId),
       )
       .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
@@ -341,8 +362,8 @@ const filteredReturns = useMemo(
           soldQuantityForProduct(selectedSale, selectedProductId) -
             returnedQuantityForProduct(
               selectedSale.id,
-              selectedProductId
-            )
+              selectedProductId,
+            ),
         )
       : 0;
 
@@ -398,14 +419,14 @@ const filteredReturns = useMemo(
       Number(productId) <= 0
     ) {
       setError(
-        "This sale item has no valid inventory product ID. Check the original sale data."
+        "This sale item has no valid inventory product ID. Check the original sale data.",
       );
       return;
     }
 
     if (!selectedInventoryProduct) {
       setError(
-        "This product could not be found in your inventory. No return was saved."
+        "This product could not be found in your inventory. No return was saved.",
       );
       return;
     }
@@ -422,7 +443,7 @@ const filteredReturns = useMemo(
 
     if (returnedQuantity > remainingQuantity) {
       setError(
-        `You can return up to ${remainingQuantity} more unit(s) of this product.`
+        `You can return up to ${remainingQuantity} more unit(s) of this product.`,
       );
       return;
     }
@@ -463,7 +484,7 @@ const filteredReturns = useMemo(
 
       if (!savedReturn || savedReturn.id === undefined) {
         throw new Error(
-          "The server response did not contain the saved return."
+          "The server response did not contain the saved return.",
         );
       }
 
@@ -480,8 +501,8 @@ const filteredReturns = useMemo(
       toast.dismiss(loadingToast);
       toast.success(
         `Return saved successfully. Refund recorded: ${money(
-          Number(savedReturn.refund_amount)
-        )}`
+          Number(savedReturn.refund_amount),
+        )}`,
       );
     } catch (err) {
       console.error("Return processing failed:", err);
@@ -531,7 +552,7 @@ const filteredReturns = useMemo(
 
       toast.dismiss(loadingToast);
       toast.error(
-        getApiError(err, "Unable to update the refund status.")
+        getApiError(err, "Unable to update the refund status."),
       );
     } finally {
       setUpdatingReturnId(null);
@@ -580,7 +601,7 @@ const filteredReturns = useMemo(
               void loadData()
                 .catch((err) => {
                   setPageError(
-                    getApiError(err, "Unable to reload return data.")
+                    getApiError(err, "Unable to reload return data."),
                   );
                 })
                 .finally(() => setLoading(false));
@@ -692,7 +713,7 @@ const filteredReturns = useMemo(
                     onBlur={() =>
                       window.setTimeout(
                         () => setShowSaleSuggestions(false),
-                        150
+                        150,
                       )
                     }
                     placeholder="Type an order number..."
@@ -717,8 +738,10 @@ const filteredReturns = useMemo(
                               Order #{sale.order_id}
                             </span>
                             <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                              {sale.date ?? sale.created_at ?? "Date unavailable"} ·{" "}
-                              {sale.items.length} product line(s)
+                              {sale.date ??
+                                sale.created_at ??
+                                "Date unavailable"}{" "}
+                              · {sale.items.length} product line(s)
                             </span>
                           </span>
                           <span className="shrink-0 text-sm font-semibold text-blue-600 dark:text-blue-400">
@@ -740,8 +763,11 @@ const filteredReturns = useMemo(
                       Order #{selectedSale.order_id}
                     </p>
                     <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                      Sale date: {selectedSale.date ?? selectedSale.created_at ?? "Unavailable"} · Sale total:{" "}
-                      {money(Number(selectedSale.total))}
+                      Sale date:{" "}
+                      {selectedSale.date ??
+                        selectedSale.created_at ??
+                        "Unavailable"}{" "}
+                      · Sale total: {money(Number(selectedSale.total))}
                     </p>
                   </div>
                 )}
@@ -775,21 +801,24 @@ const filteredReturns = useMemo(
                         selectedSale.items.map((item) => [
                           String(getSaleProductId(item) ?? ""),
                           item,
-                        ])
-                      ).values()
+                        ]),
+                      ).values(),
                     ).map((item) => {
                       const productId = getSaleProductId(item);
+
                       const alreadyReturned = returnedQuantityForProduct(
                         selectedSale.id,
-                        String(productId)
+                        String(productId),
                       );
+
                       const sold = soldQuantityForProduct(
                         selectedSale,
-                        String(productId)
+                        String(productId),
                       );
+
                       const remaining = Math.max(
                         0,
-                        sold - alreadyReturned
+                        sold - alreadyReturned,
                       );
 
                       return (
@@ -806,8 +835,9 @@ const filteredReturns = useMemo(
 
                 {selectedSaleItem && (
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Original unit price: {money(Number(selectedSaleItem.price))}{" "}
-                    · Quantity remaining: {remainingQuantity}
+                    Original unit price:{" "}
+                    {money(Number(selectedSaleItem.price))} · Quantity
+                    remaining: {remainingQuantity}
                   </p>
                 )}
 
@@ -874,7 +904,8 @@ const filteredReturns = useMemo(
                   {money(refundEstimate)}
                 </div>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Final refund is calculated and saved by the server, including applicable sale tax.
+                  Final refund is calculated and saved by the server,
+                  including applicable sale tax.
                 </p>
               </div>
 
@@ -921,7 +952,7 @@ const filteredReturns = useMemo(
               {selectedInventoryProduct &&
                 Number.isInteger(Number(quantity)) &&
                 Number(quantity) > 0 && (
-                  <div className="sm:col-span-2 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
+                  <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30 sm:col-span-2">
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <span className="text-slate-600 dark:text-slate-300">
                         Inventory stock after return
@@ -929,12 +960,14 @@ const filteredReturns = useMemo(
                       <span className="font-semibold text-blue-700 dark:text-blue-300">
                         {condition === "Damaged"
                           ? selectedInventoryProduct.stock
-                          : selectedInventoryProduct.stock + Number(quantity)}
+                          : selectedInventoryProduct.stock +
+                            Number(quantity)}
                       </span>
                     </div>
 
                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      This is a preview. The backend validates and updates stock when you submit.
+                      This is a preview. The backend validates and updates
+                      stock when you submit.
                     </p>
                   </div>
                 )}
@@ -985,8 +1018,11 @@ const filteredReturns = useMemo(
                   .then(() => toast.success("Return history refreshed."))
                   .catch((err) =>
                     toast.error(
-                      getApiError(err, "Unable to refresh return history.")
-                    )
+                      getApiError(
+                        err,
+                        "Unable to refresh return history.",
+                      ),
+                    ),
                   );
               }}
               className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -1063,14 +1099,18 @@ const filteredReturns = useMemo(
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Quantity Returned</p>
+                      <p className="text-xs text-slate-500">
+                        Quantity Returned
+                      </p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {item.quantity}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Original Unit Price</p>
+                      <p className="text-xs text-slate-500">
+                        Original Unit Price
+                      </p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {money(item.unit_price)}
                       </p>
@@ -1084,7 +1124,9 @@ const filteredReturns = useMemo(
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Restock Condition</p>
+                      <p className="text-xs text-slate-500">
+                        Restock Condition
+                      </p>
                       <p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">
                         {item.condition}
                       </p>
@@ -1106,7 +1148,7 @@ const filteredReturns = useMemo(
                     </div>
 
                     {/* REFUND STATUS AND COMPLETE ACTION */}
-                    <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800 sm:col-span-2">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-xs text-slate-500">
@@ -1126,7 +1168,9 @@ const filteredReturns = useMemo(
                         {isPending && (
                           <button
                             type="button"
-                            onClick={() => void handleCompleteRefund(item)}
+                            onClick={() =>
+                              void handleCompleteRefund(item)
+                            }
                             disabled={updatingReturnId !== null}
                             className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >

@@ -46,7 +46,6 @@ export function POS() {
     refreshSettings,
   } = useBusinessSettings();
 
-  // Shared product cache
   const {
     data: products = [],
     isLoading: productsLoading,
@@ -60,7 +59,6 @@ export function POS() {
   };
 
   const [cart, setCart] = useState<CartItem[]>([]);
-
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -93,16 +91,20 @@ export function POS() {
     };
   }, [refreshSettings]);
 
-  // Format monetary values using the active business currency.
+  // Product prices are already returned in the active currency.
+  // Do not apply exchangeRate again here.
   const formatMoney = (amount: number) => {
     if (!activeCurrency) {
       return "Currency unavailable";
     }
 
     try {
-      return new Intl.NumberFormat(undefined, {
+      return new Intl.NumberFormat("en-NG", {
         style: "currency",
         currency: activeCurrency,
+        currencyDisplay: "narrowSymbol",
+        maximumFractionDigits: 2,
+        minimumFractionDigits: 0,
       }).format(Number(amount) || 0);
     } catch {
       return "Currency unavailable";
@@ -208,10 +210,10 @@ export function POS() {
 
   const clearCart = () => setCart([]);
 
-  // Sale calculations use shared business settings.
+  // Product prices are already converted by the products API.
+  // Keep the subtotal unrounded.
   const subtotal = cart.reduce(
-    (sum, item) =>
-      sum + item.price * item.quantity,
+    (sum, item) => sum + item.price * item.quantity,
     0
   );
 
@@ -254,8 +256,10 @@ export function POS() {
     setShowCheckout(true);
   };
 
-  // Complete sale.
-  const completeCheckout = async (paymentMethod: string) => {
+  // Each payment button calls this function with ONE method.
+  const completeCheckout = async (
+    paymentMethod: "Transfer" | "Card" | "Cash"
+  ) => {
     if (processingPayment) return;
 
     if (
@@ -642,7 +646,7 @@ export function POS() {
 
                   <button
                     onClick={handleCheckout}
-                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg"
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-blue-700 transition-all shadow-lg"
                   >
                     Checkout
                   </button>
@@ -717,13 +721,14 @@ export function POS() {
               Select payment method:
             </p>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            {/* Exactly three payment methods */}
+            <div className="grid grid-cols-3 gap-3 mb-6">
               <button
                 disabled={processingPayment}
-                onClick={() => completeCheckout("Cash")}
-                className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => completeCheckout("Transfer")}
+                className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {processingPayment ? "Processing..." : "💵 Cash"}
+                {processingPayment ? "Processing..." : "🏦 Transfer"}
               </button>
 
               <button
@@ -736,20 +741,10 @@ export function POS() {
 
               <button
                 disabled={processingPayment}
-                onClick={() => completeCheckout("Transfer")}
-                className="py-4 bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-500 dark:border-purple-700 rounded-xl font-medium text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => completeCheckout("Cash")}
+                className="py-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-700 rounded-xl font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {processingPayment ? "Processing..." : "🏦 Transfer"}
-              </button>
-
-              <button
-                disabled={processingPayment}
-                onClick={() =>
-                  completeCheckout("Mobile Money")
-                }
-                className="py-4 bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-700 rounded-xl font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processingPayment ? "Processing..." : "📱 Mobile"}
+                {processingPayment ? "Processing..." : "💵 Cash"}
               </button>
             </div>
 

@@ -1,5 +1,4 @@
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -21,7 +20,7 @@ import {
   YAxis,
 } from "recharts";
 
-import api from "../../api/api";
+import { useDashboardQuery } from "../hooks/useDashboardQueries";
 
 // ================= TYPES =================
 
@@ -155,176 +154,82 @@ const emptySummary = (selectedDate: string): DashboardSummary => ({
 export function Dashboard() {
   const [activeDate, setActiveDate] = useState(getToday);
 
-  const [summary, setSummary] = useState<DashboardSummary>(
-    () => emptySummary(getToday())
-  );
+  // Shared TanStack Query cache.
+  const dashboardQuery = useDashboardQuery(activeDate);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const responseData = dashboardQuery.data as
+    | DashboardSummary
+    | undefined;
 
-  const requestIdRef = useRef(0);
-  const controllerRef = useRef<AbortController | null>(null);
-  const lastRefreshRef = useRef(0);
-
-  // ================= LOAD DASHBOARD =================
-
-  const loadDashboard = useCallback(async (force = false) => {
-    // Avoid unnecessary repeated refreshes.
-    const now = Date.now();
-
-    if (!force && now - lastRefreshRef.current < 1000) {
-      return;
+  // Validate and normalize the API response.
+  const summary = useMemo(() => {
+    if (!responseData || !responseData.metrics) {
+      return emptySummary(activeDate);
     }
 
-    lastRefreshRef.current = now;
+    const activeCurrency = String(
+      responseData.currency || ""
+    ).toUpperCase();
 
-    // Cancel any older dashboard request.
-    controllerRef.current?.abort();
+    const baseCurrency = String(
+      responseData.base_currency || ""
+    ).toUpperCase();
 
-    const controller = new AbortController();
-    controllerRef.current = controller;
-
-    const currentRequestId = ++requestIdRef.current;
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await api.get("/dashboard/summary", {
-        params: {
-          selected_date: activeDate,
-        },
-        signal: controller.signal,
-      });
-
-      // Ignore responses from outdated requests.
-      if (currentRequestId !== requestIdRef.current) {
-        return;
-      }
-
-      const data = response.data as DashboardSummary;
-
-      if (!data || !data.metrics) {
-        throw new Error("The dashboard response is incomplete.");
-      }
-
-      const activeCurrency = String(data.currency || "").toUpperCase();
-      const baseCurrency = String(data.base_currency || "").toUpperCase();
-
-      if (!/^[A-Z]{3}$/.test(activeCurrency)) {
-        throw new Error(
-          "The dashboard response does not contain a valid business currency."
-        );
-      }
-
-      if (!/^[A-Z]{3}$/.test(baseCurrency)) {
-        throw new Error(
-          "The dashboard response does not contain a valid base currency."
-        );
-      }
-
-      setSummary({
-        selected_date: data.selected_date ?? activeDate,
-        peakHour: data.peakHour ?? "—",
-        currency: activeCurrency,
-        base_currency: baseCurrency,
-        metrics: {
-          ...emptyMetrics,
-          ...data.metrics,
-        },
-        weeklyData: Array.isArray(data.weeklyData)
-          ? data.weeklyData
-          : [],
-        monthlyTrend: Array.isArray(data.monthlyTrend)
-          ? data.monthlyTrend
-          : [],
-        damagedProducts: Array.isArray(data.damagedProducts)
-          ? data.damagedProducts
-          : [],
-        topProducts: Array.isArray(data.topProducts)
-          ? data.topProducts
-          : [],
-      });
-    } catch (err: unknown) {
-      // Cancelled requests are expected when dates change.
-      if (
-        controller.signal.aborted ||
-        (err instanceof Error && err.name === "CanceledError")
-      ) {
-        return;
-      }
-
-      if (currentRequestId !== requestIdRef.current) {
-        return;
-      }
-
-      console.error("Unable to load dashboard:", err);
-
-      setError(
-        "Unable to load dashboard data or business currency. Check your connection and try again."
-      );
-    } finally {
-      if (currentRequestId === requestIdRef.current) {
-        setLoading(false);
-      }
+    if (
+      !/^[A-Z]{3}$/.test(activeCurrency) ||
+      !/^[A-Z]{3}$/.test(baseCurrency)
+    ) {
+      return emptySummary(activeDate);
     }
-  }, [activeDate]);
 
-  // ================= INITIAL LOAD / DATE CHANGE =================
-
-  useEffect(() => {
-    void loadDashboard(true);
-
-    return () => {
-      controllerRef.current?.abort();
+    return {
+      selected_date: responseData.selected_date ?? activeDate,
+      peakHour: responseData.peakHour ?? "—",
+      currency: activeCurrency,
+      base_currency: baseCurrency,
+      metrics: {
+        ...emptyMetrics,
+        ...responseData.metrics,
+      },
+      weeklyData: Array.isArray(responseData.weeklyData)
+        ? responseData.weeklyData
+        : [],
+      monthlyTrend: Array.isArray(responseData.monthlyTrend)
+        ? responseData.monthlyTrend
+        : [],
+      damagedProducts: Array.isArray(responseData.damagedProducts)
+        ? responseData.damagedProducts
+        : [],
+      topProducts: Array.isArray(responseData.topProducts)
+        ? responseData.topProducts
+        : [],
     };
-  }, [loadDashboard]);
+  }, [responseData, activeDate]);
 
-  // ================= AUTO REFRESH =================
-
-  useEffect(() => {
-    const refreshEvents = [
-      "returns-updated",
-      "sales-updated",
-      "inventory-updated",
-      "products-updated",
-      "currency-updated",
-    ];
-
-    const handleRefresh = () => {
-      void loadDashboard();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void loadDashboard();
-      }
-    };
-
-    refreshEvents.forEach((eventName) => {
-      window.addEventListener(eventName, handleRefresh);
-    });
-
-    window.addEventListener("focus", handleRefresh);
-
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange
+  const hasInvalidResponse =
+    Boolean(responseData) &&
+    (
+      !responseData?.metrics ||
+      !/^[A-Z]{3}$/.test(
+        String(responseData?.currency || "").toUpperCase()
+      ) ||
+      !/^[A-Z]{3}$/.test(
+        String(responseData?.base_currency || "").toUpperCase()
+      )
     );
 
-    return () => {
-      refreshEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, handleRefresh);
-      });
+  const error = dashboardQuery.isError
+    ? "Unable to load dashboard data. Check your connection and try again."
+    : hasInvalidResponse
+      ? "The dashboard response does not contain valid business currency information."
+      : "";
 
-      window.removeEventListener("focus", handleRefresh);
+  const loading =
+    dashboardQuery.isLoading || dashboardQuery.isFetching;
 
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange
-      );
-    };
-  }, [loadDashboard]);
+  const retryDashboard = () => {
+    void dashboardQuery.refetch();
+  };
 
   // ================= DASHBOARD DATA =================
 
@@ -436,7 +341,7 @@ export function Dashboard() {
 
           <button
             type="button"
-            onClick={() => void loadDashboard(true)}
+            onClick={retryDashboard}
             className="self-start rounded-lg border border-red-300 px-3 py-2 font-semibold hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/50 sm:self-auto"
           >
             Retry

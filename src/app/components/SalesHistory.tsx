@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ShoppingCart,
   Package,
@@ -9,14 +8,19 @@ import {
 } from "lucide-react";
 
 import {
-  getSalesApi,
   addPaymentApi,
 } from "../../api/sales";
 
-import { getReturnsApi } from "../../api/returns";
+import {
+  useSalesHistoryQuery,
+  useRefreshSalesHistory,
+} from "../hooks/useDashboardQueries";
+
 import { useBusinessSettings } from "../context/BusinessSettingsContext";
 import toast from "react-hot-toast";
 import { Metric } from "./ui/Metric";
+
+// ================= TYPES =================
 
 type CartItem = {
   id?: number;
@@ -56,26 +60,106 @@ type Sale = {
   created_by_name?: string;
 };
 
+type ReturnRecord = {
+  sale_id: number | string;
+  refund_amount?: number;
+};
+
+// ================= SALES HISTORY =================
+
 export function SalesHistory() {
   const {
     currency: activeCurrency,
     loading: currencyLoading,
-    error: settingsError,
     refreshSettings,
   } = useBusinessSettings();
 
-  const [sales, setSales] = useState<Sale[]>([]);
+  // Shared TanStack Query data.
+  const {
+    sales: salesData,
+    returns: returnsData,
+    loadingSales,
+    loadingReturns,
+    salesError,
+    returnsError,
+    refreshSales,
+    refreshReturns,
+  } = useSalesHistoryQuery();
+
+  const refreshSalesHistory = useRefreshSalesHistory();
+
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [filterPeriod, setFilterPeriod] = useState("all");
   const [payAmount, setPayAmount] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [returnTotals, setReturnTotals] = useState<Record<string, number>>({});
   const [addingPayment, setAddingPayment] = useState(false);
-  const [loadingSales, setLoadingSales] = useState(true);
 
   const currencyUnavailable = !currencyLoading && !activeCurrency;
 
-  // Format monetary values using the shared business currency.
+  // ================= NORMALIZE QUERY DATA =================
+
+  const sales: Sale[] = useMemo(() => {
+    if (!Array.isArray(salesData)) {
+      return [];
+    }
+
+    return salesData.map((sale: Sale) => ({
+      ...sale,
+      payments: sale.payments ?? [],
+      items: Array.isArray(sale.items) ? sale.items : [],
+    }));
+  }, [salesData]);
+
+  const returnTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+
+    if (!Array.isArray(returnsData)) {
+      return totals;
+    }
+
+    for (const record of returnsData as ReturnRecord[]) {
+      const saleId = String(record.sale_id);
+
+      totals[saleId] =
+        (totals[saleId] ?? 0) +
+        Number(record.refund_amount ?? 0);
+    }
+
+    return totals;
+  }, [returnsData]);
+
+  // Show errors without replacing cached data.
+  useEffect(() => {
+    if (salesError) {
+      console.error("Failed to load sales:", salesError);
+      toast.error("Could not load sales history.");
+    }
+  }, [salesError]);
+
+  useEffect(() => {
+    if (returnsError) {
+      console.error("Failed to load returns:", returnsError);
+      toast.error("Could not load return amounts.");
+    }
+  }, [returnsError]);
+
+  // Keep the open receipt synchronized with updated query data.
+  useEffect(() => {
+    if (!selectedSale) {
+      return;
+    }
+
+    const updatedSale = sales.find(
+      (sale) => String(sale.id) === String(selectedSale.id)
+    );
+
+    if (updatedSale) {
+      setSelectedSale(updatedSale);
+    }
+  }, [sales, selectedSale?.id]);
+
+  // ================= CURRENCY =================
+
   const formatMoney = (
     amount: number,
     currency: string | null = activeCurrency
@@ -96,50 +180,6 @@ export function SalesHistory() {
     }
   };
 
-  // Load sales and returns independently of currency settings.
-  const loadSales = useCallback(async (): Promise<Sale[]> => {
-    try {
-      const salesRes = await getSalesApi();
-
-      const loadedSales: Sale[] = salesRes.data.map((sale: Sale) => ({
-        ...sale,
-        payments: sale.payments ?? [],
-      }));
-
-      setSales(loadedSales);
-
-      try {
-        const returnsRes = await getReturnsApi();
-        const totals: Record<string, number> = {};
-
-        for (const record of returnsRes.data) {
-          const saleId = String(record.sale_id);
-
-          totals[saleId] =
-            (totals[saleId] ?? 0) +
-            Number(record.refund_amount ?? 0);
-        }
-
-        setReturnTotals(totals);
-      } catch (returnError) {
-        console.error("Failed to load returns:", returnError);
-        toast.error("Could not load return amounts.");
-      }
-
-      return loadedSales;
-    } catch (error) {
-      console.error("Failed to load sales:", error);
-      toast.error("Could not load sales history.");
-      return [];
-    } finally {
-      setLoadingSales(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadSales();
-  }, [loadSales]);
-
   const retryCurrency = async () => {
     try {
       await refreshSettings();
@@ -148,6 +188,8 @@ export function SalesHistory() {
       toast.error("Unable to load business currency. Please try again.");
     }
   };
+
+  // ================= RETURN CALCULATIONS =================
 
   const getReturnedAmount = (sale: Sale) =>
     returnTotals[String(sale.id)] ?? 0;
@@ -160,6 +202,8 @@ export function SalesHistory() {
       0,
       getNetTotal(sale) - Number(sale.amountPaid ?? 0)
     );
+
+  // ================= ADD PAYMENT =================
 
   const addPayment = async (
     saleId: number | string,
@@ -183,18 +227,8 @@ export function SalesHistory() {
         method: "Cash",
       });
 
-      const updatedSales = await loadSales();
-
-      const updatedSale = updatedSales.find(
-        (sale) => String(sale.id) === String(saleId)
-      );
-
-      if (updatedSale) {
-        setSelectedSale({
-          ...updatedSale,
-          payments: updatedSale.payments ?? [],
-        });
-      }
+      // Refresh sales, returns, and dashboard through the shared cache.
+      await refreshSalesHistory();
 
       setPayAmount("");
       toast.success("Payment added successfully!");
@@ -206,6 +240,8 @@ export function SalesHistory() {
     }
   };
 
+  // ================= SELECTED RECEIPT =================
+
   const selectedPayments = selectedSale?.payments ?? [];
 
   const totalPaid = selectedPayments.reduce(
@@ -216,6 +252,8 @@ export function SalesHistory() {
   const balance = selectedSale
     ? Math.max(0, getNetTotal(selectedSale) - totalPaid)
     : 0;
+
+  // ================= FILTER SALES =================
 
   const filteredSales = sales.filter((sale: Sale) => {
     if (filterPeriod !== "all") {
@@ -262,6 +300,8 @@ export function SalesHistory() {
     );
   });
 
+  // ================= SUMMARY METRICS =================
+
   const totalItems = filteredSales.reduce(
     (sum, sale) =>
       sum +
@@ -277,6 +317,8 @@ export function SalesHistory() {
     0
   );
 
+  // ================= DATE FORMAT =================
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
 
@@ -290,10 +332,13 @@ export function SalesHistory() {
     );
   };
 
+  // ================= RENDER =================
+
   return (
     <div className="space-y-4 pb-4">
 
       {/* Currency status */}
+
       {currencyLoading && (
         <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-700 dark:text-blue-300">
           Loading business currency...
@@ -322,13 +367,15 @@ export function SalesHistory() {
       )}
 
       {/* Sales loading */}
-      {loadingSales && (
+
+      {(loadingSales || loadingReturns) && (
         <div className="p-4 text-center text-slate-500">
           Loading sales history...
         </div>
       )}
 
       {/* Summary metrics */}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="col-span-2 lg:col-span-1">
           <Metric
@@ -352,6 +399,7 @@ export function SalesHistory() {
       </div>
 
       {/* Filters */}
+
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
         {[
           { value: "all", label: "All Time" },
@@ -374,6 +422,7 @@ export function SalesHistory() {
       </div>
 
       {/* Search */}
+
       <div className="mb-4">
         <input
           type="text"
@@ -385,8 +434,11 @@ export function SalesHistory() {
       </div>
 
       {/* Sales list */}
+
       <div className="space-y-3">
-        {filteredSales.length === 0 && !loadingSales ? (
+        {filteredSales.length === 0 &&
+        !loadingSales &&
+        !loadingReturns ? (
           <div className="text-center py-12">
             <Receipt className="size-16 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
 
@@ -456,6 +508,7 @@ export function SalesHistory() {
       </div>
 
       {/* Receipt modal */}
+
       {selectedSale && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -542,6 +595,7 @@ export function SalesHistory() {
               </div>
 
               {/* Items */}
+
               <div className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4">
                 <div className="space-y-3">
                   {selectedSale.items.map((item, index) => (
@@ -568,6 +622,7 @@ export function SalesHistory() {
               </div>
 
               {/* Sale totals */}
+
               <div className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4 space-y-2 text-sm">
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Subtotal</span>
@@ -602,6 +657,7 @@ export function SalesHistory() {
               </div>
 
               {/* Payments */}
+
               <div className="border-t mt-2 pt-2">
                 <p className="font-semibold text-sm">Payments</p>
 
@@ -622,6 +678,7 @@ export function SalesHistory() {
               </div>
 
               {/* Add payment */}
+
               {(selectedSale.status === "DEBT" ||
                 selectedSale.status === "PARTIAL") && (
                 <div className="border-t mt-3 pt-3">
@@ -648,6 +705,7 @@ export function SalesHistory() {
               )}
 
               {/* Balance summary */}
+
               <div className="border-t mt-3 pt-2 text-sm">
                 <p>Net Total: {formatMoney(getNetTotal(selectedSale))}</p>
                 <p>Paid: {formatMoney(totalPaid)}</p>

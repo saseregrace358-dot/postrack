@@ -133,6 +133,7 @@ export function Inventory() {
       return new Intl.NumberFormat("en-NG", {
         style: "currency",
         currency: activeCurrency,
+        currencyDisplay: "narrowSymbol",
       }).format(Number(amount) || 0);
     } catch {
       return "Currency unavailable";
