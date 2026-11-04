@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Plus,
@@ -9,8 +10,11 @@ import {
   X,
 } from "lucide-react";
 
-import { getProducts } from "../../api/products";
 import { createSaleApi } from "../../api/sales";
+import {
+  useProducts,
+  productQueryKey,
+} from "../hooks/useProducts";
 import { useBusinessSettings } from "../context/BusinessSettingsContext";
 
 import toast from "react-hot-toast";
@@ -29,6 +33,8 @@ type CartItem = Product & {
 };
 
 export function POS() {
+  const queryClient = useQueryClient();
+
   const {
     settings,
     currency: activeCurrency,
@@ -40,11 +46,20 @@ export function POS() {
     refreshSettings,
   } = useBusinessSettings();
 
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  // Shared product cache
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProducts() as {
+    data: Product[];
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => Promise<unknown>;
+  };
 
-  const [productsLoading, setProductsLoading] = useState(true);
-  const [productsError, setProductsError] = useState(false);
+  const [cart, setCart] = useState<CartItem[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
@@ -57,30 +72,7 @@ export function POS() {
 
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Load products independently from business settings.
-  // POS can display products while the settings context loads.
-  const loadProducts = async () => {
-    try {
-      setProductsError(false);
-
-      const response = await getProducts();
-
-      setProducts(response.data);
-    } catch (error) {
-      console.error("Failed to load products:", error);
-
-      setProductsError(true);
-      toast.error("Unable to load products");
-    } finally {
-      setProductsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  // Refresh settings when the currency is changed elsewhere.
+  // Refresh settings when currency changes elsewhere.
   useEffect(() => {
     const handleCurrencyUpdated = () => {
       refreshSettings().catch(() => {
@@ -322,11 +314,11 @@ export function POS() {
       const saleRes = await createSaleApi(saleData);
       const createdSale = saleRes.data;
 
-      // Refresh product stock after a successful sale.
+      // Refresh shared products after stock changes.
       try {
-        const response = await getProducts();
-        setProducts(response.data);
-        setProductsError(false);
+        await queryClient.invalidateQueries({
+          queryKey: productQueryKey,
+        });
       } catch (error) {
         console.error(
           "Sale succeeded, but product refresh failed:",
@@ -428,7 +420,7 @@ export function POS() {
           </p>
 
           <button
-            onClick={loadProducts}
+            onClick={() => refetchProducts()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg"
           >
             Retry Products

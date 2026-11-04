@@ -1,5 +1,6 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Plus,
@@ -10,10 +11,14 @@ import {
 } from "lucide-react";
 
 import {
-  getProducts,
   createProduct,
   updateProductApi,
 } from "../../api/products";
+
+import {
+  useProducts,
+  productQueryKey,
+} from "../hooks/useProducts";
 
 import { useBusinessSettings } from "../context/BusinessSettingsContext";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -48,6 +53,8 @@ type NewProduct = {
 };
 
 export function Inventory() {
+  const queryClient = useQueryClient();
+
   const {
     settings,
     currency: activeCurrency,
@@ -56,7 +63,19 @@ export function Inventory() {
     refreshSettings,
   } = useBusinessSettings();
 
-  const [products, setProducts] = useState<Product[]>([]);
+  // Shared products query: used by POS and Inventory.
+  const {
+    data: products = [],
+    isLoading: loading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProducts() as {
+    data: Product[];
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => Promise<unknown>;
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -71,9 +90,6 @@ export function Inventory() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [activeImage, setActiveImage] = useState("");
   const [gallery, setGallery] = useState<string[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [productsError, setProductsError] = useState(false);
 
   const currencyError = !settings && !!currencySettingsError;
 
@@ -106,36 +122,15 @@ export function Inventory() {
 
   const LOW_STOCK_THRESHOLD = 5;
 
-  // Load products independently from business settings.
-  const loadProducts = useCallback(async () => {
-    try {
-      setProductsError(false);
-
-      const response = await getProducts();
-
-      setProducts(response.data);
-    } catch (error) {
-      console.error("Failed to load products:", error);
-
-      setProductsError(true);
-      toast.error("Unable to load products");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
-
-  // Format money using the shared active business currency.
+  // Format money using the active business currency.
+  // en-NG displays the naira symbol when the active currency is NGN.
   const formatMoney = (amount: number) => {
     if (!activeCurrency) {
       return "Currency unavailable";
     }
 
     try {
-      return new Intl.NumberFormat(undefined, {
+      return new Intl.NumberFormat("en-NG", {
         style: "currency",
         currency: activeCurrency,
       }).format(Number(amount) || 0);
@@ -154,7 +149,16 @@ export function Inventory() {
     }
   };
 
-  // Image upload preview
+  // Refresh the shared product cache.
+  const refreshProducts = async () => {
+    try {
+      await refetchProducts();
+    } catch {
+      toast.error("Unable to refresh products");
+    }
+  };
+
+  // Image upload preview.
   const handleImageUpload = (file: File) => {
     const previewUrl = URL.createObjectURL(file);
 
@@ -166,7 +170,7 @@ export function Inventory() {
     }));
   };
 
-  // Barcode scanner
+  // Barcode scanner.
   const startScanner = () => {
     setScanning(true);
 
@@ -207,7 +211,7 @@ export function Inventory() {
     };
   }, [scanning]);
 
-  // Add product
+  // Add product.
   const addProduct = async () => {
     if (saving) return;
 
@@ -266,7 +270,7 @@ export function Inventory() {
         imageUrl = data.publicUrl;
       }
 
-      const response = await createProduct({
+      await createProduct({
         name: newProduct.name,
         cost,
         price,
@@ -276,18 +280,9 @@ export function Inventory() {
         image: imageUrl,
       });
 
-      setProducts((prev) => {
-        const index = prev.findIndex(
-          (product) => product.id === response.data.id
-        );
-
-        if (index >= 0) {
-          const updated = [...prev];
-          updated[index] = response.data;
-          return updated;
-        }
-
-        return [...prev, response.data];
+      // Update the shared product cache.
+      await queryClient.invalidateQueries({
+        queryKey: productQueryKey,
       });
 
       setNewProduct({
@@ -315,7 +310,7 @@ export function Inventory() {
     }
   };
 
-  // Update product
+  // Update product.
   const handleUpdateProduct = async () => {
     if (!editProduct || saving) return;
 
@@ -358,7 +353,10 @@ export function Inventory() {
         barcode: editProduct.barcode,
       });
 
-      await loadProducts();
+      // Refresh the shared cache after the update.
+      await queryClient.invalidateQueries({
+        queryKey: productQueryKey,
+      });
 
       setEditProduct(null);
       setShowEditModal(false);
@@ -375,7 +373,7 @@ export function Inventory() {
     }
   };
 
-  // Filter products
+  // Filter products.
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -452,7 +450,7 @@ export function Inventory() {
           </p>
 
           <button
-            onClick={loadProducts}
+            onClick={refreshProducts}
             className="px-3 py-2 bg-blue-600 text-white text-xs rounded-lg"
           >
             Retry Products
@@ -985,6 +983,7 @@ export function Inventory() {
           <img
             src={activeImage}
             className="max-h-[75vh] max-w-[90vw] rounded-lg shadow-lg mb-4"
+            alt="Product"
           />
 
           <div className="flex gap-3 overflow-x-auto px-4">
@@ -992,6 +991,7 @@ export function Inventory() {
               <img
                 key={i}
                 src={img}
+                alt={`Product image ${i + 1}`}
                 onClick={() => setActiveImage(img)}
                 className={`h-16 w-16 object-cover rounded cursor-pointer border-2 ${
                   activeImage === img

@@ -1,5 +1,10 @@
+
 import { useState, useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
+import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 
 import { router } from "./routes";
 import { Splash } from "./components/Splash";
@@ -11,8 +16,19 @@ import { BusinessSettingsProvider } from "./context/BusinessSettingsContext";
 import { Toaster } from "react-hot-toast";
 import { InstallPrompt } from "./components/InstallPrompt";
 
+// Create the client outside App so it is not recreated during renders.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000,
+      gcTime: 10 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: true,
+    },
+  },
+});
+
 export default function App() {
-  // Restore the existing session immediately.
   const [token, setToken] = useState<string | null>(() => {
     return (
       localStorage.getItem("token") ||
@@ -20,7 +36,6 @@ export default function App() {
     );
   });
 
-  // Splash is displayed only during initial application startup.
   const [showSplash, setShowSplash] = useState(true);
 
   const publicPages = [
@@ -29,7 +44,6 @@ export default function App() {
     "/privacy",
   ];
 
-  // Clear authentication information from both storage locations.
   const clearAuthData = () => {
     const authKeys = [
       "token",
@@ -44,9 +58,11 @@ export default function App() {
     });
   };
 
-  // Return the application to the login page.
   const returnToLogin = () => {
     clearAuthData();
+
+    // Clear cached business data when the session ends.
+    queryClient.clear();
 
     window.history.replaceState({}, "", "/");
 
@@ -54,7 +70,6 @@ export default function App() {
     setShowSplash(false);
   };
 
-  // Listen for expired sessions.
   useEffect(() => {
     const handleSessionExpired = () => {
       returnToLogin();
@@ -81,80 +96,87 @@ export default function App() {
     };
   }, []);
 
-  // Called after successful login.
   const handleLogin = (newToken: string) => {
+    // Avoid carrying any previous session's cached data into this session.
+    queryClient.clear();
+
     setToken(newToken);
     setShowSplash(false);
   };
 
-  // Called when the user logs out.
   const handleLogout = () => {
     returnToLogin();
   };
 
-  // Initial splash screen only.
+  let content;
+
   if (showSplash) {
-    return (
+    content = (
       <Splash
         onComplete={() => setShowSplash(false)}
       />
     );
-  }
-
-  const isPublicPage = publicPages.includes(
-    window.location.pathname
-  );
-
-  // Show login when there is no token and the page is protected.
-  if (!token && !isPublicPage) {
-    return (
-      <>
-        <InstallPrompt />
-        <Auth onLogin={handleLogin} />
-        <Toaster position="top-center" />
-      </>
+  } else {
+    const isPublicPage = publicPages.includes(
+      window.location.pathname
     );
+
+    if (!token && !isPublicPage) {
+      content = (
+        <>
+          <InstallPrompt />
+          <Auth onLogin={handleLogin} />
+          <Toaster position="top-center" />
+        </>
+      );
+    } else {
+      content = (
+        <AuthContext.Provider value={{ handleLogout }}>
+          <ThemeProvider>
+            <NotificationProvider>
+              <Toaster
+                position="top-center"
+                reverseOrder={false}
+                containerStyle={{
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                }}
+                toastOptions={{
+                  duration: 2500,
+                  style: {
+                    borderRadius: "12px",
+                    padding: "16px",
+                    fontSize: "15px",
+                  },
+                  success: {
+                    style: {
+                      background: "#16a34a",
+                      color: "#fff",
+                    },
+                  },
+                  error: {
+                    style: {
+                      background: "#dc2626",
+                      color: "#fff",
+                    },
+                  },
+                }}
+              />
+
+              <BusinessSettingsProvider>
+                <RouterProvider router={router} />
+              </BusinessSettingsProvider>
+            </NotificationProvider>
+          </ThemeProvider>
+        </AuthContext.Provider>
+      );
+    }
   }
 
   return (
-  <AuthContext.Provider value={{ handleLogout }}>
-    <ThemeProvider>
-      <NotificationProvider>
-        <Toaster
-          position="top-center"
-          reverseOrder={false}
-          containerStyle={{
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-          }}
-          toastOptions={{
-            duration: 2500,
-            style: {
-              borderRadius: "12px",
-              padding: "16px",
-              fontSize: "15px",
-            },
-            success: {
-              style: {
-                background: "#16a34a",
-                color: "#fff",
-              },
-            },
-            error: {
-              style: {
-                background: "#dc2626",
-                color: "#fff",
-              },
-            },
-          }}
-        />
-
-        <BusinessSettingsProvider>
-          <RouterProvider router={router} />
-        </BusinessSettingsProvider>
-      </NotificationProvider>
-    </ThemeProvider>
-  </AuthContext.Provider>
-);
+    <QueryClientProvider client={queryClient}>
+      {content}
+    </QueryClientProvider>
+  );
 }
