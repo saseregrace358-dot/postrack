@@ -287,7 +287,11 @@ const unreadCount = filteredNotifications.filter(
   (n: any) => !n.read
 ).length;
 
-const user = JSON.parse(localStorage.getItem("user") || "{}");
+const savedUser =
+  localStorage.getItem("user") ||
+  sessionStorage.getItem("user");
+
+const user = savedUser ? JSON.parse(savedUser) : {};
 console.log("USER:", user);
 const isOwner =
 user.role === "owner" ||
