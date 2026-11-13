@@ -7,9 +7,7 @@ import {
   X,
 } from "lucide-react";
 
-import {
-  addPaymentApi,
-} from "../../api/sales";
+import { addPaymentApi } from "../../api/sales";
 
 import {
   useSalesHistoryQuery,
@@ -82,8 +80,6 @@ export function SalesHistory() {
     loadingReturns,
     salesError,
     returnsError,
-    refreshSales,
-    refreshReturns,
   } = useSalesHistoryQuery();
 
   const refreshSalesHistory = useRefreshSalesHistory();
@@ -128,7 +124,8 @@ export function SalesHistory() {
     return totals;
   }, [returnsData]);
 
-  // Show errors without replacing cached data.
+  // ================= ERROR HANDLING =================
+
   useEffect(() => {
     if (salesError) {
       console.error("Failed to load sales:", salesError);
@@ -169,14 +166,15 @@ export function SalesHistory() {
     }
 
     try {
-      return new Intl.NumberFormat(undefined, {
+      return new Intl.NumberFormat("en-NG", {
         style: "currency",
         currency,
-        minimumFractionDigits: currency === "JPY" ? 0 : 2,
-        maximumFractionDigits: currency === "JPY" ? 0 : 2,
-      }).format(Number(amount ?? 0));
+        currencyDisplay: "narrowSymbol",
+        maximumFractionDigits: 2,
+        minimumFractionDigits: 0,
+      }).format(Number(amount) || 0);
     } catch {
-      return `${currency} ${Number(amount ?? 0).toLocaleString()}`;
+      return "Currency unavailable";
     }
   };
 

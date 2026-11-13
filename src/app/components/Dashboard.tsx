@@ -86,10 +86,13 @@ const formatCurrency = (amount: number, currency: string) => {
   }
 
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency,
-    }).format(Number(amount || 0));
+      currencyDisplay: "narrowSymbol",
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+    }).format(Number(amount) || 0);
   } catch {
     return "—";
   }
@@ -101,12 +104,14 @@ const formatAxisCurrency = (value: number, currency: string) => {
   }
 
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency,
+      currencyDisplay: "narrowSymbol",
       notation: "compact",
       maximumFractionDigits: 1,
-    }).format(Number(value || 0));
+      minimumFractionDigits: 0,
+    }).format(Number(value) || 0);
   } catch {
     return "—";
   }
