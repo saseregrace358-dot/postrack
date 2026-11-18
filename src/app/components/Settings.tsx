@@ -1,6 +1,18 @@
 
 import { useState, useEffect } from "react";
-import { Moon, Sun } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  Headset,
+  MessageCircle,
+  Mail,
+  Phone,
+  ChevronDown,
+  ChevronUp,
+  MessageSquareText,
+  Clock,
+  ExternalLink,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useTheme } from "../context/ThemeContext";
@@ -36,6 +48,13 @@ const SUPPORTED_CURRENCIES = [
   { code: "CHF", name: "Swiss Franc" },
 ];
 
+// Replace these placeholders with your official DGTrack support contacts.
+const SUPPORT_EMAIL = "support@yourdomain.com";
+const SUPPORT_PHONE = "+234XXXXXXXXXX";
+
+// WhatsApp requires the international number without +, spaces or dashes.
+const SUPPORT_WHATSAPP = "234XXXXXXXXXX";
+
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
 
@@ -64,7 +83,7 @@ export function Settings() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Synchronize the editable form fields with shared business settings.
+  // Synchronize editable fields with shared business settings.
   useEffect(() => {
     if (!settings) return;
 
@@ -113,9 +132,7 @@ export function Settings() {
       Number(taxRate) < 0 ||
       Number(debtThreshold) < 0
     ) {
-      toast.error(
-        "Enter valid tax and debt threshold values."
-      );
+      toast.error("Enter valid tax and debt threshold values.");
       return false;
     }
 
@@ -147,8 +164,6 @@ export function Settings() {
 
       toast.success("Tax settings saved");
 
-      // Refresh shared settings without treating a refresh failure
-      // as a failed save.
       try {
         await refreshSettings();
       } catch {
@@ -228,10 +243,7 @@ export function Settings() {
 
       toast.success("Currency settings saved");
 
-      // Notify components such as Dashboard that depend on this event.
-      window.dispatchEvent(
-        new Event("currency-updated")
-      );
+      window.dispatchEvent(new Event("currency-updated"));
 
       try {
         await refreshSettings();
@@ -339,10 +351,10 @@ export function Settings() {
       )}
 
       {/* Theme */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={toggleTheme}
-          className="w-full flex justify-between p-4"
+          className="w-full flex justify-between items-center p-4"
         >
           <span>
             {theme === "dark" ? "Dark" : "Light"} Mode
@@ -358,7 +370,7 @@ export function Settings() {
       />
 
       {/* Staff Management */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => setShowStaffManagement(true)}
           className="w-full flex justify-between items-center p-4"
@@ -482,7 +494,7 @@ export function Settings() {
       </div>
 
       {/* Tax Settings */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => toggleSection("tax")}
           className="w-full flex justify-between items-center p-4"
@@ -508,7 +520,7 @@ export function Settings() {
         </button>
 
         {expanded === "tax" && (
-          <div className="border-t p-4 space-y-3">
+          <div className="border-t dark:border-slate-700 p-4 space-y-3">
             {!settings ? (
               <p className="text-sm text-gray-500">
                 Business settings are not available.
@@ -526,7 +538,7 @@ export function Settings() {
                   onChange={(e) =>
                     setTaxRate(e.target.value)
                   }
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800"
                   placeholder="7.5"
                 />
 
@@ -544,10 +556,10 @@ export function Settings() {
       </div>
 
       {/* Debt Threshold */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => toggleSection("debt")}
-          className="w-full flex justify-between p-4"
+          className="w-full flex justify-between items-center p-4"
         >
           <span>Debt Threshold</span>
 
@@ -557,7 +569,7 @@ export function Settings() {
         </button>
 
         {expanded === "debt" && (
-          <div className="border-t p-4 space-y-3">
+          <div className="border-t dark:border-slate-700 p-4 space-y-3">
             {!settings ? (
               <p className="text-sm text-gray-500">
                 Business settings are not available.
@@ -575,7 +587,7 @@ export function Settings() {
                   onChange={(e) =>
                     setDebtThreshold(e.target.value)
                   }
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-800"
                   placeholder="50000"
                 />
 
@@ -593,7 +605,7 @@ export function Settings() {
       </div>
 
       {/* Returned Items */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => setShowReturn(true)}
           className="w-full flex justify-between items-center p-4"
@@ -604,10 +616,10 @@ export function Settings() {
       </div>
 
       {/* Export & Reports */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => toggleSection("export")}
-          className="w-full flex justify-between p-4"
+          className="w-full flex justify-between items-center p-4"
         >
           <span>Export & Reports</span>
 
@@ -617,7 +629,7 @@ export function Settings() {
         </button>
 
         {expanded === "export" && (
-          <div className="border-t p-4 space-y-3">
+          <div className="border-t dark:border-slate-700 p-4 space-y-3">
             <button
               onClick={handleExportProductsCsv}
               className="w-full py-2 bg-blue-600 text-white rounded"
@@ -656,8 +668,160 @@ export function Settings() {
         )}
       </div>
 
+      {/* Contact & Customer Support */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleSection("support")}
+          aria-expanded={expanded === "support"}
+          className="w-full flex justify-between items-center p-4 text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <Headset size={21} />
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">
+                Contact & Customer Support
+              </p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                Get help, send feedback or make an enquiry
+              </p>
+            </div>
+          </div>
+
+          {expanded === "support" ? (
+            <ChevronUp size={20} className="text-gray-500" />
+          ) : (
+            <ChevronDown size={20} className="text-gray-500" />
+          )}
+        </button>
+
+        {expanded === "support" && (
+          <div className="border-t dark:border-slate-700 p-4 space-y-4">
+
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                We're here to help
+              </h3>
+
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 leading-relaxed">
+                Have a question about DGTrack, need technical
+                assistance, or want to share a complaint or suggestion?
+                Contact our customer support team through any of the
+                channels below.
+              </p>
+            </div>
+
+            {/* WhatsApp Support */}
+            <a
+              href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(
+                "Hello DGTrack Support, I need assistance with my account."
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-green-500 dark:hover:border-green-500 transition-colors"
+            >
+              <div className="w-11 h-11 shrink-0 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                <MessageCircle size={22} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Chat with us
+                </p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  Chat with our team on WhatsApp
+                </p>
+              </div>
+
+              <ExternalLink
+                size={17}
+                className="text-gray-400 shrink-0"
+              />
+            </a>
+
+            {/* Email Support */}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+                "DGTrack Customer Support Enquiry"
+              )}`}
+              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+            >
+              <div className="w-11 h-11 shrink-0 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <Mail size={22} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Email support
+                </p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  Send us your questions or complaints
+                </p>
+              </div>
+
+              <ExternalLink
+                size={17}
+                className="text-gray-400 shrink-0"
+              />
+            </a>
+
+            {/* Phone Support */}
+            <a
+              href={`tel:${SUPPORT_PHONE}`}
+              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-purple-500 dark:hover:border-purple-500 transition-colors"
+            >
+              <div className="w-11 h-11 shrink-0 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                <Phone size={22} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Call us
+                </p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  Speak directly with our support team
+                </p>
+              </div>
+
+              <ExternalLink
+                size={17}
+                className="text-gray-400 shrink-0"
+              />
+            </a>
+
+            {/* Complaints and enquiries */}
+            <div className="rounded-xl bg-gray-50 dark:bg-slate-700/60 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <MessageSquareText
+                  size={19}
+                  className="text-blue-600 dark:text-blue-400"
+                />
+
+                <p className="font-medium text-sm text-gray-900 dark:text-white">
+                  Complaints, enquiries & feedback
+                </p>
+              </div>
+
+              <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed">
+                We welcome your questions, suggestions and reports
+                about any issue you experience while using DGTrack.
+                Please include a clear description of your concern
+                so our team can assist you appropriately.
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-400 dark:text-slate-500 text-center">
+              DGTrack Customer Care
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Billing */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700">
         <button
           onClick={() => setShowBilling(true)}
           className="w-full flex justify-between items-center p-4"

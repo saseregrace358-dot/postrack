@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import uuid
@@ -23,22 +22,29 @@ router = APIRouter(
 )
 
 
+# ============================================================
+# DATABASE
+# ============================================================
+
 def get_db():
     db = SessionLocal()
+
     try:
         yield db
     finally:
         db.close()
 
 
-# ==========================================
-# CURRENCY HELPERS
-# ==========================================
+# ============================================================
+# CURRENCY SETTINGS
+# ============================================================
 
 def get_currency_settings(db: Session, business_id: str):
     settings = (
         db.query(BusinessSettings)
-        .filter(BusinessSettings.business_id == business_id)
+        .filter(
+            BusinessSettings.business_id == business_id
+        )
         .first()
     )
 
@@ -103,8 +109,17 @@ def get_currency_settings(db: Session, business_id: str):
     return settings, rate
 
 
+# ============================================================
+# MONEY HELPERS
+# ============================================================
+
 def currency_digits(currency: str):
-    return 0 if currency == "JPY" else 2
+    """
+    JPY uses zero decimal places.
+    Other currently supported currencies use two.
+    """
+
+    return 0 if currency.upper() == "JPY" else 2
 
 
 def round_money(amount, currency: str):
@@ -209,9 +224,248 @@ def to_active_currency(
     )
 
 
-# ==========================================
-# FORMAT SALE RESPONSE
-# ==========================================
+# ============================================================
+# SHARED SALE CALCULATION
+# USED BY BOTH QUOTE AND CHECKOUT
+# ============================================================
+
+def calculate_sale_amounts(
+    db: Session,
+    business_id: str,
+    settings: BusinessSettings,
+    rate: Decimal,
+    items,
+    lock_products: bool = False
+):
+    """
+    Calculates the sale using database product prices.
+
+    Product prices in the database are always stored
+    in the business base currency.
+
+    This function is shared by:
+        POST /sales/quote
+        POST /sales
+
+    When lock_products=True, product rows are locked
+    while checkout is being processed.
+
+    The quote endpoint does not change stock.
+    """
+
+    base_currency = settings.base_currency
+    active_currency = settings.currency
+
+    if not items:
+        raise HTTPException(
+            status_code=400,
+            detail="A sale must contain at least one product."
+        )
+
+    subtotal = Decimal("0")
+
+    sale_items = []
+    original_items = []
+    products_to_update = {}
+
+    for item in items:
+
+        product_query = (
+            db.query(Product)
+            .filter(
+                Product.id == item.product_id,
+                Product.business_id == business_id
+            )
+        )
+
+        if lock_products:
+            product_query = product_query.with_for_update()
+
+        product = product_query.first()
+
+        if not product:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Product {item.product_id} was not found."
+            )
+
+        if item.quantity <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Product quantity must be greater than zero."
+            )
+
+        already_requested = (
+            products_to_update
+            .get(product.id, {})
+            .get("quantity", 0)
+        )
+
+        total_requested = (
+            already_requested + item.quantity
+        )
+
+        if product.stock < total_requested:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient stock for {product.name}."
+            )
+
+        products_to_update[product.id] = {
+            "product": product,
+            "quantity": total_requested
+        }
+
+        # Database product values are in base currency.
+        try:
+            product_price = Decimal(str(product.price))
+            product_cost = Decimal(str(product.cost or 0))
+
+        except (InvalidOperation, TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid price or cost for {product.name}."
+            )
+
+        if (
+            not product_price.is_finite()
+            or not product_cost.is_finite()
+            or product_price < 0
+            or product_cost < 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid price or cost for {product.name}."
+            )
+
+        subtotal += (
+            product_price * item.quantity
+        )
+
+        # Canonical item values stored in base currency.
+        sale_items.append({
+            "product_id": product.id,
+            "name": product.name,
+            "price": float(product_price),
+            "cost": float(product_cost),
+            "quantity": item.quantity
+        })
+
+        # Sale-time item snapshot in active currency.
+        original_items.append({
+            "product_id": product.id,
+            "name": product.name,
+            "price": float(
+                to_active_decimal(
+                    product_price,
+                    rate,
+                    active_currency
+                )
+            ),
+            "cost": float(
+                to_active_decimal(
+                    product_cost,
+                    rate,
+                    active_currency
+                )
+            ),
+            "quantity": item.quantity
+        })
+
+    # Round subtotal in base currency first.
+    subtotal = round_money(
+        subtotal,
+        base_currency
+    )
+
+    # --------------------------------------------------------
+    # TAX IS CALCULATED IN BASE CURRENCY
+    # --------------------------------------------------------
+
+    tax = Decimal("0")
+
+    if (
+        settings.tax_enabled
+        and settings.tax_rate is not None
+    ):
+        try:
+            tax_rate = Decimal(str(settings.tax_rate))
+
+        except (InvalidOperation, TypeError, ValueError):
+            raise HTTPException(
+                status_code=409,
+                detail="The configured tax rate is invalid."
+            )
+
+        if not tax_rate.is_finite() or tax_rate < 0:
+            raise HTTPException(
+                status_code=409,
+                detail="The configured tax rate is invalid."
+            )
+
+        if tax_rate > 0:
+            tax = (
+                subtotal
+                * tax_rate
+                / Decimal("100")
+            )
+
+    tax = round_money(
+        tax,
+        base_currency
+    )
+
+    total = round_money(
+        subtotal + tax,
+        base_currency
+    )
+
+    # --------------------------------------------------------
+    # CONVERT THE FINAL AMOUNTS TO ACTIVE CURRENCY
+    # --------------------------------------------------------
+
+    subtotal_active = to_active_decimal(
+        subtotal,
+        rate,
+        active_currency
+    )
+
+    total_active = to_active_decimal(
+        total,
+        rate,
+        active_currency
+    )
+
+    # Ensure displayed subtotal + displayed tax = displayed total.
+    # This avoids a one-cent difference caused by rounding
+    # subtotal, tax and total independently.
+    tax_active = round_money(
+        total_active - subtotal_active,
+        active_currency
+    )
+
+    return {
+        "subtotal": subtotal,
+        "tax": tax,
+        "total": total,
+
+        "subtotal_active": subtotal_active,
+        "tax_active": tax_active,
+        "total_active": total_active,
+
+        "sale_items": sale_items,
+        "original_items": original_items,
+        "products_to_update": products_to_update,
+
+        "base_currency": base_currency,
+        "active_currency": active_currency,
+        "exchange_rate": rate
+    }
+
+
+# ============================================================
+# SALE RESPONSE
+# ============================================================
 
 def sale_to_response(
     sale: Sale,
@@ -223,31 +477,35 @@ def sale_to_response(
         for column in Sale.__table__.columns
     }
 
-    # Preserve canonical database amounts.
+    # Preserve canonical database values.
     result["base_subtotal"] = sale.subtotal
     result["base_tax"] = sale.tax
     result["base_total"] = sale.total
     result["base_amountPaid"] = sale.amountPaid
     result["base_balance"] = sale.balance
 
-    # Return financial amounts in the active currency.
-    result["subtotal"] = to_active_currency(
+    # Convert subtotal and total first.
+    subtotal_active = to_active_decimal(
         sale.subtotal,
         rate,
         active_currency
     )
 
-    result["tax"] = to_active_currency(
-        sale.tax,
-        rate,
-        active_currency
-    )
-
-    result["total"] = to_active_currency(
+    total_active = to_active_decimal(
         sale.total,
         rate,
         active_currency
     )
+
+    # Keep the displayed amounts mathematically consistent.
+    tax_active = round_money(
+        total_active - subtotal_active,
+        active_currency
+    )
+
+    result["subtotal"] = float(subtotal_active)
+    result["tax"] = float(tax_active)
+    result["total"] = float(total_active)
 
     result["amountPaid"] = to_active_currency(
         sale.amountPaid,
@@ -263,10 +521,14 @@ def sale_to_response(
 
     result["currency"] = active_currency
 
-    # Convert sale item prices and costs.
+    # --------------------------------------------------------
+    # CONVERT SALE ITEMS
+    # --------------------------------------------------------
+
     converted_items = []
 
     for item in sale.items or []:
+
         converted_item = dict(item)
 
         if "price" in converted_item:
@@ -293,10 +555,14 @@ def sale_to_response(
 
     result["items"] = converted_items
 
-    # Convert payment records for display.
+    # --------------------------------------------------------
+    # CONVERT PAYMENT RECORDS
+    # --------------------------------------------------------
+
     converted_payments = []
 
     for payment in sale.payments or []:
+
         converted_payment = dict(payment)
 
         base_amount = payment.get("amount", 0)
@@ -318,9 +584,80 @@ def sale_to_response(
     return result
 
 
-# ==========================================
+# ============================================================
+# SALE QUOTE
+# ============================================================
+
+@router.post("/quote")
+def quote_sale(
+    payload: SaleCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    Calculates the current sale preview.
+
+    This endpoint:
+        - Validates the requested products.
+        - Checks available stock.
+        - Calculates subtotal.
+        - Calculates tax.
+        - Calculates total.
+        - Converts the result into the active currency.
+
+    It does NOT:
+        - Reduce stock.
+        - Create a sale.
+        - Create a payment.
+        - Create notifications.
+    """
+
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business."
+        )
+
+    settings, rate = get_currency_settings(
+        db,
+        business_id
+    )
+
+    calculation = calculate_sale_amounts(
+        db=db,
+        business_id=business_id,
+        settings=settings,
+        rate=rate,
+        items=payload.items,
+        lock_products=False
+    )
+
+    return {
+        "subtotal": float(
+            calculation["subtotal_active"]
+        ),
+        "tax": float(
+            calculation["tax_active"]
+        ),
+        "total": float(
+            calculation["total_active"]
+        ),
+        "currency": calculation["active_currency"],
+        "base_currency": calculation["base_currency"],
+        "exchange_rate": float(
+            calculation["exchange_rate"]
+        ),
+        "tax_enabled": bool(settings.tax_enabled),
+        "tax_rate": float(settings.tax_rate or 0),
+        "items": calculation["original_items"]
+    }
+
+
+# ============================================================
 # CREATE SALE
-# ==========================================
+# ============================================================
 
 @router.post("")
 async def create_sale(
@@ -328,7 +665,7 @@ async def create_sale(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
 
     if not business_id:
         raise HTTPException(
@@ -346,143 +683,36 @@ async def create_sale(
 
     order_id = f"ORD-{uuid.uuid4().hex[:10]}"
 
+    notifications_to_broadcast = []
+
     try:
-        # ======================================
-        # VALIDATE PRODUCTS AND CALCULATE SUBTOTAL
-        # ======================================
+        # ----------------------------------------------------
+        # CALCULATE SALE USING SHARED FUNCTION
+        # ----------------------------------------------------
 
-        sale_items = []
-        original_items = []
-        products_to_update = {}
-
-        subtotal = Decimal("0")
-
-        for item in payload.items:
-
-            product = (
-                db.query(Product)
-                .filter(
-                    Product.id == item.product_id,
-                    Product.business_id == business_id
-                )
-                .first()
-            )
-
-            if not product:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Product not found."
-                )
-
-            if item.quantity <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Product quantity must be greater than zero."
-                )
-
-            already_requested = (
-                products_to_update
-                .get(product.id, {})
-                .get("quantity", 0)
-            )
-
-            total_requested = (
-                already_requested + item.quantity
-            )
-
-            if product.stock < total_requested:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Insufficient stock for {product.name}."
-                )
-
-            products_to_update[product.id] = {
-                "product": product,
-                "quantity": total_requested
-            }
-
-            # Database product prices are in base currency.
-            product_price = Decimal(str(product.price))
-            product_cost = Decimal(str(product.cost))
-
-            if (
-                not product_price.is_finite()
-                or not product_cost.is_finite()
-                or product_price < 0
-                or product_cost < 0
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid price or cost for {product.name}."
-                )
-
-            subtotal += (
-                product_price * item.quantity
-            )
-
-            sale_items.append({
-                "product_id": product.id,
-                "name": product.name,
-                "price": float(product_price),
-                "cost": float(product_cost),
-                "quantity": item.quantity
-            })
-
-            original_items.append({
-                "product_id": product.id,
-                "name": product.name,
-                "price": float(
-                    to_active_decimal(
-                        product_price,
-                        rate,
-                        active_currency
-                    )
-                ),
-                "cost": float(
-                    to_active_decimal(
-                        product_cost,
-                        rate,
-                        active_currency
-                    )
-                ),
-                "quantity": item.quantity
-            })
-
-        subtotal = round_money(
-            subtotal,
-            base_currency
+        calculation = calculate_sale_amounts(
+            db=db,
+            business_id=business_id,
+            settings=settings,
+            rate=rate,
+            items=payload.items,
+            lock_products=True
         )
 
-        # ======================================
-        # CALCULATE TAX AND TOTAL
-        # IN BASE CURRENCY
-        # ======================================
+        subtotal = calculation["subtotal"]
+        tax = calculation["tax"]
+        total = calculation["total"]
 
-        tax = Decimal("0")
+        sale_items = calculation["sale_items"]
+        original_items = calculation["original_items"]
 
-        if (
-            settings.tax_enabled
-            and settings.tax_rate is not None
-            and Decimal(str(settings.tax_rate)) > 0
-        ):
-            tax = subtotal * (
-                Decimal(str(settings.tax_rate))
-                / Decimal("100")
-            )
+        products_to_update = calculation["products_to_update"]
 
-        tax = round_money(
-            tax,
-            base_currency
-        )
+        total_active = calculation["total_active"]
 
-        total = round_money(
-            subtotal + tax,
-            base_currency
-        )
-
-        # ======================================
-        # VALIDATE PAYMENT IN ACTIVE CURRENCY
-        # ======================================
+        # ----------------------------------------------------
+        # VALIDATE PAYMENT
+        # ----------------------------------------------------
 
         amount_paid_active = round_money(
             payload.amountPaid or 0,
@@ -495,26 +725,21 @@ async def create_sale(
                 detail="Payment amount cannot be negative."
             )
 
-        # This is the same rounded total displayed to the user.
-        total_active = to_active_decimal(
-            total,
-            rate,
-            active_currency
-        )
-
         if amount_paid_active > total_active:
             raise HTTPException(
                 status_code=400,
                 detail="Payment amount cannot exceed the sale total."
             )
 
-        # If the customer pays the displayed total,
-        # use the exact base-currency total.
+        # If the customer pays the exact displayed total,
+        # use the exact canonical base-currency total.
         if amount_paid_active == total_active:
+
             amount_paid = total
             amount_paid_active = total_active
 
         else:
+
             amount_paid = to_base_currency(
                 amount_paid_active,
                 rate,
@@ -527,8 +752,6 @@ async def create_sale(
                     detail="Payment amount cannot exceed the sale total."
                 )
 
-        # IMPORTANT:
-        # Calculate balance before using it anywhere else.
         balance = round_money(
             max(
                 Decimal("0"),
@@ -537,9 +760,9 @@ async def create_sale(
             base_currency
         )
 
-        # ======================================
+        # ----------------------------------------------------
         # CHECK TOTAL BUSINESS DEBT
-        # ======================================
+        # ----------------------------------------------------
 
         current_total_debt = (
             db.query(
@@ -563,11 +786,11 @@ async def create_sale(
             current_total_debt + balance
         )
 
-        # Debt threshold is configured in active currency.
         if (
             settings.debt_threshold is not None
             and Decimal(str(settings.debt_threshold)) > 0
         ):
+
             debt_threshold_base = to_base_currency(
                 settings.debt_threshold,
                 rate,
@@ -612,14 +835,14 @@ async def create_sale(
 
                 raise HTTPException(
                     status_code=400,
-                    detail="Debt limit exceeded, payment not processed."
+                    detail=(
+                        "Debt limit exceeded, payment not processed."
+                    )
                 )
 
-        # ======================================
+        # ----------------------------------------------------
         # REDUCE STOCK
-        # ======================================
-
-        notifications_to_broadcast = []
+        # ----------------------------------------------------
 
         for product_data in products_to_update.values():
 
@@ -647,9 +870,9 @@ async def create_sale(
                     notification
                 )
 
-        # ======================================
+        # ----------------------------------------------------
         # PAYMENT STATUS
-        # ======================================
+        # ----------------------------------------------------
 
         if balance <= 0:
             status = "PAID"
@@ -663,6 +886,7 @@ async def create_sale(
         payments = []
 
         if amount_paid > 0:
+
             payments.append({
                 "amount": float(amount_paid),
                 "amount_in_currency": float(amount_paid_active),
@@ -672,30 +896,29 @@ async def create_sale(
                 "method": payload.paymentMethod
             })
 
-        # ======================================
-        # SAVE ORIGINAL TRANSACTION SNAPSHOT
-        # ======================================
+        # ----------------------------------------------------
+        # ORIGINAL TRANSACTION SNAPSHOT
+        # ----------------------------------------------------
 
         original_amounts = {
             "currency": active_currency,
             "exchange_rate": float(rate),
             "items": original_items,
+
             "subtotal": float(
-                to_active_decimal(
-                    subtotal,
-                    rate,
-                    active_currency
-                )
+                calculation["subtotal_active"]
             ),
+
             "tax": float(
-                to_active_decimal(
-                    tax,
-                    rate,
-                    active_currency
-                )
+                calculation["tax_active"]
             ),
-            "total": float(total_active),
+
+            "total": float(
+                calculation["total_active"]
+            ),
+
             "amountPaid": float(amount_paid_active),
+
             "balance": float(
                 to_active_decimal(
                     balance,
@@ -705,25 +928,30 @@ async def create_sale(
             )
         }
 
-        # ======================================
+        # ----------------------------------------------------
         # SAVE SALE
-        # ======================================
+        # ----------------------------------------------------
 
         sale = Sale(
             order_id=order_id,
             items=sale_items,
+
             subtotal=float(subtotal),
             tax=float(tax),
             total=float(total),
+
             amountPaid=float(amount_paid),
             balance=float(balance),
+
             paymentMethod=payload.paymentMethod,
             payments=payments,
             status=status,
+
             base_currency=base_currency,
             currency_at_sale=active_currency,
             exchange_rate_at_sale=rate,
             original_amounts=original_amounts,
+
             business_id=business_id,
             created_by=user["id"],
             created_by_name=user.get("name")
@@ -734,9 +962,9 @@ async def create_sale(
         db.commit()
         db.refresh(sale)
 
-        # ======================================
+        # ----------------------------------------------------
         # BROADCAST LOW STOCK NOTIFICATIONS
-        # ======================================
+        # ----------------------------------------------------
 
         for notification in notifications_to_broadcast:
 
@@ -766,16 +994,22 @@ async def create_sale(
         raise
 
 
-# ==========================================
+# ============================================================
 # GET SALES
-# ==========================================
+# ============================================================
 
 @router.get("")
 def get_sales(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business."
+        )
 
     settings, rate = get_currency_settings(
         db,
@@ -801,10 +1035,9 @@ def get_sales(
     ]
 
 
-# ==========================================
+# ============================================================
 # ADD PAYMENT TO EXISTING SALE
-# DEBT AND PARTIAL REPAYMENT
-# ==========================================
+# ============================================================
 
 @router.patch("/{sale_id}/payment")
 async def add_payment(
@@ -813,7 +1046,7 @@ async def add_payment(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
 
     if not business_id:
         raise HTTPException(
@@ -846,9 +1079,9 @@ async def add_payment(
         )
 
     try:
-        # ======================================
+        # ----------------------------------------------------
         # CHECK OUTSTANDING BALANCE
-        # ======================================
+        # ----------------------------------------------------
 
         outstanding_base = round_money(
             sale.balance or 0,
@@ -861,9 +1094,9 @@ async def add_payment(
                 detail="This sale has no outstanding balance."
             )
 
-        # ======================================
+        # ----------------------------------------------------
         # VALIDATE PAYMENT AMOUNT
-        # ======================================
+        # ----------------------------------------------------
 
         payment_amount_active = round_money(
             payment.get("amount", 0),
@@ -876,8 +1109,6 @@ async def add_payment(
                 detail="Payment amount must be greater than zero."
             )
 
-        # Convert outstanding balance to the same currency
-        # used by the payment input.
         outstanding_active = to_active_decimal(
             outstanding_base,
             rate,
@@ -893,12 +1124,14 @@ async def add_payment(
                 )
             )
 
-        # If the customer pays the displayed outstanding balance,
+        # If the customer pays the full displayed balance,
         # use the exact remaining base-currency balance.
         if payment_amount_active == outstanding_active:
+
             payment_amount_base = outstanding_base
 
         else:
+
             payment_amount_base = to_base_currency(
                 payment_amount_active,
                 rate,
@@ -920,9 +1153,9 @@ async def add_payment(
                 detail="Payment amount is too small to record."
             )
 
-        # ======================================
+        # ----------------------------------------------------
         # UPDATE PAYMENT HISTORY
-        # ======================================
+        # ----------------------------------------------------
 
         payments = list(sale.payments or [])
 
@@ -943,8 +1176,7 @@ async def add_payment(
         })
 
         # Use sale.amountPaid as the authoritative accumulated
-        # payment amount. Do not rebuild it by summing old
-        # payment-history records, which may have legacy formats.
+        # payment amount.
         previous_amount_paid = round_money(
             sale.amountPaid or 0,
             base_currency
@@ -974,31 +1206,34 @@ async def add_payment(
             base_currency
         )
 
-        # ======================================
+        # ----------------------------------------------------
         # SAVE UPDATED SALE AMOUNTS
-        # ======================================
+        # ----------------------------------------------------
 
         sale.payments = payments
         sale.amountPaid = float(new_total_paid)
         sale.balance = float(new_balance)
 
-        # ======================================
+        # ----------------------------------------------------
         # UPDATE PAYMENT STATUS
-        # ======================================
+        # ----------------------------------------------------
 
         if new_balance <= 0:
+
             sale.balance = 0
             sale.status = "PAID"
 
         elif new_total_paid > 0:
+
             sale.status = "PARTIAL"
 
         else:
+
             sale.status = "DEBT"
 
-        # ======================================
-        # CREATE PAYMENT NOTIFICATION
-        # ======================================
+        # ----------------------------------------------------
+        # PAYMENT NOTIFICATION
+        # ----------------------------------------------------
 
         notification = Notification(
             business_id=business_id,
@@ -1014,12 +1249,13 @@ async def add_payment(
         db.add(notification)
 
         db.commit()
+
         db.refresh(sale)
         db.refresh(notification)
 
-        # ======================================
+        # ----------------------------------------------------
         # BROADCAST NOTIFICATION
-        # ======================================
+        # ----------------------------------------------------
 
         await manager.broadcast(
             business_id,
