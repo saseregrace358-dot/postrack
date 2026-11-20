@@ -1,7 +1,16 @@
+import os
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt, JWTError
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal
 from app.websocket_manager import manager
-import os
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 
 router = APIRouter()
 
@@ -13,32 +22,53 @@ ALGORITHM = "HS256"
 async def websocket_notifications(websocket: WebSocket):
     token = websocket.query_params.get("token")
 
-    if not token:
-        print("No token received")
+    if not token or not SECRET_KEY:
         await websocket.close(code=1008)
         return
 
+    db: Session = SessionLocal()
+    connected = False
+    business_id = None
+
     try:
+        # Authenticate the WebSocket connection.
         payload = jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[ALGORITHM],
         )
 
-        print("JWT Payload:", payload)
+        business_id = payload.get("business_id")
 
-        business_id = payload["business_id"]
+        if not business_id:
+            await websocket.close(code=1008)
+            return
 
+        # Require an active subscription with notifications enabled.
+        check_subscription_feature(
+            db,
+            business_id,
+            "notifications",
+        )
+
+        # Connect only after authentication and subscription checks pass.
         await manager.connect(business_id, websocket)
-        print("WebSocket connected")
+        connected = True
 
         while True:
             await websocket.receive_text()
 
-    except JWTError as e:
-        print("JWT ERROR:", e)
+    except WebSocketDisconnect:
+        pass
+
+    except JWTError:
         await websocket.close(code=1008)
 
-    except Exception as e:
-        print("GENERAL ERROR:", repr(e))
+    except Exception:
         await websocket.close(code=1008)
+
+    finally:
+        if connected:
+            manager.disconnect(business_id, websocket)
+
+        db.close()

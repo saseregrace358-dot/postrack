@@ -1,28 +1,21 @@
+
 import api from "./api";
 
-// Get all available subscription plans
-export const getPlans = () => {
-  return api.get("/subscriptions/plans");
-};
+export const getPlans = () => api.get("/subscriptions/plans");
 
-// Get current business subscription
-export const getMySubscription = () => {
-  return api.get("/subscriptions/me");
-};
+export const getMySubscription = () => api.get("/subscriptions/me");
 
-// Initialize Paystack payment
-export const initializePayment = (plan: string) => {
-  return api.post("/payments/initialize", {
-    plan,
-  });
-};
+export interface PaymentRequest {
+  plan: string;
+  billing_interval: "monthly" | "yearly";
+  payment_currency: "NGN";
+}
 
-// Verify payment after Paystack redirects back
-export const verifyPayment = (reference: string) => {
-  return api.get(`/payments/verify/${reference}`);
-};
+export const initializePayment = (payload: PaymentRequest) =>
+  api.post("/payments/initialize", payload);
 
-// Cancel subscription
-export const cancelSubscription = () => {
-  return api.post("/payments/cancel");
-};
+export const verifyPayment = (reference: string) =>
+  api.get(`/payments/verify/${reference}`);
+
+export const cancelSubscription = () =>
+  api.post("/payments/cancel");

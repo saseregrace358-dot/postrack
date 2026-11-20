@@ -1,25 +1,54 @@
-from datetime import datetime
+
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.models.business_subscription import BusinessSubscription
 from app.models.subscription_plan import SubscriptionPlan
-from app.models.sale import Sale
 from app.models.product import Product
 from app.models.employee import Employee
 
 
-async def check_permission(
+# Subscriptions that can retain access until their expiry date.
+VALID_SUBSCRIPTION_STATUSES = {
+    "active",
+    "cancelled",
+    "trialing",
+}
+
+
+FEATURE_FLAGS = {
+    "reports": "reports_enabled",
+    "export": "export_enabled",
+    "ai": "ai_enabled",
+    "notifications": "notifications_enabled",
+}
+
+
+def get_valid_subscription(
     db: Session,
     business_id: str,
-    feature: str,
 ):
-    # Get active subscription
+    """
+    Return the business's valid subscription and plan.
+
+    Expired subscriptions are marked expired.
+    Missing expiry dates fail closed instead of granting
+    indefinite access.
+    """
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+
     subscription = (
         db.query(BusinessSubscription)
         .filter(
-            BusinessSubscription.business_id == business_id,
-            BusinessSubscription.status == "active",
+            BusinessSubscription.business_id == business_id
         )
         .first()
     )
@@ -29,24 +58,55 @@ async def check_permission(
             status_code=403,
             detail={
                 "error": "no_subscription",
-                "message": "No active subscription found."
+                "message": "No subscription was found for this business.",
             },
         )
 
-    # Check expiry
-    if (
-        subscription.expires_at
-        and subscription.expires_at < datetime.utcnow()
-    ):
+    status = (subscription.status or "").strip().lower()
+
+    if status not in VALID_SUBSCRIPTION_STATUSES:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "subscription_inactive",
+                "message": "Your subscription is not active.",
+            },
+        )
+
+    expiry = subscription.expires_at
+
+    if expiry is None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "subscription_expiry_missing",
+                "message": (
+                    "Your subscription expiry date is missing. "
+                    "Please contact support."
+                ),
+            },
+        )
+
+    # Support both timezone-aware and naive database datetimes.
+    if expiry.tzinfo is not None:
+        now = datetime.now(timezone.utc)
+        expiry_comparison = expiry
+    else:
+        now = datetime.utcnow()
+        expiry_comparison = expiry
+
+    if expiry_comparison <= now:
+        subscription.status = "expired"
+        db.commit()
+
         raise HTTPException(
             status_code=403,
             detail={
                 "error": "subscription_expired",
-                "message": "Your subscription has expired."
+                "message": "Your subscription has expired. Please renew to continue.",
             },
         )
 
-    # Load plan
     plan = (
         db.query(SubscriptionPlan)
         .filter(
@@ -57,93 +117,164 @@ async def check_permission(
 
     if not plan:
         raise HTTPException(
-            status_code=404,
-            detail="Subscription plan not found.",
+            status_code=403,
+            detail={
+                "error": "subscription_plan_missing",
+                "message": "Your subscription plan could not be found.",
+            },
         )
 
-    # Feature permissions
-    feature_flags = {
-        "reports": plan.reports_enabled,
-        "export": plan.export_enabled,
-        "ai": plan.ai_enabled,
-        "notifications": plan.notifications_enabled,
-    }
+    return subscription, plan
 
-    if feature in feature_flags:
-        if not feature_flags[feature]:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "feature_locked",
-                    "feature": feature,
-                    "plan": plan.name,
-                },
+
+def check_subscription_feature(
+    db: Session,
+    business_id: str,
+    feature: str,
+):
+    """
+    Validate subscription access and check a plan feature.
+
+    Supported features:
+    reports, export, ai, notifications.
+    """
+
+    subscription, plan = get_valid_subscription(
+        db,
+        business_id,
+    )
+
+    flag_name = FEATURE_FLAGS.get(feature)
+
+    if flag_name is None:
+        raise ValueError(
+            f"Unknown subscription feature: {feature}"
+        )
+
+    enabled = bool(
+        getattr(plan, flag_name, False)
+    )
+
+    if not enabled:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "feature_locked",
+                "feature": feature,
+                "plan": plan.name,
+                "message": (
+                    f"The {feature} feature is not included "
+                    f"in your {plan.name} plan."
+                ),
+            },
+        )
+
+    return subscription, plan
+
+
+def check_creation_limit(
+    db: Session,
+    business_id: str,
+    resource: str,
+):
+    """
+    Check product or employee limits before creating a new record.
+
+    A limit of -1 means unlimited.
+    Sales are deliberately not limited here.
+    """
+
+    subscription, plan = get_valid_subscription(
+        db,
+        business_id,
+    )
+
+    if resource == "products":
+        limit = plan.max_products
+
+        current_count = (
+            db.query(func.count(Product.id))
+            .filter(
+                Product.business_id == business_id
             )
-
-    # Sales limit
-    if feature == "sales":
-        sales_count = (
-            db.query(Sale)
-            .filter(Sale.business_id == business_id)
-            .count()
+            .scalar()
+            or 0
         )
 
-        if (
-            plan.max_sales is not None
-            and sales_count >= plan.max_sales
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "sales_limit_reached",
-                    "current": sales_count,
-                    "limit": plan.max_sales,
-                    "plan": plan.name,
-                },
+    elif resource == "employees":
+        limit = plan.max_employees
+
+        current_count = (
+            db.query(func.count(Employee.id))
+            .filter(
+                Employee.business_id == business_id
             )
-
-    # Product limit
-    elif feature == "products":
-        product_count = (
-            db.query(Product)
-            .filter(Product.business_id == business_id)
-            .count()
+            .scalar()
+            or 0
         )
 
-        if (
-            plan.max_products is not None
-            and product_count >= plan.max_products
-        ):
+    else:
+        raise ValueError(
+            f"Unsupported subscription limit: {resource}"
+        )
+
+    # Preserve the existing convention:
+    # -1 means unlimited; None also means no configured limit.
+    if limit is not None and limit >= 0:
+        if current_count >= limit:
             raise HTTPException(
                 status_code=403,
                 detail={
-                    "error": "product_limit_reached",
-                    "current": product_count,
-                    "limit": plan.max_products,
+                    "error": "limit_reached",
+                    "resource": resource,
+                    "limit": limit,
+                    "current_count": current_count,
                     "plan": plan.name,
-                },
-            )
-
-    # Employee limit
-    elif feature == "employees":
-        employee_count = (
-            db.query(Employee)
-            .filter(Employee.business_id == business_id)
-            .count()
-        )
-
-        if (
-            plan.max_employees is not None
-            and employee_count >= plan.max_employees
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "employee_limit_reached",
-                    "current": employee_count,
-                    "limit": plan.max_employees,
-                    "plan": plan.name,
+                    "message": (
+                        f"You have reached the {resource} limit "
+                        f"for your {plan.name} plan."
+                    ),
                 },
             )
 
     return True
+
+
+def check_permission(
+    db: Session,
+    business_id: str,
+    feature: str,
+):
+    """
+    Backward-compatible permission entry point.
+
+    For new code, use check_subscription_feature() for features
+    and check_creation_limit() only when creating records.
+    """
+
+    if feature in FEATURE_FLAGS:
+        check_subscription_feature(
+            db,
+            business_id,
+            feature,
+        )
+        return True
+
+    if feature in {"products", "employees"}:
+        check_creation_limit(
+            db,
+            business_id,
+            feature,
+        )
+        return True
+
+    if feature == "sales":
+        get_valid_subscription(
+            db,
+            business_id,
+        )
+        return True
+
+    raise ValueError(
+        f"Unknown permission: {feature}"
+    )

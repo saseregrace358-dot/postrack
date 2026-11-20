@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,21 +11,19 @@ from app.schemas.employee import (
 )
 from app.utils.email_service import send_employee_login_email
 from app.auth.dependencies import get_current_user
-from app.auth.password import (
-    hash_password,
-    verify_password,
-)
+from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
 from app.models.user import User
-from datetime import datetime
-from app.models.business_subscription import BusinessSubscription
-from app.models.subscription_plan import SubscriptionPlan
 
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 router = APIRouter(
     prefix="/employees",
     tags=["Employees"],
 )
-
 
 
 # ===========================
@@ -44,73 +43,13 @@ def create_employee(
             detail="Your account is not linked to a business.",
         )
 
-    # Find this business's subscription.
-    subscription = (
-        db.query(BusinessSubscription)
-        .filter(
-            BusinessSubscription.business_id == business_id
-        )
-        .first()
+    # Validate subscription and employee limit.
+    check_creation_limit(
+        db,
+        business_id,
+        "employees",
     )
 
-    if not subscription or subscription.status != "active":
-        raise HTTPException(
-            status_code=403,
-            detail="An active subscription is required to add employees.",
-        )
-
-    # Check that the subscription has not expired.
-    now = datetime.utcnow()
-
-    if not subscription.expires_at or subscription.expires_at <= now:
-        subscription.status = "expired"
-        db.commit()
-
-        raise HTTPException(
-            status_code=403,
-            detail="Your subscription has expired. Please renew to add employees.",
-        )
-
-    # Load the plan assigned to this subscription.
-    plan = (
-        db.query(SubscriptionPlan)
-        .filter(
-            SubscriptionPlan.id == subscription.plan_id
-        )
-        .first()
-    )
-
-    if not plan:
-        raise HTTPException(
-            status_code=403,
-            detail="Your subscription plan could not be found.",
-        )
-
-    # Count employees belonging to this business only.
-    employee_count = (
-        db.query(Employee)
-        .filter(Employee.business_id == business_id)
-        .count()
-    )
-
-    # A limit of -1 means unlimited.
-    # Otherwise, reject creation when the limit is reached.
-    if plan.max_employees is None:
-        raise HTTPException(
-            status_code=403,
-            detail="The employee limit for your plan is not configured.",
-        )
-
-    if plan.max_employees != -1 and employee_count >= plan.max_employees:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"You have reached your plan's employee limit "
-                f"of {plan.max_employees}."
-            ),
-        )
-
-    # Create the employee only after the checks pass.
     employee = Employee(
         full_name=payload.full_name,
         email=payload.email,
@@ -134,9 +73,11 @@ def get_employees(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user.get("business_id")
+
     employees = (
         db.query(Employee)
-        .filter(Employee.business_id == user["business_id"])
+        .filter(Employee.business_id == business_id)
         .all()
     )
 
@@ -153,11 +94,15 @@ def update_employee(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user.get("business_id")
+
+    get_valid_subscription(db, business_id)
+
     employee = (
         db.query(Employee)
         .filter(
             Employee.id == employee_id,
-            Employee.business_id == user["business_id"],
+            Employee.business_id == business_id,
         )
         .first()
     )
@@ -190,11 +135,15 @@ def delete_employee(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user.get("business_id")
+
+    get_valid_subscription(db, business_id)
+
     employee = (
         db.query(Employee)
         .filter(
             Employee.id == employee_id,
-            Employee.business_id == user["business_id"],
+            Employee.business_id == business_id,
         )
         .first()
     )
@@ -253,14 +202,12 @@ async def employee_login(
         }
     )
 
-    # Send login notification to owner
     owner = (
         db.query(User)
         .filter(User.business_id == employee.business_id)
         .filter(User.role == "owner")
         .first()
     )
-    print("Owner found:", owner)
 
     if owner:
         await send_employee_login_email(
@@ -268,8 +215,6 @@ async def employee_login(
             employee_name=employee.full_name,
             business_name=owner.business_name,
         )
-    else:
-         print("No owner found for this business.")
 
     return {
         "access_token": token,

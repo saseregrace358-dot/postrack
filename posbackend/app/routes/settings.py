@@ -9,7 +9,11 @@ from app.database import SessionLocal
 from app.auth.dependencies import get_current_user
 from app.models.business_settings import BusinessSettings
 from app.schemas.business_settings import BusinessSettingsSchema
-
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 
 router = APIRouter(
     prefix="/settings",
@@ -47,7 +51,7 @@ def round_currency(amount, currency: str):
 
 
 def fetch_exchange_rate(base_currency: str, target_currency: str):
-    """Fetch conversion rate from original currency to active currency."""
+    """Fetch conversion rate from base currency to active currency."""
 
     if base_currency == target_currency:
         return Decimal("1"), None
@@ -177,9 +181,18 @@ def get_settings(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business."
+        )
+
+    # Reading settings remains available after subscription expiry.
     settings = get_existing_settings(
         db,
-        user["business_id"]
+        business_id
     )
 
     validate_settings(settings)
@@ -193,9 +206,20 @@ def save_settings(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business."
+        )
+
+    # Only businesses with a valid subscription can change settings.
+    get_valid_subscription(db, business_id)
+
     settings = get_existing_settings(
         db,
-        user["business_id"]
+        business_id
     )
 
     base_currency, old_currency, old_rate = validate_settings(settings)
@@ -259,8 +283,7 @@ def save_settings(
         )
 
     else:
-        # No currency change: the submitted threshold is already
-        # expressed in the current active currency.
+        # No currency change: submitted threshold is in current currency.
         settings.debt_threshold = float(
             round_currency(
                 debt_threshold,

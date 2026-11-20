@@ -69,12 +69,12 @@ class ResetPasswordRequest(BaseModel):
 # =====================
 
 
+
 @router.post("/register")
 async def register(
     user: UserRegister,
     db: Session = Depends(get_db)
 ):
-
     # 1. Check policy acceptance
     if not user.terms_accepted or not user.privacy_policy_accepted:
         raise HTTPException(
@@ -107,20 +107,30 @@ async def register(
             detail="User already exists"
         )
 
-    # 4. Find the Professional plan
-    professional_plan = (
+    # 4. Find the Free Trial plan
+    trial_plan = (
         db.query(SubscriptionPlan)
         .filter(
-            SubscriptionPlan.name.ilike("Professional"),
+            SubscriptionPlan.name.ilike("Free Trial"),
             SubscriptionPlan.active.is_(True)
         )
         .first()
     )
 
-    if not professional_plan:
+    if not trial_plan:
         raise HTTPException(
             status_code=500,
-            detail="Professional plan is unavailable"
+            detail="Free Trial plan is unavailable"
+        )
+
+    # Validate trial duration
+    if (
+        trial_plan.duration_value != 14
+        or trial_plan.duration_unit != "days"
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail="Free Trial duration is incorrectly configured"
         )
 
     # 5. Generate business ID
@@ -129,11 +139,13 @@ async def register(
     # 6. Hash password
     hashed = hash_password(user.password)
 
-    # 7. Record registration time
+    # 7. Registration time
     now = datetime.utcnow()
 
-    # 8. Calculate trial expiry
-    trial_expiry = now + timedelta(days=14)
+    # 8. Calculate trial expiry from the plan configuration
+    trial_expiry = now + timedelta(
+        days=trial_plan.duration_value
+    )
 
     # 9. Create owner account
     new_user = User(
@@ -149,16 +161,19 @@ async def register(
         privacy_policy_version="1.0"
     )
 
-    # 10. Create Professional trial subscription
+    # 10. Create full-access trial subscription
     subscription = BusinessSubscription(
         business_id=business_id,
-        plan_id=professional_plan.id,
-        status="trialing",
+        plan_id=trial_plan.id,
+        status="active",
+        billing_interval="monthly",
+        payment_currency=selected_currency,
+        amount_paid=0,
         started_at=now,
         expires_at=trial_expiry
     )
 
-    # 11. Create business settings with selected currency
+    # 11. Create business settings
     business_settings = BusinessSettings(
         business_id=business_id,
         base_currency=selected_currency,
@@ -167,7 +182,7 @@ async def register(
         exchange_rate_updated_at=None
     )
 
-    # 12. Save all three records in one transaction
+    # 12. Save all records in one transaction
     try:
         db.add(new_user)
         db.add(subscription)
@@ -181,7 +196,6 @@ async def register(
 
     except Exception:
         db.rollback()
-
         traceback.print_exc()
 
         raise HTTPException(
@@ -207,10 +221,12 @@ async def register(
         "business_id": business_id,
         "currency": selected_currency,
         "trial": {
-            "plan": professional_plan.name,
+            "plan": trial_plan.name,
             "status": subscription.status,
             "started_at": subscription.started_at,
-            "expires_at": subscription.expires_at
+            "expires_at": subscription.expires_at,
+            "duration_days": trial_plan.duration_value,
+            "full_access": True
         }
     }
 

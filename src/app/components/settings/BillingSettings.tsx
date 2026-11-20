@@ -1,5 +1,11 @@
+
 import { useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 
 import {
   getPlans,
@@ -10,235 +16,525 @@ import {
 interface Plan {
   id: number;
   name: string;
-  price: number;
-  duration_days: number;
+
+  monthly_price_ngn: number;
+  monthly_price_usd: number;
+  yearly_price_ngn: number;
+  yearly_price_usd: number;
+
+  duration_value: number;
+  duration_unit: "days" | "months" | "years";
 
   max_products: number;
   max_employees: number;
-  
+  max_customers: number;
+  max_sales: number;
 
   ai_enabled: boolean;
   reports_enabled: boolean;
+  export_enabled: boolean;
   notifications_enabled: boolean;
+  custom_pricing: boolean;
+  active: boolean;
 }
 
 interface Subscription {
-  plan_name: string;
-  expires_at: string;
-  status: string;
+  id?: number;
+  plan_name?: string;
+  status?: string;
+  expires_at?: string | null;
+  started_at?: string | null;
+  billing_interval?: string;
+  payment_currency?: string;
+  amount_paid?: number | string;
+  plan?: Plan | null;
 }
 
 interface Props {
   onBack: () => void;
 }
 
-export default function BillingSettings({
-  onBack,
-}: Props) {
+type BillingInterval = "monthly" | "yearly";
+
+function formatPrice(amount: number, currency = "NGN") {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number(amount || 0));
+}
+
+function formatLimit(value: number) {
+  return value === -1 ? "Unlimited" : Number(value).toLocaleString();
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Not available";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return date.toLocaleDateString();
+}
+
+function Feature({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <CheckCircle
+        size={18}
+        className="shrink-0 text-green-600"
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export default function BillingSettings({ onBack }: Props) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] =
     useState<Subscription | null>(null);
 
+  const [billingInterval, setBillingInterval] =
+    useState<BillingInterval>("monthly");
+
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [payingPlan, setPayingPlan] =
-    useState<string | null>(null);
+  const [payingPlan, setPayingPlan] = useState<string | null>(null);
 
-  
   async function loadData() {
-  try {
-    const plansRes = await getPlans();
-    setPlans(plansRes.data);
-  } catch (err) {
-    console.error("Failed to load plans", err);
+    setLoading(true);
+    setError("");
+
+    try {
+      const [plansResult, subscriptionResult] =
+        await Promise.allSettled([
+          getPlans(),
+          getMySubscription(),
+        ]);
+
+      if (plansResult.status === "fulfilled") {
+        setPlans(plansResult.value.data || []);
+      } else {
+        setError("Unable to load subscription plans.");
+      }
+
+      if (subscriptionResult.status === "fulfilled") {
+        const data = subscriptionResult.value.data;
+
+        setSubscription(
+          data?.plan_name ? data : null
+        );
+      } else {
+        setSubscription(null);
+      }
+    } catch (err) {
+      console.error("Billing information error:", err);
+      setError("Unable to load billing information.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  try {
-    const subRes = await getMySubscription();
-    setSubscription(subRes.data);
-  } catch (err) {
-    console.log("No active subscription");
-    setSubscription(null);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function subscribe(plan: Plan) {
+    if (plan.custom_pricing) {
+      return;
+    }
+
+    const amount =
+      billingInterval === "yearly"
+        ? plan.yearly_price_ngn
+        : plan.monthly_price_ngn;
+
+    if (amount <= 0) {
+      alert("This plan cannot be purchased through checkout.");
+      return;
+    }
+
+    const paymentKey = `${plan.id}-${billingInterval}`;
+
+    try {
+      setPayingPlan(paymentKey);
+
+      const response = await initializePayment({
+        plan: plan.name.toLowerCase(),
+        billing_interval: billingInterval,
+        payment_currency: "NGN",
+      });
+
+      const authorizationUrl =
+        response.data?.authorization_url;
+
+      if (!authorizationUrl) {
+        throw new Error("Payment authorization URL was not returned.");
+      }
+
+      window.location.href = authorizationUrl;
+    } catch (err) {
+      console.error("Payment initialization failed:", err);
+
+      alert(
+        "Unable to initialize payment. Please try again."
+      );
+
+      setPayingPlan(null);
+    }
   }
 
-  setLoading(false);
-}
-useEffect(() => {
-  loadData();
+  const paidPlans = plans.filter((plan) => {
+    const name = plan.name.toLowerCase();
 
-  const plan = sessionStorage.getItem("selectedPlan");
+    return (
+      plan.active !== false &&
+      !name.includes("trial") &&
+      !name.includes("free")
+    );
+  });
 
-  if (plan) {
-    sessionStorage.removeItem("selectedPlan");
+  const currentPlanName =
+    subscription?.plan_name?.toLowerCase() || "";
 
-    setTimeout(() => {
-      loadData();
-    }, 1000);
-  }
-}, []);
-   async function subscribe(plan: string) {
-  try {
-    setPayingPlan(plan);
+  const subscriptionExpiry = subscription?.expires_at
+    ? new Date(subscription.expires_at).getTime()
+    : 0;
 
-    const res = await initializePayment(plan);
-
-    sessionStorage.setItem("selectedPlan", plan);
-
-    window.location.href = res.data.authorization_url;
-  } catch (err) {
-    console.error("Failed to initialize payment", err);
-    alert("Unable to initialize payment.");
-  } finally {
-    setPayingPlan(null);
-  }
-}
+  const hasCurrentAccess =
+    ["active", "cancelled", "trialing"].includes(
+      subscription?.status?.toLowerCase() || ""
+    ) &&
+    subscriptionExpiry > Date.now();
 
   if (loading) {
     return (
-      <div className="p-6 text-center">
-        Loading subscription...
+      <div className="flex items-center justify-center gap-3 p-10">
+        <Loader2 size={22} className="animate-spin" />
+        <span>Loading subscription...</span>
       </div>
     );
   }
 
   return (
-  
-  <div className="mx-auto max-w-7xl p-6">
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl p-6">
+      <div className="space-y-8">
 
-      {/* Back */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-blue-600 font-medium"
-      >
-        <ArrowLeft size={18} />
-        Back
-      </button>
+        {/* Back button */}
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 font-medium text-blue-600 hover:text-blue-700"
+        >
+          <ArrowLeft size={18} />
+          Back
+        </button>
 
-      {/* Current Subscription */}
+        {/* Error message */}
+        {error && (
+          <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950">
+            <AlertCircle size={20} />
 
-      <div className="rounded-xl border bg-blue-50 dark:bg-slate-800 p-5">
+            <span>{error}</span>
 
-        <h2 className="font-bold text-lg">
-          Current Subscription
-        </h2>
-
-        <p className="mt-2">
-          <span className="font-semibold">
-            Plan:
-          </span>{" "}
-          {subscription?.plan_name ?? "Free"}
-        </p>
-
-        <p>
-          <span className="font-semibold">
-            Status:
-          </span>{" "}
-          {subscription?.status ?? "Active"}
-        </p>
-
-        {subscription?.expires_at && (
-          <p>
-  <span className="font-semibold">
-    Expires:
-  </span>{" "}
-  {subscription?.expires_at
-    ? new Date(subscription.expires_at).toLocaleDateString()
-    : "Not available"}
-</p>
+            <button
+              onClick={loadData}
+              className="ml-auto font-semibold underline"
+            >
+              Retry
+            </button>
+          </div>
         )}
 
-      </div>
+        {/* Current subscription */}
+        <section className="rounded-xl border bg-blue-50 p-6 dark:border-slate-700 dark:bg-slate-800">
+          <h2 className="text-xl font-bold">
+            Current Subscription
+          </h2>
 
-      {/* Plans */}
-      {/* Upgrade Plans */}
+          {subscription ? (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
 
-<div className="mt-6">
-  <h2 className="mb-6 text-2xl font-bold">
-    Upgrade Your Plan
-  </h2>
+              <div>
+                <p className="text-sm text-gray-500">
+                  Current Plan
+                </p>
+                <p className="font-semibold">
+                  {subscription.plan_name || "Not available"}
+                </p>
+              </div>
 
-  
+              <div>
+                <p className="text-sm text-gray-500">
+                  Status
+                </p>
+                <p className="font-semibold capitalize">
+                  {subscription.status || "Unknown"}
+                </p>
+              </div>
 
-  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-    {plans
-      .filter((plan) => plan.name.toLowerCase() !== "free")
-      .map((plan) => (
-        <div
-          key={plan.id}
-          className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:bg-slate-800"
-        >
-          {/* Header */}
-          <div className="mb-5">
-            <h3 className="text-2xl font-bold">
-              {plan.name}
-            </h3>
+              <div>
+                <p className="text-sm text-gray-500">
+                  Billing Interval
+                </p>
+                <p className="font-semibold capitalize">
+                  {subscription.billing_interval || "Not available"}
+                </p>
+              </div>
 
-            <p className="mt-2 text-3xl font-bold text-blue-600">
-              ₦{plan.price.toLocaleString()}
+              <div>
+                <p className="text-sm text-gray-500">
+                  Payment Currency
+                </p>
+                <p className="font-semibold">
+                  {subscription.payment_currency || "Not available"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">
+                  Amount Paid
+                </p>
+                <p className="font-semibold">
+                  {subscription.amount_paid != null
+                    ? formatPrice(
+                        Number(subscription.amount_paid),
+                        subscription.payment_currency || "NGN"
+                      )
+                    : "Not available"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">
+                  Expires
+                </p>
+                <p className="font-semibold">
+                  {formatDate(subscription.expires_at)}
+                </p>
+              </div>
+
+            </div>
+          ) : (
+            <p className="mt-3 text-gray-600 dark:text-gray-300">
+              No subscription information is currently available.
+            </p>
+          )}
+
+          {subscription?.status?.toLowerCase() === "cancelled" &&
+            hasCurrentAccess && (
+              <p className="mt-4 text-sm text-amber-700 dark:text-amber-400">
+                Your subscription is cancelled, but access continues
+                until your expiry date.
+              </p>
+            )}
+
+          {subscription?.status?.toLowerCase() === "expired" && (
+            <p className="mt-4 text-sm text-red-600">
+              Your subscription has expired. Choose a plan below
+              to renew access.
+            </p>
+          )}
+        </section>
+
+        {/* Plan selection */}
+        <section>
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">
+              Subscription Plans
+            </h2>
+
+            <p className="mt-2 text-gray-500">
+              Choose the plan that suits your business.
             </p>
 
-            <p className="text-sm text-gray-500">
-              {plan.duration_days} Days
+            <p className="mt-1 text-sm text-gray-500">
+              All plans include unlimited sales.
             </p>
           </div>
 
-          {/* Features */}
-          <div className="space-y-3">
+          {/* Billing interval selector */}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setBillingInterval("monthly")}
+              className={`rounded-lg px-5 py-2.5 font-medium transition ${
+                billingInterval === "monthly"
+                  ? "bg-blue-600 text-white"
+                  : "border bg-white text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-200"
+              }`}
+            >
+              Monthly
+            </button>
 
-            <div className="flex items-center gap-2">
-              <CheckCircle size={18} className="text-green-600" />
-              <span>
-                {plan.max_products.toLocaleString()} Products
+            <button
+              onClick={() => setBillingInterval("yearly")}
+              className={`rounded-lg px-5 py-2.5 font-medium transition ${
+                billingInterval === "yearly"
+                  ? "bg-blue-600 text-white"
+                  : "border bg-white text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-200"
+              }`}
+            >
+              Yearly
+            </button>
+
+            {billingInterval === "yearly" && (
+              <span className="text-sm text-green-600">
+                Annual billing selected
               </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <CheckCircle size={18} className="text-green-600" />
-              <span>
-                {plan.max_employees.toLocaleString()} Employees
-              </span>
-            </div>
-
-            
-
-            {plan.ai_enabled && (
-              <div className="flex items-center gap-2">
-                <CheckCircle size={18} className="text-green-600" />
-                <span>AI Features</span>
-              </div>
-            )}
-
-            {plan.reports_enabled && (
-              <div className="flex items-center gap-2">
-                <CheckCircle size={18} className="text-green-600" />
-                <span>Advanced Reports</span>
-              </div>
-            )}
-
-            {plan.notifications_enabled && (
-              <div className="flex items-center gap-2">
-                <CheckCircle size={18} className="text-green-600" />
-                <span>Notifications</span>
-              </div>
             )}
           </div>
 
-          {/* Button */}
-          <button
-            onClick={() => subscribe(plan.name.toLowerCase())}
-            disabled={payingPlan !== null}
-            className="mt-6 w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:bg-gray-400"
-          >
-            {payingPlan === plan.name.toLowerCase()
-              ? "Redirecting..."
-              : "Choose Plan"}
-          </button>
+          {paidPlans.length === 0 ? (
+            <div className="rounded-lg border p-6 text-center text-gray-500">
+              No paid plans are currently available.
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {paidPlans.map((plan) => {
+                const planKey = plan.name.toLowerCase();
+
+                const isCurrentPlan =
+                  currentPlanName === planKey &&
+                  hasCurrentAccess;
+
+                const paymentKey =
+                  `${plan.id}-${billingInterval}`;
+
+                const isPaying = payingPlan === paymentKey;
+
+                const price =
+                  billingInterval === "yearly"
+                    ? plan.yearly_price_ngn
+                    : plan.monthly_price_ngn;
+
+                const period =
+                  billingInterval === "yearly"
+                    ? "/ year"
+                    : "/ month";
+
+                return (
+                  <div
+                    key={plan.id}
+                    className="flex flex-col rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    {/* Plan heading */}
+                    <div className="mb-5">
+                      <h3 className="text-2xl font-bold">
+                        {plan.name}
+                      </h3>
+
+                      {plan.custom_pricing ? (
+                        <div className="mt-3">
+                          <p className="text-2xl font-bold text-blue-600">
+                            Custom Pricing
+                          </p>
+
+                          <p className="mt-2 text-sm text-gray-500">
+                            Contact the sales team for a quotation.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="mt-3 text-3xl font-bold text-blue-600">
+                            {formatPrice(price)}
+                            <span className="text-sm font-normal text-gray-500">
+                              {" "}{period}
+                            </span>
+                          </p>
+
+                          {billingInterval === "yearly" && (
+                            <p className="mt-2 text-sm text-gray-500">
+                              {formatPrice(plan.yearly_price_ngn)} billed annually
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Features */}
+                    <div className="flex-1 space-y-3">
+
+                      <Feature
+                        label={`${formatLimit(plan.max_products)} Products`}
+                      />
+
+                      <Feature
+                        label={`${formatLimit(plan.max_employees)} Employees`}
+                      />
+
+                      <Feature
+                        label={`${formatLimit(plan.max_customers)} Customers`}
+                      />
+
+                      <Feature label="Unlimited Sales" />
+
+                      {plan.reports_enabled && (
+                        <Feature label="Advanced Reports" />
+                      )}
+
+                      {plan.notifications_enabled && (
+                        <Feature label="Notifications" />
+                      )}
+
+                      {plan.ai_enabled && (
+                        <Feature label="AI Features" />
+                      )}
+
+                      {plan.export_enabled && (
+                        <Feature label="Data Export" />
+                      )}
+
+                    </div>
+
+                    {/* Plan action */}
+                    <div className="mt-6">
+                      {plan.custom_pricing ? (
+                        <div className="rounded-lg bg-gray-100 p-3 text-center text-sm font-medium text-gray-600 dark:bg-slate-700 dark:text-gray-300">
+                          Contact sales for a quotation
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => subscribe(plan)}
+                          disabled={
+                            payingPlan !== null ||
+                            isCurrentPlan ||
+                            price <= 0
+                          }
+                          className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                        >
+                          {isPaying ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <Loader2
+                                size={18}
+                                className="animate-spin"
+                              />
+                              Redirecting...
+                            </span>
+                          ) : isCurrentPlan ? (
+                            "Current Plan"
+                          ) : (
+                            `Choose ${billingInterval === "yearly" ? "Yearly" : "Monthly"} Plan`
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Payment information */}
+        <div className="rounded-lg border p-4 text-sm text-gray-500 dark:border-slate-700">
+          Payments are currently processed in Nigerian Naira (NGN)
+          through Paystack. USD checkout is not yet available.
         </div>
-      ))}
-  </div>
-</div>   
-  </div>
+
+      </div>
     </div>
   );
 }

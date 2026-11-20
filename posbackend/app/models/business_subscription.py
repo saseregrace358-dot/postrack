@@ -1,14 +1,35 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    ForeignKey,
+    Numeric,
+)
 from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
 class BusinessSubscription(Base):
     __tablename__ = "business_subscriptions"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
-    business_id = Column(String, unique=True, index=True)
+    business_id = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
 
     plan_id = Column(
         Integer,
@@ -16,10 +37,42 @@ class BusinessSubscription(Base):
         nullable=False,
     )
 
-    status = Column(String, default="active")
+    status = Column(
+        String,
+        default="active",
+        nullable=False,
+    )
 
-    plan = relationship("SubscriptionPlan")
+    billing_interval = Column(
+        String,
+        default="monthly",
+        nullable=False,
+    )
 
-    started_at = Column(DateTime)
+    # Actual currency used for the subscription payment.
+    # Null is allowed for trials and legacy records without
+    # a verified payment currency.
+    payment_currency = Column(
+        String(3),
+        nullable=True,
+    )
 
-    expires_at = Column(DateTime)
+    amount_paid = Column(
+        Numeric(12, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    plan = relationship(
+        "SubscriptionPlan",
+    )
+
+    started_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=True,
+    )

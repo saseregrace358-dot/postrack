@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from io import BytesIO
@@ -12,6 +13,11 @@ from app.database import SessionLocal
 from app.models.product import Product
 from app.models.sale import Sale
 from app.auth.dependencies import get_current_user
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 
 router = APIRouter(
     prefix="/export",
@@ -27,6 +33,24 @@ def get_db():
         db.close()
 
 
+def check_export_access(user, db):
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business."
+        )
+
+    check_subscription_feature(
+        db,
+        business_id,
+        "export"
+    )
+
+    return business_id
+
+
 # ==========================
 # PRODUCTS CSV
 # ==========================
@@ -36,9 +60,11 @@ def export_products_csv(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = check_export_access(user, db)
+
     products = (
         db.query(Product)
-        .filter(Product.business_id == user["business_id"])
+        .filter(Product.business_id == business_id)
         .all()
     )
 
@@ -77,9 +103,11 @@ def export_sales_csv(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = check_export_access(user, db)
+
     sales = (
         db.query(Sale)
-        .filter(Sale.business_id == user["business_id"])
+        .filter(Sale.business_id == business_id)
         .all()
     )
 
@@ -113,6 +141,7 @@ def export_sales_csv(
         }
     )
 
+
 # ==========================
 # PRODUCTS PDF
 # ==========================
@@ -122,9 +151,11 @@ def export_products_pdf(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = check_export_access(user, db)
+
     products = (
         db.query(Product)
-        .filter(Product.business_id == user["business_id"])
+        .filter(Product.business_id == business_id)
         .all()
     )
 
@@ -145,10 +176,10 @@ def export_products_pdf(
     table = Table(table_data)
 
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.blue),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("GRID", (0,0), (-1,-1), 1, colors.black),
-        ("BOTTOMPADDING",(0,0),(-1,0),10)
+        ("BACKGROUND", (0, 0), (-1, 0), colors.blue),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 10)
     ]))
 
     doc.build([table])
@@ -174,9 +205,11 @@ def export_sales_pdf(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = check_export_access(user, db)
+
     sales = (
         db.query(Sale)
-        .filter(Sale.business_id == user["business_id"])
+        .filter(Sale.business_id == business_id)
         .all()
     )
 
@@ -223,6 +256,7 @@ def export_sales_pdf(
         }
     )
 
+
 # ==========================
 # DASHBOARD PDF
 # ==========================
@@ -232,15 +266,17 @@ def dashboard_pdf(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    business_id = check_export_access(user, db)
+
     products = (
         db.query(Product)
-        .filter(Product.business_id == user["business_id"])
+        .filter(Product.business_id == business_id)
         .all()
     )
 
     sales = (
         db.query(Sale)
-        .filter(Sale.business_id == user["business_id"])
+        .filter(Sale.business_id == business_id)
         .all()
     )
 

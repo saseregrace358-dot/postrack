@@ -1,5 +1,7 @@
 
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Literal
 from uuid import uuid4
 import os
 import hashlib
@@ -12,7 +14,7 @@ from fastapi import (
     Depends,
     HTTPException,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -36,8 +38,22 @@ router = APIRouter(
 )
 
 
+SUPPORTED_PAYMENT_CURRENCIES = {"NGN", "USD"}
+
+
+# ==========================================
+# PAYMENT REQUEST
+# ==========================================
+
 class PaymentRequest(BaseModel):
-    plan: str
+    plan_name: str = Field(
+        validation_alias=AliasChoices("plan_name", "plan")
+    )
+
+    billing_interval: Literal["monthly", "yearly"] = "monthly"
+
+    # Required: do not silently assume NGN.
+    payment_currency: Literal["NGN", "USD"]
 
 
 # ==========================================
@@ -57,7 +73,130 @@ def get_business_id(user) -> str:
 
 
 # ==========================================
-# GET VALID SUBSCRIPTION
+# MONEY HELPERS
+# ==========================================
+
+def to_decimal(value) -> Decimal:
+    try:
+        result = Decimal(str(value)).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+
+        if not result.is_finite():
+            raise ValueError
+
+        return result
+
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("Invalid monetary amount.")
+
+
+def get_plan_price(
+    plan: SubscriptionPlan,
+    billing_interval: str,
+    payment_currency: str,
+) -> Decimal:
+
+    currency = payment_currency.upper()
+
+    if currency not in SUPPORTED_PAYMENT_CURRENCIES:
+        raise ValueError("Unsupported payment currency.")
+
+    if billing_interval == "monthly":
+        field = f"monthly_price_{currency.lower()}"
+    elif billing_interval == "yearly":
+        field = f"yearly_price_{currency.lower()}"
+    else:
+        raise ValueError("Unsupported billing interval.")
+
+    value = getattr(plan, field, None)
+
+    return to_decimal(value)
+
+
+def amount_to_minor_units(amount: Decimal) -> int:
+    amount_decimal = to_decimal(amount)
+
+    if amount_decimal <= Decimal("0.00"):
+        raise ValueError("Payment amount must be greater than zero.")
+
+    return int(
+        (amount_decimal * Decimal("100")).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+
+# ==========================================
+# VALIDATE VERIFIED PAYSTACK TRANSACTION
+# ==========================================
+
+def validate_paystack_transaction(
+    data: dict,
+    payment: Payment,
+) -> str:
+
+    if data.get("reference") != payment.reference:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment reference does not match.",
+        )
+
+    if data.get("status") != "success":
+        raise HTTPException(
+            status_code=400,
+            detail="Payment was not successful.",
+        )
+
+    verified_currency = (
+        data.get("currency") or ""
+    ).strip().upper()
+
+    if verified_currency not in SUPPORTED_PAYMENT_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported payment currency returned by provider.",
+        )
+
+    # If currency was recorded during initialization,
+    # the verified transaction must match it.
+    #
+    # If this is an older pending payment with no recorded
+    # currency, use the currency returned by Paystack.
+    if payment.payment_currency:
+        expected_currency = payment.payment_currency.upper()
+
+        if verified_currency != expected_currency:
+            raise HTTPException(
+                status_code=400,
+                detail="Verified payment currency does not match the initialized payment.",
+            )
+
+    try:
+        paid_amount_minor = int(data["amount"])
+        expected_amount_minor = amount_to_minor_units(
+            to_decimal(payment.amount)
+        )
+
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid amount in payment verification response.",
+        )
+
+    if paid_amount_minor != expected_amount_minor:
+        raise HTTPException(
+            status_code=400,
+            detail="The verified payment amount does not match.",
+        )
+
+    return verified_currency
+
+
+# ==========================================
+# GET SUBSCRIPTION
 # ==========================================
 
 def get_valid_subscription(
@@ -77,10 +216,12 @@ def get_valid_subscription(
 
     now = datetime.utcnow()
 
-    # Active and cancelled subscriptions both expire
-    # when their paid period ends.
     if (
-        subscription.status in ["active", "cancelled"]
+        subscription.status in [
+            "active",
+            "cancelled",
+            "trialing",
+        ]
         and subscription.expires_at is not None
         and subscription.expires_at <= now
     ):
@@ -93,7 +234,7 @@ def get_valid_subscription(
 
 
 # ==========================================
-# SHARED SUBSCRIPTION ACTIVATION
+# SUBSCRIPTION ACTIVATION
 # ==========================================
 
 def activate_subscription(
@@ -102,6 +243,12 @@ def activate_subscription(
     plan: SubscriptionPlan,
 ):
     now = datetime.utcnow()
+
+    if not payment.payment_currency:
+        raise HTTPException(
+            status_code=400,
+            detail="Verified payment currency is missing.",
+        )
 
     subscription = (
         db.query(BusinessSubscription)
@@ -113,9 +260,8 @@ def activate_subscription(
         .first()
     )
 
-    # Extend an existing unexpired subscription.
-    # This also supports a customer who cancelled
-    # but still has paid time remaining.
+    # Extend existing paid access rather than losing
+    # the remaining time on an active/cancelled subscription.
     if (
         subscription
         and subscription.status in ["active", "cancelled"]
@@ -126,8 +272,11 @@ def activate_subscription(
     else:
         start_at = now
 
-    # Calculate expiry using calendar days, months or years.
-    expires_at = calculate_expiry(start_at, plan)
+    expires_at = calculate_expiry(
+        start_at,
+        plan,
+        payment.billing_interval,
+    )
 
     if subscription:
         subscription.plan_id = plan.id
@@ -135,11 +284,24 @@ def activate_subscription(
         subscription.started_at = start_at
         subscription.expires_at = expires_at
 
+        subscription.billing_interval = (
+            payment.billing_interval
+        )
+
+        subscription.payment_currency = (
+            payment.payment_currency
+        )
+
+        subscription.amount_paid = payment.amount
+
     else:
         subscription = BusinessSubscription(
             business_id=payment.business_id,
             plan_id=plan.id,
             status="active",
+            billing_interval=payment.billing_interval,
+            payment_currency=payment.payment_currency,
+            amount_paid=payment.amount,
             started_at=start_at,
             expires_at=expires_at,
         )
@@ -150,6 +312,69 @@ def activate_subscription(
     payment.paid_at = now
 
     return subscription
+
+
+# ==========================================
+# SHARED PAYMENT PROCESSOR
+# ==========================================
+
+def process_verified_payment(
+    db: Session,
+    payment: Payment,
+):
+    if payment.status == "success":
+        return None
+
+    if payment.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"This payment is {payment.status}.",
+        )
+
+    try:
+        response = verify_payment(payment.reference)
+
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to verify payment with the provider. Please retry.",
+        )
+
+    if not response or not response.get("status"):
+        raise HTTPException(
+            status_code=503,
+            detail="Payment verification is temporarily unavailable.",
+        )
+
+    data = response.get("data") or {}
+
+    verified_currency = validate_paystack_transaction(
+        data,
+        payment,
+    )
+
+    # Record the currency returned by the verified transaction.
+    payment.payment_currency = verified_currency
+
+    plan = (
+        db.query(SubscriptionPlan)
+        .filter(
+            SubscriptionPlan.id == payment.plan_id
+        )
+        .first()
+    )
+
+    if not plan:
+        raise HTTPException(
+            status_code=404,
+            detail="The purchased plan no longer exists.",
+        )
+
+    return activate_subscription(
+        db=db,
+        payment=payment,
+        plan=plan,
+    )
 
 
 # ==========================================
@@ -171,6 +396,14 @@ def initialize_subscription_payment(
             detail="Your account email is missing.",
         )
 
+    payment_currency = payload.payment_currency.upper()
+
+    if payment_currency not in SUPPORTED_PAYMENT_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported payment currency.",
+        )
+
     frontend_url = os.getenv(
         "FRONTEND_URL", ""
     ).rstrip("/")
@@ -185,7 +418,7 @@ def initialize_subscription_payment(
         db.query(SubscriptionPlan)
         .filter(
             SubscriptionPlan.name.ilike(
-                payload.plan.strip()
+                payload.plan_name.strip()
             ),
             SubscriptionPlan.active.is_(True),
         )
@@ -198,22 +431,49 @@ def initialize_subscription_payment(
             detail="Active subscription plan not found.",
         )
 
-    if plan.price is None or plan.price <= 0:
+    if plan.custom_pricing:
         raise HTTPException(
             status_code=400,
-            detail="This plan cannot be purchased through this checkout.",
+            detail=(
+                "This plan requires a custom quotation "
+                "and cannot be purchased through checkout."
+            ),
+        )
+
+    try:
+        amount = get_plan_price(
+            plan=plan,
+            billing_interval=payload.billing_interval,
+            payment_currency=payment_currency,
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="The selected plan has an invalid price.",
+        )
+
+    if amount <= Decimal("0.00"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"This plan has no configured "
+                f"{payment_currency} price for the selected interval."
+            ),
         )
 
     reference = str(uuid4())
 
-    # Save the transaction before contacting Paystack.
     payment = Payment(
         business_id=business_id,
         plan_id=plan.id,
-        amount=plan.price,
+        amount=amount,
         provider="Paystack",
         reference=reference,
         status="pending",
+        payment_type="initial",
+        billing_interval=payload.billing_interval,
+        payment_currency=payment_currency,
     )
 
     db.add(payment)
@@ -223,13 +483,12 @@ def initialize_subscription_payment(
     try:
         response = initialize_payment(
             email=email,
-            amount=plan.price,
+            amount=amount,
             reference=reference,
-            callback_url=(
-                f"{frontend_url}/payment-success"
-            ),
+            callback_url=f"{frontend_url}/payment-success",
             business_id=business_id,
             plan=plan.name,
+            currency=payment_currency,
         )
 
     except Exception:
@@ -238,7 +497,7 @@ def initialize_subscription_payment(
 
         raise HTTPException(
             status_code=502,
-            detail="Unable to connect to the payment provider.",
+            detail="Unable to initialize payment with the provider.",
         )
 
     if not response or not response.get("status"):
@@ -257,8 +516,10 @@ def initialize_subscription_payment(
             ),
         )
 
-    authorization_url = (
-        response.get("data", {}).get("authorization_url")
+    response_data = response.get("data") or {}
+
+    authorization_url = response_data.get(
+        "authorization_url"
     )
 
     if not authorization_url:
@@ -273,6 +534,9 @@ def initialize_subscription_payment(
     return {
         "authorization_url": authorization_url,
         "reference": reference,
+        "amount": str(amount),
+        "currency": payment.payment_currency,
+        "billing_interval": payment.billing_interval,
     }
 
 
@@ -294,6 +558,7 @@ def verify_subscription(
             Payment.reference == reference,
             Payment.business_id == business_id,
         )
+        .with_for_update()
         .first()
     )
 
@@ -303,7 +568,6 @@ def verify_subscription(
             detail="Payment reference not found for this business.",
         )
 
-    # Prevent the same payment from activating twice.
     if payment.status == "success":
         subscription = (
             db.query(BusinessSubscription)
@@ -320,100 +584,27 @@ def verify_subscription(
                 subscription.status if subscription else "inactive"
             ),
             "plan_id": payment.plan_id,
+            "payment_currency": payment.payment_currency,
             "expires": (
                 subscription.expires_at
                 if subscription else None
             ),
         }
 
-    if payment.status != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail=f"This payment is {payment.status}.",
-        )
-
     try:
-        response = verify_payment(reference)
-
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail="Unable to verify payment with the provider.",
-        )
-
-    if not response or not response.get("status"):
-        raise HTTPException(
-            status_code=400,
-            detail="Payment verification failed.",
-        )
-
-    data = response.get("data") or {}
-
-    if data.get("reference") != reference:
-        raise HTTPException(
-            status_code=400,
-            detail="Payment reference does not match.",
-        )
-
-    if data.get("status") != "success":
-        payment.status = "failed"
-        db.commit()
-
-        raise HTTPException(
-            status_code=400,
-            detail="Payment was not successful.",
-        )
-
-    # Validate amount.
-    try:
-        paid_amount_kobo = int(data["amount"])
-
-        expected_amount_kobo = round(
-            float(payment.amount) * 100
-        )
-
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid amount in payment verification response.",
-        )
-
-    if paid_amount_kobo != expected_amount_kobo:
-        raise HTTPException(
-            status_code=400,
-            detail="The verified payment amount does not match.",
-        )
-
-    if data.get("currency") != "NGN":
-        raise HTTPException(
-            status_code=400,
-            detail="Unexpected payment currency.",
-        )
-
-    # Get the purchased plan from our database.
-    plan = (
-        db.query(SubscriptionPlan)
-        .filter(
-            SubscriptionPlan.id == payment.plan_id
-        )
-        .first()
-    )
-
-    if not plan:
-        raise HTTPException(
-            status_code=404,
-            detail="The purchased plan no longer exists.",
-        )
-
-    try:
-        subscription = activate_subscription(
+        subscription = process_verified_payment(
             db=db,
             payment=payment,
-            plan=plan,
         )
 
         db.commit()
-        db.refresh(subscription)
+
+        if subscription:
+            db.refresh(subscription)
+
+    except HTTPException:
+        db.rollback()
+        raise
 
     except Exception:
         db.rollback()
@@ -426,11 +617,22 @@ def verify_subscription(
             ),
         )
 
+    plan = (
+        db.query(SubscriptionPlan)
+        .filter(
+            SubscriptionPlan.id == payment.plan_id
+        )
+        .first()
+    )
+
     return {
         "message": "Subscription activated successfully.",
         "payment_status": payment.status,
-        "plan": plan.name,
+        "plan": plan.name if plan else None,
         "subscription_status": subscription.status,
+        "billing_interval": subscription.billing_interval,
+        "payment_currency": subscription.payment_currency,
+        "amount_paid": str(subscription.amount_paid),
         "expires": subscription.expires_at,
     }
 
@@ -470,6 +672,9 @@ def get_subscription(
         "status": subscription.status,
         "plan": plan.name if plan else None,
         "expires": subscription.expires_at,
+        "billing_interval": subscription.billing_interval,
+        "payment_currency": subscription.payment_currency,
+        "amount_paid": str(subscription.amount_paid),
     }
 
 
@@ -489,6 +694,7 @@ def cancel_subscription(
         .filter(
             BusinessSubscription.business_id == business_id
         )
+        .with_for_update()
         .first()
     )
 
@@ -518,8 +724,6 @@ def cancel_subscription(
             detail="Your subscription has already expired.",
         )
 
-    # Cancellation does not remove paid access immediately.
-    # The subscription remains valid until expires_at.
     subscription.status = "cancelled"
 
     db.commit()
@@ -550,7 +754,6 @@ async def paystack_webhook(
             detail="Payment provider is not configured.",
         )
 
-    # Verify the original request body.
     body = await request.body()
 
     signature = request.headers.get(
@@ -584,7 +787,6 @@ async def paystack_webhook(
             detail="Invalid webhook payload.",
         )
 
-    # Only process successful payment notifications.
     if event.get("event") != "charge.success":
         return {
             "received": True,
@@ -615,7 +817,6 @@ async def paystack_webhook(
             "ignored": True,
         }
 
-    # Prevent duplicate activation.
     if payment.status == "success":
         return {
             "received": True,
@@ -628,81 +829,27 @@ async def paystack_webhook(
             "ignored": True,
         }
 
-    # Verify directly with Paystack.
     try:
-        response = verify_payment(reference)
-
-    except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to verify transaction; retry later.",
-        )
-
-    if not response or not response.get("status"):
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Transaction verification is temporarily unavailable."
-            ),
-        )
-
-    data = response.get("data") or {}
-
-    if (
-        data.get("reference") != reference
-        or data.get("status") != "success"
-    ):
-        return {
-            "received": True,
-            "ignored": True,
-        }
-
-    # Validate amount and currency.
-    try:
-        paid_amount_kobo = int(data["amount"])
-
-        expected_amount_kobo = round(
-            float(payment.amount) * 100
-        )
-
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to validate transaction amount.",
-        )
-
-    if (
-        paid_amount_kobo != expected_amount_kobo
-        or data.get("currency") != "NGN"
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Transaction amount or currency does not match.",
-        )
-
-    plan = (
-        db.query(SubscriptionPlan)
-        .filter(
-            SubscriptionPlan.id == payment.plan_id
-        )
-        .first()
-    )
-
-    if not plan:
-        raise HTTPException(
-            status_code=503,
-            detail="Purchased plan is temporarily unavailable.",
-        )
-
-    try:
-        subscription = activate_subscription(
+        subscription = process_verified_payment(
             db=db,
             payment=payment,
-            plan=plan,
         )
 
         db.commit()
-        db.refresh(subscription)
+
+        if subscription:
+            db.refresh(subscription)
+
+    except HTTPException as exc:
+        db.rollback()
+
+        if exc.status_code >= 500:
+            raise HTTPException(
+                status_code=503,
+                detail="Transaction verification is temporarily unavailable.",
+            )
+
+        raise
 
     except Exception:
         db.rollback()

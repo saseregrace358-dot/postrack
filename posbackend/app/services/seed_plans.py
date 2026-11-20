@@ -1,3 +1,4 @@
+
 from sqlalchemy.orm import Session
 
 from app.models.subscription_plan import SubscriptionPlan
@@ -6,103 +7,132 @@ from app.models.subscription_plan import SubscriptionPlan
 def seed_subscription_plans(db: Session):
 
     plans = [
-    {
-        "name": "Free",
-        "price": 0,
-        "duration_days": 14,
-        "description": """
-• Basic POS
-• Inventory
-• 1 Employees
-• 100 Products
-""",
-        "max_employees": 1,
-        "max_products": 100,
-        "max_customers": 100,
-        "max_sales": 100,
-        "ai_enabled": False,
-        "reports_enabled": False,
-        "Export_enable": False,
-        "notifications_enabled": False,
-    },
+        {
+            "name": "Free Trial",
+            "price": 0,
+            "monthly_price_ngn": 0,
+            "monthly_price_usd": 0,
+            "yearly_price_ngn": 0,
+            "yearly_price_usd": 0,
+            "duration_value": 14,
+            "duration_unit": "days",
+            "description": "14-day full-access free trial",
+            "max_employees": -1,
+            "max_products": -1,
+            "max_customers": -1,
+            "max_sales": -1,
+            "ai_enabled": True,
+            "reports_enabled": True,
+            "export_enabled": True,
+            "notifications_enabled": True,
+            "custom_pricing": False,
+            "active": True,
+        },
+        {
+            "name": "Essential",
+            "price": 2500,
+            "monthly_price_ngn": 2500,
+            "monthly_price_usd": 4,
+            "yearly_price_ngn": 27600,
+            "yearly_price_usd": 36,
+            "duration_value": 1,
+            "duration_unit": "months",
+            "description": "Essential tools for small businesses.",
+            "max_employees": 3,
+            "max_products": 500,
+            "max_customers": -1,
+            "max_sales": -1,
+            "ai_enabled": False,
+            "reports_enabled": True,
+            "export_enabled": False,
+            "notifications_enabled": True,
+            "custom_pricing": False,
+            "active": True,
+        },
+        {
+            "name": "Business Plus",
+            "price": 5000,
+            "monthly_price_ngn": 5000,
+            "monthly_price_usd": 8,
+            "yearly_price_ngn": 54000,
+            "yearly_price_usd": 84,
+            "duration_value": 1,
+            "duration_unit": "months",
+            "description": "Advanced tools for growing businesses.",
+            "max_employees": 20,
+            "max_products": 5000,
+            "max_customers": -1,
+            "max_sales": -1,
+            "ai_enabled": True,
+            "reports_enabled": True,
+            "export_enabled": True,
+            "notifications_enabled": True,
+            "custom_pricing": False,
+            "active": True,
+        },
+        {
+            "name": "Enterprise",
+            "price": 0,
+            "monthly_price_ngn": 0,
+            "monthly_price_usd": 0,
+            "yearly_price_ngn": 0,
+            "yearly_price_usd": 0,
+            "duration_value": 1,
+            "duration_unit": "months",
+            "description": (
+                "Custom solutions, usage limits, and pricing "
+                "for enterprise businesses. Contact us for a quotation."
+            ),
+            "max_employees": -1,
+            "max_products": -1,
+            "max_customers": -1,
+            "max_sales": -1,
+            "ai_enabled": True,
+            "reports_enabled": True,
+            "export_enabled": True,
+            "notifications_enabled": True,
+            "custom_pricing": True,
+            "active": True,
+        },
+    ]
 
-    {
-        "name": "Starter",
-        "price": 2500,
-        "duration_days": 30,
-        "description": """POS
-• POS
-• Inventory
-• Reports
-• 3 Employees
-• 500 Products
-""",
-        "max_employees": 3,
-        "max_products": 500,
-        
-        "max_sales": 1000,
-        "ai_enabled": False,
-        "reports_enabled": True,
-        "Export_enable": False,
-        "notifications_enabled": True,
-    },
-
-    {
-        "name": "Professional",
-        "price": 5000,
-        "duration_days": 30,
-        "description": """Everything in Starter
-AI
-Advanced Reports
-20 Employees
-5000 Products
-""",
-        "max_employees": 20,
-        "max_products": 5000,
-        
-        "max_sales": 10000,
-        "ai_enabled": True,
-        "reports_enabled": True,
-        "Export_enable": True,
-        "notifications_enabled": True,
-    },
-
-    {
-        "name": "Enterprise",
-        "price": 30000,
-        "duration_days": 30,
-        "description": """Unlimited Products
-Unlimited Employees
-Priority Support
-Unlimited Sales
-Export and backup files""",
-        "max_employees": 9999,
-        "max_products": 999999,
-        
-        "max_sales": 999999,
-        "ai_enabled": True,
-        "reports_enabled": True,
-        "Export_enable": True,
-        "notifications_enabled": True,
-    }
-]
-    
-    
-    for plan_data in plans:
-        existing = (
-            db.query(SubscriptionPlan)
-            .filter(
-                SubscriptionPlan.name.ilike(
-                    plan_data["name"]
+    try:
+        for plan_data in plans:
+            existing = (
+                db.query(SubscriptionPlan)
+                .filter(
+                    SubscriptionPlan.name.ilike(
+                        plan_data["name"]
+                    )
                 )
+                .first()
             )
-            .first()
-        )
 
-        if existing:
-            for key, value in plan_data.items():
-                setattr(existing, key, value)
-        else:
-            db.add(SubscriptionPlan(**plan_data))
+            if existing:
+                for key, value in plan_data.items():
+                    setattr(existing, key, value)
+            else:
+                db.add(
+                    SubscriptionPlan(**plan_data)
+                )
 
-    db.commit()
+        # Disable obsolete plans without deleting their records.
+        obsolete_plans = ["Starter", "Professional"]
+
+        for obsolete_name in obsolete_plans:
+            old_plan = (
+                db.query(SubscriptionPlan)
+                .filter(
+                    SubscriptionPlan.name.ilike(obsolete_name)
+                )
+                .first()
+            )
+
+            if old_plan:
+                old_plan.active = False
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise

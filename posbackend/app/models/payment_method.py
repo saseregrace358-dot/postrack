@@ -1,13 +1,13 @@
+
 from datetime import datetime
+
 from sqlalchemy import (
     Column,
     Integer,
     String,
     Boolean,
     DateTime,
-    ForeignKey,
 )
-from sqlalchemy.orm import relationship
 from app.database import Base
 
 
@@ -45,9 +45,20 @@ class PaymentMethod(Base):
 
     exp_year = Column(String, nullable=True)
 
-    reusable = Column(Boolean, default=False)
+    reusable = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
 
-    active = Column(Boolean, default=True)
+    active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )

@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.auth.dependencies import get_current_user
-
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 from app.models.sale import Sale
 from app.models.product import Product
 from app.models.inventory_log import InventoryLog
@@ -24,6 +28,10 @@ from app.schemas.return_schema import (
 
 router = APIRouter(prefix="/returns", tags=["Returns"])
 
+
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
 
 def get_db():
     db = SessionLocal()
@@ -115,6 +123,18 @@ def get_currency_context(db, business_id):
             detail="Business exchange rate is missing or invalid.",
         )
 
+    if (
+        base_currency == active_currency
+        and rate != Decimal("1")
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Exchange rate must be 1 when the base "
+                "and active currencies are the same."
+            ),
+        )
+
     return {
         "base_currency": base_currency,
         "currency": active_currency,
@@ -145,7 +165,6 @@ def serialize_return(record, db, currency_context=None):
     active_currency = currency_context["currency"]
     current_rate = currency_context["exchange_rate"]
 
-    # The business base currency must remain unchanged.
     if currency_context["base_currency"] != base_currency:
         raise HTTPException(
             status_code=409,
@@ -174,7 +193,6 @@ def serialize_return(record, db, currency_context=None):
             "name": item.product_name,
             "quantity": item.quantity,
 
-            # Current active currency amounts.
             "price": float(
                 to_active_currency(
                     base_unit_price,
@@ -197,7 +215,6 @@ def serialize_return(record, db, currency_context=None):
                 )
             ),
 
-            # Original stored base currency amounts.
             "base_unit_price": float(base_unit_price),
             "base_refund_amount": float(base_refund),
 
@@ -217,7 +234,6 @@ def serialize_return(record, db, currency_context=None):
         "reason": record.reason,
         "return_reason": record.reason,
 
-        # Converted refund for frontend display.
         "refund_amount": float(
             to_active_currency(
                 base_refund_amount,
@@ -226,14 +242,11 @@ def serialize_return(record, db, currency_context=None):
             )
         ),
 
-        # Original stored refund.
         "base_refund_amount": float(base_refund_amount),
 
-        # Current display currency.
         "currency": active_currency,
         "current_exchange_rate": float(current_rate),
 
-        # Historical transaction currency snapshot.
         "base_currency": record.base_currency,
         "currency_at_return": record.currency_at_return,
         "exchange_rate_at_return": float(
@@ -266,7 +279,17 @@ def create_return(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+
+    # A new return is a business operation and requires
+    # an active, unexpired subscription.
+    get_valid_subscription(db, business_id)
 
     try:
         sale = (
@@ -456,7 +479,6 @@ def create_return(
                     / decimal_value(sale.subtotal)
                 )
 
-            # Store refund amounts in the business base currency.
             unit_price = round_money(
                 unit_price,
                 base_currency,
@@ -490,7 +512,6 @@ def create_return(
             base_currency,
         )
 
-        # Preserve the currency and rate used when the return occurred.
         original_amounts = {
             "currency": active_currency,
             "base_currency": base_currency,
@@ -532,7 +553,6 @@ def create_return(
             business_id=business_id,
             reason=payload.reason.strip(),
 
-            # Canonical amount stored in base currency.
             refund_amount=float(total_refund),
 
             base_currency=base_currency,
@@ -563,7 +583,6 @@ def create_return(
                 )
             )
 
-            # Restock resellable items only.
             if item["restocked"]:
                 item["product"].stock += item["quantity"]
 
@@ -609,7 +628,13 @@ def get_returns(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
 
     currency_context = get_currency_context(
         db,
@@ -645,7 +670,13 @@ def get_returns_for_sale(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user["business_id"]
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
 
     sale = (
         db.query(Sale)
@@ -707,11 +738,19 @@ def update_return_status(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    business_id = user.get("business_id")
+
+    if not business_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not linked to a business.",
+        )
+
     record = (
         db.query(ReturnRecord)
         .filter(
             ReturnRecord.id == return_id,
-            ReturnRecord.business_id == user["business_id"],
+            ReturnRecord.business_id == business_id,
         )
         .with_for_update()
         .first()

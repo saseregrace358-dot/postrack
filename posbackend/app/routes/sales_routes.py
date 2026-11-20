@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import uuid
@@ -14,7 +15,11 @@ from app.models.notification import Notification
 from app.models.business_settings import BusinessSettings
 from app.auth.dependencies import get_current_user
 from app.websocket_manager import manager
-
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    check_creation_limit,
+)
 
 router = APIRouter(
     prefix="/sales",
@@ -118,7 +123,6 @@ def currency_digits(currency: str):
     JPY uses zero decimal places.
     Other currently supported currencies use two.
     """
-
     return 0 if currency.upper() == "JPY" else 2
 
 
@@ -243,12 +247,9 @@ def calculate_sale_amounts(
     Product prices in the database are always stored
     in the business base currency.
 
-    This function is shared by:
+    Shared by:
         POST /sales/quote
         POST /sales
-
-    When lock_products=True, product rows are locked
-    while checkout is being processed.
 
     The quote endpoint does not change stock.
     """
@@ -316,7 +317,6 @@ def calculate_sale_amounts(
             "quantity": total_requested
         }
 
-        # Database product values are in base currency.
         try:
             product_price = Decimal(str(product.price))
             product_cost = Decimal(str(product.cost or 0))
@@ -338,11 +338,8 @@ def calculate_sale_amounts(
                 detail=f"Invalid price or cost for {product.name}."
             )
 
-        subtotal += (
-            product_price * item.quantity
-        )
+        subtotal += product_price * item.quantity
 
-        # Canonical item values stored in base currency.
         sale_items.append({
             "product_id": product.id,
             "name": product.name,
@@ -351,7 +348,6 @@ def calculate_sale_amounts(
             "quantity": item.quantity
         })
 
-        # Sale-time item snapshot in active currency.
         original_items.append({
             "product_id": product.id,
             "name": product.name,
@@ -372,7 +368,6 @@ def calculate_sale_amounts(
             "quantity": item.quantity
         })
 
-    # Round subtotal in base currency first.
     subtotal = round_money(
         subtotal,
         base_currency
@@ -421,7 +416,7 @@ def calculate_sale_amounts(
     )
 
     # --------------------------------------------------------
-    # CONVERT THE FINAL AMOUNTS TO ACTIVE CURRENCY
+    # CONVERT FINAL AMOUNTS TO ACTIVE CURRENCY
     # --------------------------------------------------------
 
     subtotal_active = to_active_decimal(
@@ -436,9 +431,7 @@ def calculate_sale_amounts(
         active_currency
     )
 
-    # Ensure displayed subtotal + displayed tax = displayed total.
-    # This avoids a one-cent difference caused by rounding
-    # subtotal, tax and total independently.
+    # Ensure displayed subtotal + displayed tax = total.
     tax_active = round_money(
         total_active - subtotal_active,
         active_currency
@@ -477,14 +470,12 @@ def sale_to_response(
         for column in Sale.__table__.columns
     }
 
-    # Preserve canonical database values.
     result["base_subtotal"] = sale.subtotal
     result["base_tax"] = sale.tax
     result["base_total"] = sale.total
     result["base_amountPaid"] = sale.amountPaid
     result["base_balance"] = sale.balance
 
-    # Convert subtotal and total first.
     subtotal_active = to_active_decimal(
         sale.subtotal,
         rate,
@@ -497,7 +488,6 @@ def sale_to_response(
         active_currency
     )
 
-    # Keep the displayed amounts mathematically consistent.
     tax_active = round_money(
         total_active - subtotal_active,
         active_currency
@@ -595,21 +585,9 @@ def quote_sale(
     user=Depends(get_current_user)
 ):
     """
-    Calculates the current sale preview.
+    Calculates a sale preview without changing stock.
 
-    This endpoint:
-        - Validates the requested products.
-        - Checks available stock.
-        - Calculates subtotal.
-        - Calculates tax.
-        - Calculates total.
-        - Converts the result into the active currency.
-
-    It does NOT:
-        - Reduce stock.
-        - Create a sale.
-        - Create a payment.
-        - Create notifications.
+    Requires a valid subscription because it prepares a new sale.
     """
 
     business_id = user.get("business_id")
@@ -619,6 +597,9 @@ def quote_sale(
             status_code=403,
             detail="Your account is not linked to a business."
         )
+
+    # Subscription enforcement
+    get_valid_subscription(db, business_id)
 
     settings, rate = get_currency_settings(
         db,
@@ -673,6 +654,9 @@ async def create_sale(
             detail="Your account is not linked to a business."
         )
 
+    # Subscription enforcement
+    get_valid_subscription(db, business_id)
+
     settings, rate = get_currency_settings(
         db,
         business_id
@@ -686,10 +670,6 @@ async def create_sale(
     notifications_to_broadcast = []
 
     try:
-        # ----------------------------------------------------
-        # CALCULATE SALE USING SHARED FUNCTION
-        # ----------------------------------------------------
-
         calculation = calculate_sale_amounts(
             db=db,
             business_id=business_id,
@@ -731,15 +711,11 @@ async def create_sale(
                 detail="Payment amount cannot exceed the sale total."
             )
 
-        # If the customer pays the exact displayed total,
-        # use the exact canonical base-currency total.
         if amount_paid_active == total_active:
-
             amount_paid = total
             amount_paid_active = total_active
 
         else:
-
             amount_paid = to_base_currency(
                 amount_paid_active,
                 rate,
@@ -782,15 +758,12 @@ async def create_sale(
             str(current_total_debt or 0)
         )
 
-        new_total_debt = (
-            current_total_debt + balance
-        )
+        new_total_debt = current_total_debt + balance
 
         if (
             settings.debt_threshold is not None
             and Decimal(str(settings.debt_threshold)) > 0
         ):
-
             debt_threshold_base = to_base_currency(
                 settings.debt_threshold,
                 rate,
@@ -835,9 +808,7 @@ async def create_sale(
 
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "Debt limit exceeded, payment not processed."
-                    )
+                    detail="Debt limit exceeded, payment not processed."
                 )
 
         # ----------------------------------------------------
@@ -886,7 +857,6 @@ async def create_sale(
         payments = []
 
         if amount_paid > 0:
-
             payments.append({
                 "amount": float(amount_paid),
                 "amount_in_currency": float(amount_paid_active),
@@ -1003,6 +973,10 @@ def get_sales(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    """
+    Sales history remains accessible after subscription expiry.
+    """
+
     business_id = user.get("business_id")
 
     if not business_id:
@@ -1046,6 +1020,11 @@ async def add_payment(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    """
+    Existing outstanding balances can still be collected
+    after subscription expiry.
+    """
+
     business_id = user.get("business_id")
 
     if not business_id:
@@ -1124,14 +1103,10 @@ async def add_payment(
                 )
             )
 
-        # If the customer pays the full displayed balance,
-        # use the exact remaining base-currency balance.
         if payment_amount_active == outstanding_active:
-
             payment_amount_base = outstanding_base
 
         else:
-
             payment_amount_base = to_base_currency(
                 payment_amount_active,
                 rate,
@@ -1175,8 +1150,6 @@ async def add_payment(
             "added_by_name": user.get("name")
         })
 
-        # Use sale.amountPaid as the authoritative accumulated
-        # payment amount.
         previous_amount_paid = round_money(
             sale.amountPaid or 0,
             base_currency

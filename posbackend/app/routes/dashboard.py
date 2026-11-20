@@ -13,9 +13,12 @@ from app.models.product import Product
 from app.models.return_record import ReturnRecord
 from app.models.return_item import ReturnItem
 from app.models.business_settings import BusinessSettings
-from app.models.business_subscription import BusinessSubscription
-from app.models.subscription_plan import SubscriptionPlan
 
+from app.services.subscription_service import (
+    get_valid_subscription,
+    check_subscription_feature,
+    
+)
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -185,41 +188,25 @@ def get_line_cost(line, product_by_id):
 
 def has_reports_access(db: Session, business_id: str) -> bool:
     """
-    Advanced charts and insights require an active,
+    Advanced charts and insights require a valid,
     unexpired subscription whose plan enables reports.
 
     Basic dashboard metrics remain available regardless.
     """
 
-    subscription = (
-        db.query(BusinessSubscription)
-        .filter(
-            BusinessSubscription.business_id == business_id
+    try:
+        subscription, plan = get_valid_subscription(
+            db,
+            business_id
         )
-        .first()
-    )
 
-    if not subscription or subscription.status != "active":
-        return False
+        return bool(plan.reports_enabled)
 
-    now = datetime.utcnow()
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
 
-    if not subscription.expires_at or subscription.expires_at <= now:
-        subscription.status = "expired"
-        db.commit()
-        return False
-
-    plan = (
-        db.query(SubscriptionPlan)
-        .filter(
-            SubscriptionPlan.id == subscription.plan_id
-        )
-        .first()
-    )
-
-    return bool(
-        plan and plan.reports_enabled
-    )
+        raise
 
 
 # ==========================================
