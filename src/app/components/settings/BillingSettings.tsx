@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   CheckCircle,
@@ -20,6 +21,7 @@ interface Plan {
 
   monthly_price_ngn: number;
   monthly_price_usd: number;
+
   yearly_price_ngn: number;
   yearly_price_usd: number;
 
@@ -28,7 +30,6 @@ interface Plan {
 
   max_products: number;
   max_employees: number;
-  max_customers: number;
   max_sales: number;
 
   ai_enabled: boolean;
@@ -58,12 +59,16 @@ interface Props {
 type BillingInterval = "monthly" | "yearly";
 type PaymentCurrency = "NGN" | "USD";
 
-function formatPrice(amount: number, currency: PaymentCurrency) {
+function formatPrice(
+  amount: number,
+  currency: PaymentCurrency
+) {
   return new Intl.NumberFormat(
     currency === "NGN" ? "en-NG" : "en-US",
     {
       style: "currency",
       currency,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }
   ).format(Number(amount || 0));
@@ -71,6 +76,7 @@ function formatPrice(amount: number, currency: PaymentCurrency) {
 
 function formatLimit(value: number | null | undefined) {
   if (value == null || value === -1) return "Unlimited";
+
   return Number(value).toLocaleString();
 }
 
@@ -151,8 +157,7 @@ export default function BillingSettings({ onBack }: Props) {
       }
 
       if (subscriptionResult.status === "fulfilled") {
-        const data = subscriptionResult.value.data;
-        setSubscription(data || null);
+        setSubscription(subscriptionResult.value.data || null);
       } else {
         setSubscription(null);
       }
@@ -168,27 +173,38 @@ export default function BillingSettings({ onBack }: Props) {
     loadData();
   }, []);
 
-  function getPlanPrice(plan: Plan) {
-    if (billingInterval === "yearly") {
-      return paymentCurrency === "USD"
+  // Returns the actual amount charged for the selected interval.
+  function getBillingTotal(plan: Plan): number {
+    if (paymentCurrency === "USD") {
+      return billingInterval === "yearly"
         ? Number(plan.yearly_price_usd || 0)
-        : Number(plan.yearly_price_ngn || 0);
+        : Number(plan.monthly_price_usd || 0);
     }
 
-    return paymentCurrency === "USD"
-      ? Number(plan.monthly_price_usd || 0)
+    return billingInterval === "yearly"
+      ? Number(plan.yearly_price_ngn || 0)
       : Number(plan.monthly_price_ngn || 0);
+  }
+
+  // Returns the displayed monthly equivalent.
+  function getDisplayedPrice(plan: Plan): number {
+    const total = getBillingTotal(plan);
+
+    return billingInterval === "yearly"
+      ? total / 12
+      : total;
   }
 
   async function subscribe(plan: Plan) {
     if (plan.custom_pricing) return;
 
-    if (getPlanPrice(plan) <= 0) {
+    if (getBillingTotal(plan) <= 0) {
       alert("This plan is not available for paid checkout.");
       return;
     }
 
-    const paymentKey = `${plan.id}-${billingInterval}-${paymentCurrency}`;
+    const paymentKey =
+      `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
     try {
       setPayingPlan(paymentKey);
@@ -203,7 +219,9 @@ export default function BillingSettings({ onBack }: Props) {
         response.data?.authorization_url;
 
       if (!authorizationUrl) {
-        throw new Error("Payment authorization URL was not returned.");
+        throw new Error(
+          "Payment authorization URL was not returned."
+        );
       }
 
       window.location.href = authorizationUrl;
@@ -240,6 +258,7 @@ export default function BillingSettings({ onBack }: Props) {
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="space-y-8">
+
         {/* Back */}
         <button
           onClick={onBack}
@@ -332,8 +351,9 @@ export default function BillingSettings({ onBack }: Props) {
             </p>
           </div>
 
-          {/* Billing interval */}
+          {/* Billing interval and currency */}
           <div className="mb-6 flex flex-wrap items-center gap-3">
+
             <button
               onClick={() => setBillingInterval("monthly")}
               className={`rounded-lg px-5 py-2.5 font-medium transition ${
@@ -356,9 +376,10 @@ export default function BillingSettings({ onBack }: Props) {
               Yearly
             </button>
 
-            {/* Currency */}
             <div className="ml-2 flex items-center gap-2">
-              <span className="text-sm text-gray-500">Currency:</span>
+              <span className="text-sm text-gray-500">
+                Currency:
+              </span>
 
               <button
                 onClick={() => setPaymentCurrency("NGN")}
@@ -396,6 +417,7 @@ export default function BillingSettings({ onBack }: Props) {
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+
               {plans.map((plan) => {
                 const planKey = plan.name.toLowerCase().trim();
 
@@ -407,7 +429,9 @@ export default function BillingSettings({ onBack }: Props) {
                   `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
                 const isPaying = payingPlan === paymentKey;
-                const price = getPlanPrice(plan);
+
+                const billingTotal = getBillingTotal(plan);
+                const displayedPrice = getDisplayedPrice(plan);
 
                 const isFreePlan =
                   !plan.custom_pricing &&
@@ -415,11 +439,6 @@ export default function BillingSettings({ onBack }: Props) {
                   Number(plan.monthly_price_usd || 0) === 0 &&
                   Number(plan.yearly_price_ngn || 0) === 0 &&
                   Number(plan.yearly_price_usd || 0) === 0;
-
-                const period =
-                  billingInterval === "yearly"
-                    ? "/ year"
-                    : "/ month";
 
                 return (
                   <div
@@ -443,24 +462,37 @@ export default function BillingSettings({ onBack }: Props) {
                           <p className="text-2xl font-bold text-blue-600">
                             Custom Pricing
                           </p>
+
                           <p className="mt-2 text-sm text-gray-500">
                             Contact the sales team for a quotation.
                           </p>
                         </div>
                       ) : (
                         <div className="mt-3">
+
+                          {/* Monthly equivalent */}
                           <p className="text-3xl font-bold text-blue-600">
-                            {formatPrice(price, paymentCurrency)}
+                            {formatPrice(
+                              displayedPrice,
+                              paymentCurrency
+                            )}
+
                             <span className="text-sm font-normal text-gray-500">
-                              {" "}{period}
+                              {" "}/ month
                             </span>
                           </p>
 
-                          {billingInterval === "yearly" && (
-                            <p className="mt-2 text-sm text-gray-500">
-                              {formatPrice(price, paymentCurrency)} billed annually
-                            </p>
-                          )}
+                          {/* Actual billing amount */}
+                          <p className="mt-2 text-sm text-gray-500">
+                            {formatPrice(
+                              billingTotal,
+                              paymentCurrency
+                            )}{" "}
+                            billed {billingInterval === "yearly"
+                              ? "annually"
+                              : "monthly"}
+                          </p>
+
                         </div>
                       )}
                     </div>
@@ -474,12 +506,6 @@ export default function BillingSettings({ onBack }: Props) {
                       <Feature
                         label={`${formatLimit(plan.max_employees)} Employees`}
                       />
-
-                      <Feature
-                        label={`${formatLimit(plan.max_customers)} Customers`}
-                      />
-
-                      <Feature label="Unlimited Sales" />
 
                       {plan.reports_enabled && (
                         <Feature label="Advanced Reports" />
@@ -514,7 +540,7 @@ export default function BillingSettings({ onBack }: Props) {
                           disabled={
                             payingPlan !== null ||
                             isCurrentPlan ||
-                            price <= 0
+                            billingTotal <= 0
                           }
                           className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                         >
@@ -534,6 +560,7 @@ export default function BillingSettings({ onBack }: Props) {
                   </div>
                 );
               })}
+
             </div>
           )}
         </section>
