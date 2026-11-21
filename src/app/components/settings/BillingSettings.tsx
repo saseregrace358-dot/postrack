@@ -15,8 +15,7 @@ import {
   initializePayment,
 } from "../../../api/subscriptions";
 
-// Replace with the actual DGTrack WhatsApp number.
-// Country code included, without +, spaces, or hyphens.
+// Replace with your actual DGTrack WhatsApp number.
 const DGTRACK_WHATSAPP_NUMBER = "234XXXXXXXXXX";
 
 interface Plan {
@@ -63,6 +62,10 @@ interface Props {
 type BillingInterval = "monthly" | "yearly";
 type PaymentCurrency = "NGN" | "USD";
 
+// ===========================
+// Formatting Helpers
+// ===========================
+
 function formatPrice(
   amount: number,
   currency: PaymentCurrency
@@ -77,8 +80,12 @@ function formatPrice(
   ).format(Number(amount || 0));
 }
 
-function formatLimit(value: number | null | undefined) {
-  if (value == null || value === -1) return "Unlimited";
+function formatLimit(
+  value: number | null | undefined
+) {
+  if (value == null || value === -1) {
+    return "Unlimited";
+  }
 
   return Number(value).toLocaleString();
 }
@@ -99,18 +106,24 @@ function getStatusLabel(status?: string | null) {
   switch ((status || "").toLowerCase()) {
     case "active":
       return "Active";
+
     case "trialing":
       return "Free Trial";
+
     case "cancelled":
       return "Cancelled";
+
     case "expired":
       return "Expired";
+
     default:
       return status || "Unknown";
   }
 }
 
-function getSubscriptionInterval(subscription: Subscription | null) {
+function getSubscriptionInterval(
+  subscription: Subscription | null
+) {
   if (!subscription) return "Not available";
 
   if (
@@ -122,18 +135,33 @@ function getSubscriptionInterval(subscription: Subscription | null) {
     const durationUnit =
       subscription.plan?.duration_unit || "days";
 
-    return `${durationValue}-${durationUnit === "days" ? "day" : durationUnit === "months" ? "month" : "year"} trial`;
+    const unit =
+      durationUnit === "days"
+        ? "day"
+        : durationUnit === "months"
+        ? "month"
+        : "year";
+
+    return `${durationValue}-${unit} trial`;
   }
 
-  switch ((subscription.billing_interval || "").toLowerCase()) {
+  switch (
+    (subscription.billing_interval || "").toLowerCase()
+  ) {
     case "monthly":
       return "Monthly";
+
     case "yearly":
       return "Yearly";
+
     default:
       return "Not available";
   }
 }
+
+// ===========================
+// Feature Component
+// ===========================
 
 function Feature({ label }: { label: string }) {
   return (
@@ -142,20 +170,34 @@ function Feature({ label }: { label: string }) {
         size={18}
         className="shrink-0 text-green-600"
       />
+
       <span>{label}</span>
     </div>
   );
 }
 
+// ===========================
+// WhatsApp
+// ===========================
+
 function getWhatsAppLink() {
   const message =
     "Hello DGTrack team, I am interested in the Enterprise plan. Please provide information about your custom pricing and available packages.";
 
-  return `https://wa.me/${DGTRACK_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${DGTRACK_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+    message
+  )}`;
 }
 
-export default function BillingSettings({ onBack }: Props) {
+// ===========================
+// Main Component
+// ===========================
+
+export default function BillingSettings({
+  onBack,
+}: Props) {
   const [plans, setPlans] = useState<Plan[]>([]);
+
   const [subscription, setSubscription] =
     useState<Subscription | null>(null);
 
@@ -167,7 +209,12 @@ export default function BillingSettings({ onBack }: Props) {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [payingPlan, setPayingPlan] = useState<string | null>(null);
+  const [payingPlan, setPayingPlan] =
+    useState<string | null>(null);
+
+  // ===========================
+  // Load Billing Information
+  // ===========================
 
   async function loadData() {
     setLoading(true);
@@ -183,26 +230,59 @@ export default function BillingSettings({ onBack }: Props) {
       if (plansResult.status === "fulfilled") {
         const returnedPlans = plansResult.value.data;
 
-        setPlans(
-          Array.isArray(returnedPlans)
-            ? returnedPlans.filter(
-                (plan: Plan) => plan.active !== false
-              )
-            : []
+        const activePlans: Plan[] = Array.isArray(
+          returnedPlans
+        )
+          ? returnedPlans.filter(
+              (plan: Plan) => plan.active !== false
+            )
+          : [];
+
+        // Always place Custom Pricing last.
+        // Sort normal plans by ID.
+        const sortedPlans = activePlans.sort(
+          (a, b) => {
+            if (
+              a.custom_pricing &&
+              !b.custom_pricing
+            ) {
+              return 1;
+            }
+
+            if (
+              !a.custom_pricing &&
+              b.custom_pricing
+            ) {
+              return -1;
+            }
+
+            return a.id - b.id;
+          }
         );
+
+        setPlans(sortedPlans);
       } else {
-        setError("Unable to load subscription plans.");
+        setError(
+          "Unable to load subscription plans."
+        );
       }
 
       if (subscriptionResult.status === "fulfilled") {
-        const data = subscriptionResult.value.data;
-        setSubscription(data || null);
+        setSubscription(
+          subscriptionResult.value.data || null
+        );
       } else {
         setSubscription(null);
       }
     } catch (err) {
-      console.error("Billing information error:", err);
-      setError("Unable to load billing information.");
+      console.error(
+        "Billing information error:",
+        err
+      );
+
+      setError(
+        "Unable to load billing information."
+      );
     } finally {
       setLoading(false);
     }
@@ -212,7 +292,10 @@ export default function BillingSettings({ onBack }: Props) {
     loadData();
   }, []);
 
-  // Actual amount charged for the selected billing interval.
+  // ===========================
+  // Plan Pricing
+  // ===========================
+
   function getPlanPrice(plan: Plan) {
     if (billingInterval === "yearly") {
       return paymentCurrency === "USD"
@@ -225,8 +308,7 @@ export default function BillingSettings({ onBack }: Props) {
       : Number(plan.monthly_price_ngn || 0);
   }
 
-  // Main display price: yearly amount divided by 12
-  // when yearly billing is selected.
+  // Monthly equivalent displayed on the card.
   function getDisplayedMonthlyPrice(plan: Plan) {
     const monthlyPrice =
       paymentCurrency === "USD"
@@ -243,11 +325,18 @@ export default function BillingSettings({ onBack }: Props) {
       : monthlyPrice;
   }
 
+  // ===========================
+  // Payment
+  // ===========================
+
   async function subscribe(plan: Plan) {
     if (plan.custom_pricing) return;
 
     if (getPlanPrice(plan) <= 0) {
-      alert("This plan is not available for paid checkout.");
+      alert(
+        "This plan is not available for paid checkout."
+      );
+
       return;
     }
 
@@ -274,19 +363,36 @@ export default function BillingSettings({ onBack }: Props) {
 
       window.location.href = authorizationUrl;
     } catch (err) {
-      console.error("Payment initialization failed:", err);
-      alert("Unable to initialize payment. Please try again.");
+      console.error(
+        "Payment initialization failed:",
+        err
+      );
+
+      alert(
+        "Unable to initialize payment. Please try again."
+      );
+
       setPayingPlan(null);
     }
   }
 
+  // ===========================
+  // Current Subscription
+  // ===========================
+
   const currentPlanName =
-    subscription?.plan_name?.toLowerCase().trim() ||
-    subscription?.plan?.name?.toLowerCase().trim() ||
+    subscription?.plan_name
+      ?.toLowerCase()
+      .trim() ||
+    subscription?.plan?.name
+      ?.toLowerCase()
+      .trim() ||
     "";
 
   const expiryTime = subscription?.expires_at
-    ? new Date(subscription.expires_at).getTime()
+    ? new Date(
+        subscription.expires_at
+      ).getTime()
     : 0;
 
   const hasCurrentAccess =
@@ -294,20 +400,33 @@ export default function BillingSettings({ onBack }: Props) {
       (subscription?.status || "").toLowerCase()
     ) && expiryTime > Date.now();
 
+  // ===========================
+  // Loading
+  // ===========================
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-3 p-10">
-        <Loader2 size={22} className="animate-spin" />
+        <Loader2
+          size={22}
+          className="animate-spin"
+        />
+
         <span>Loading subscription...</span>
       </div>
     );
   }
 
+  // ===========================
+  // Render
+  // ===========================
+
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="space-y-8">
 
-        {/* Back */}
+        {/* Back Button */}
+
         <button
           onClick={onBack}
           className="flex items-center gap-2 font-medium text-blue-600 hover:text-blue-700"
@@ -317,9 +436,11 @@ export default function BillingSettings({ onBack }: Props) {
         </button>
 
         {/* Error */}
+
         {error && (
           <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950">
             <AlertCircle size={20} />
+
             <span>{error}</span>
 
             <button
@@ -332,6 +453,7 @@ export default function BillingSettings({ onBack }: Props) {
         )}
 
         {/* Current Subscription */}
+
         <section className="rounded-xl border bg-blue-50 p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-xl font-bold">
             Current Subscription
@@ -344,6 +466,7 @@ export default function BillingSettings({ onBack }: Props) {
                 <p className="text-sm text-gray-500">
                   Current Plan
                 </p>
+
                 <p className="font-semibold">
                   {subscription.plan_name ||
                     subscription.plan?.name ||
@@ -355,8 +478,11 @@ export default function BillingSettings({ onBack }: Props) {
                 <p className="text-sm text-gray-500">
                   Status
                 </p>
+
                 <p className="font-semibold">
-                  {getStatusLabel(subscription.status)}
+                  {getStatusLabel(
+                    subscription.status
+                  )}
                 </p>
               </div>
 
@@ -364,8 +490,11 @@ export default function BillingSettings({ onBack }: Props) {
                 <p className="text-sm text-gray-500">
                   Billing Interval
                 </p>
+
                 <p className="font-semibold">
-                  {getSubscriptionInterval(subscription)}
+                  {getSubscriptionInterval(
+                    subscription
+                  )}
                 </p>
               </div>
 
@@ -373,8 +502,11 @@ export default function BillingSettings({ onBack }: Props) {
                 <p className="text-sm text-gray-500">
                   Expires
                 </p>
+
                 <p className="font-semibold">
-                  {formatDate(subscription.expires_at)}
+                  {formatDate(
+                    subscription.expires_at
+                  )}
                 </p>
               </div>
 
@@ -385,23 +517,26 @@ export default function BillingSettings({ onBack }: Props) {
             </p>
           )}
 
-          {subscription?.status?.toLowerCase() === "cancelled" &&
+          {subscription?.status?.toLowerCase() ===
+            "cancelled" &&
             hasCurrentAccess && (
               <p className="mt-4 text-sm text-amber-700 dark:text-amber-400">
-                Your subscription is cancelled, but access continues
-                until your expiry date.
+                Your subscription is cancelled, but access
+                continues until your expiry date.
               </p>
             )}
 
-          {subscription?.status?.toLowerCase() === "expired" && (
-            <p className="mt-4 text-sm text-red-600">
-              Your subscription has expired. Choose a plan below
-              to renew access.
-            </p>
-          )}
+          {subscription?.status?.toLowerCase() ===
+            "expired" && (
+              <p className="mt-4 text-sm text-red-600">
+                Your subscription has expired. Choose a
+                plan below to renew access.
+              </p>
+            )}
         </section>
 
         {/* Subscription Plans */}
+
         <section>
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
@@ -417,10 +552,14 @@ export default function BillingSettings({ onBack }: Props) {
             </p>
           </div>
 
-          {/* Billing interval and currency */}
+          {/* Billing Interval and Currency */}
+
           <div className="mb-6 flex flex-wrap items-center gap-3">
+
             <button
-              onClick={() => setBillingInterval("monthly")}
+              onClick={() =>
+                setBillingInterval("monthly")
+              }
               className={`rounded-lg px-5 py-2.5 font-medium transition ${
                 billingInterval === "monthly"
                   ? "bg-blue-600 text-white"
@@ -431,7 +570,9 @@ export default function BillingSettings({ onBack }: Props) {
             </button>
 
             <button
-              onClick={() => setBillingInterval("yearly")}
+              onClick={() =>
+                setBillingInterval("yearly")
+              }
               className={`rounded-lg px-5 py-2.5 font-medium transition ${
                 billingInterval === "yearly"
                   ? "bg-blue-600 text-white"
@@ -447,7 +588,9 @@ export default function BillingSettings({ onBack }: Props) {
               </span>
 
               <button
-                onClick={() => setPaymentCurrency("NGN")}
+                onClick={() =>
+                  setPaymentCurrency("NGN")
+                }
                 className={`rounded-lg px-4 py-2 font-medium transition ${
                   paymentCurrency === "NGN"
                     ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
@@ -458,7 +601,9 @@ export default function BillingSettings({ onBack }: Props) {
               </button>
 
               <button
-                onClick={() => setPaymentCurrency("USD")}
+                onClick={() =>
+                  setPaymentCurrency("USD")
+                }
                 className={`rounded-lg px-4 py-2 font-medium transition ${
                   paymentCurrency === "USD"
                     ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
@@ -476,14 +621,18 @@ export default function BillingSettings({ onBack }: Props) {
             )}
           </div>
 
+          {/* Plan Cards */}
+
           {plans.length === 0 ? (
             <div className="rounded-lg border p-6 text-center text-gray-500">
               No subscription plans are currently available.
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-              {plans.map((plan) => {
-                const planKey = plan.name.toLowerCase().trim();
+
+              {plans.map((plan, index) => {
+                const planKey =
+                  plan.name.toLowerCase().trim();
 
                 const isCurrentPlan =
                   currentPlanName === planKey &&
@@ -492,12 +641,11 @@ export default function BillingSettings({ onBack }: Props) {
                 const paymentKey =
                   `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
-                const isPaying = payingPlan === paymentKey;
+                const isPaying =
+                  payingPlan === paymentKey;
 
-                // Actual charge amount.
                 const price = getPlanPrice(plan);
 
-                // Main displayed monthly equivalent.
                 const displayedMonthlyPrice =
                   getDisplayedMonthlyPrice(plan);
 
@@ -511,9 +659,15 @@ export default function BillingSettings({ onBack }: Props) {
                 return (
                   <div
                     key={plan.id}
-                    className="flex flex-col rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                    className={`flex flex-col rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:border-slate-700 dark:bg-slate-800 ${
+                      plan.custom_pricing
+                        ? "border-blue-300 dark:border-blue-700"
+                        : ""
+                    }`}
                   >
-                    {/* Heading */}
+
+                    {/* Plan Heading */}
+
                     <div className="mb-5">
                       <h3 className="text-2xl font-bold">
                         {plan.name}
@@ -542,13 +696,18 @@ export default function BillingSettings({ onBack }: Props) {
                               displayedMonthlyPrice,
                               paymentCurrency
                             )}
+
                             <span className="text-sm font-normal text-gray-500">
                               {" "}/ month
                             </span>
                           </p>
 
                           <p className="mt-2 text-sm text-gray-500">
-                            {formatPrice(price, paymentCurrency)} billed{" "}
+                            {formatPrice(
+                              price,
+                              paymentCurrency
+                            )}{" "}
+                            billed{" "}
                             {billingInterval === "yearly"
                               ? "annually"
                               : "monthly"}
@@ -557,14 +716,19 @@ export default function BillingSettings({ onBack }: Props) {
                       )}
                     </div>
 
-                    {/* Features */}
+                    {/* Plan Features */}
+
                     <div className="flex-1 space-y-3">
                       <Feature
-                        label={`${formatLimit(plan.max_products)} Products`}
+                        label={`${formatLimit(
+                          plan.max_products
+                        )} Products`}
                       />
 
                       <Feature
-                        label={`${formatLimit(plan.max_employees)} Employees`}
+                        label={`${formatLimit(
+                          plan.max_employees
+                        )} Employees`}
                       />
 
                       {plan.reports_enabled && (
@@ -584,7 +748,8 @@ export default function BillingSettings({ onBack }: Props) {
                       )}
                     </div>
 
-                    {/* Action */}
+                    {/* Plan Action */}
+
                     <div className="mt-6">
                       {plan.custom_pricing ? (
                         <a
@@ -602,7 +767,9 @@ export default function BillingSettings({ onBack }: Props) {
                         </div>
                       ) : (
                         <button
-                          onClick={() => subscribe(plan)}
+                          onClick={() =>
+                            subscribe(plan)
+                          }
                           disabled={
                             payingPlan !== null ||
                             isCurrentPlan ||
@@ -630,9 +797,11 @@ export default function BillingSettings({ onBack }: Props) {
                         </button>
                       )}
                     </div>
+
                   </div>
                 );
               })}
+
             </div>
           )}
         </section>
