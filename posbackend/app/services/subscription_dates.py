@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
@@ -7,13 +6,12 @@ def calculate_expiry(start_at, plan, billing_interval=None):
     """
     Calculate subscription expiry.
 
-    Monthly and yearly billing intervals override the
-    plan's default duration for paid subscriptions.
-
-    If no billing interval is supplied, use the plan's
-    configured duration. This supports free trials and
-    other custom-duration plans.
+    Paid billing intervals override the plan duration.
+    Otherwise, use the plan's configured duration.
     """
+
+    if start_at is None:
+        raise ValueError("Subscription start date is required.")
 
     if billing_interval == "monthly":
         return start_at + relativedelta(months=1)
@@ -21,13 +19,21 @@ def calculate_expiry(start_at, plan, billing_interval=None):
     if billing_interval == "yearly":
         return start_at + relativedelta(years=1)
 
+    if billing_interval is not None:
+        raise ValueError("Invalid billing interval.")
+
+    duration = plan.duration_value
+
+    if duration is None or duration < 1:
+        raise ValueError("Invalid subscription duration.")
+
     if plan.duration_unit == "days":
-        return start_at + timedelta(days=plan.duration_value)
+        return start_at + timedelta(days=duration)
 
     if plan.duration_unit == "months":
-        return start_at + relativedelta(months=plan.duration_value)
+        return start_at + relativedelta(months=duration)
 
     if plan.duration_unit == "years":
-        return start_at + relativedelta(years=plan.duration_value)
+        return start_at + relativedelta(years=duration)
 
-    raise ValueError("Invalid subscription duration unit")
+    raise ValueError("Invalid subscription duration unit.")

@@ -1,5 +1,5 @@
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal
 from uuid import uuid4
@@ -39,6 +39,71 @@ router = APIRouter(
 
 
 SUPPORTED_PAYMENT_CURRENCIES = {"NGN", "USD"}
+VALID_BILLING_INTERVALS = {"monthly", "yearly"}
+VALID_SUBSCRIPTION_STATUSES = {
+    "active",
+    "cancelled",
+    "trialing",
+}
+
+
+# ==========================================
+# DATETIME HELPERS
+# ==========================================
+
+def utc_now_naive():
+    """
+    Return current UTC time without timezone information.
+
+    The database models use DateTime without timezone=True.
+    """
+
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def to_utc_naive(value):
+    """
+    Normalize aware or naive datetimes to naive UTC.
+    """
+
+    if value is None:
+        return None
+
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return value
+
+
+def is_subscription_expired(subscription) -> bool:
+    """
+    Treat a missing expiry date as invalid.
+    """
+
+    if subscription.expires_at is None:
+        return True
+
+    expiry = to_utc_naive(subscription.expires_at)
+
+    return expiry <= utc_now_naive()
+
+
+def get_effective_subscription_status(subscription) -> str:
+    """
+    Calculate the effective status without committing changes.
+
+    This is used when displaying subscription information.
+    """
+
+    status = (subscription.status or "").strip().lower()
+
+    if status not in VALID_SUBSCRIPTION_STATUSES:
+        return status or "inactive"
+
+    if is_subscription_expired(subscription):
+        return "expired"
+
+    return status
 
 
 # ==========================================
@@ -52,7 +117,7 @@ class PaymentRequest(BaseModel):
 
     billing_interval: Literal["monthly", "yearly"] = "monthly"
 
-    # Required: do not silently assume NGN.
+    # Currency must be explicitly selected.
     payment_currency: Literal["NGN", "USD"]
 
 
@@ -105,8 +170,10 @@ def get_plan_price(
 
     if billing_interval == "monthly":
         field = f"monthly_price_{currency.lower()}"
+
     elif billing_interval == "yearly":
         field = f"yearly_price_{currency.lower()}"
+
     else:
         raise ValueError("Unsupported billing interval.")
 
@@ -160,27 +227,32 @@ def validate_paystack_transaction(
             detail="Unsupported payment currency returned by provider.",
         )
 
-    # If currency was recorded during initialization,
-    # the verified transaction must match it.
-    #
-    # If this is an older pending payment with no recorded
-    # currency, use the currency returned by Paystack.
     if payment.payment_currency:
         expected_currency = payment.payment_currency.upper()
 
         if verified_currency != expected_currency:
             raise HTTPException(
                 status_code=400,
-                detail="Verified payment currency does not match the initialized payment.",
+                detail=(
+                    "Verified payment currency does not match "
+                    "the initialized payment."
+                ),
             )
 
     try:
         paid_amount_minor = int(data["amount"])
+
         expected_amount_minor = amount_to_minor_units(
             to_decimal(payment.amount)
         )
 
-    except (KeyError, TypeError, ValueError, InvalidOperation):
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        InvalidOperation,
+        OverflowError,
+    ):
         raise HTTPException(
             status_code=400,
             detail="Invalid amount in payment verification response.",
@@ -196,41 +268,20 @@ def validate_paystack_transaction(
 
 
 # ==========================================
-# GET SUBSCRIPTION
+# GET SUBSCRIPTION RECORD
 # ==========================================
 
-def get_valid_subscription(
+def get_subscription_record(
     db: Session,
     business_id: str,
 ):
-    subscription = (
+    return (
         db.query(BusinessSubscription)
         .filter(
             BusinessSubscription.business_id == business_id
         )
         .first()
     )
-
-    if not subscription:
-        return None
-
-    now = datetime.utcnow()
-
-    if (
-        subscription.status in [
-            "active",
-            "cancelled",
-            "trialing",
-        ]
-        and subscription.expires_at is not None
-        and subscription.expires_at <= now
-    ):
-        subscription.status = "expired"
-
-        db.commit()
-        db.refresh(subscription)
-
-    return subscription
 
 
 # ==========================================
@@ -242,13 +293,30 @@ def activate_subscription(
     payment: Payment,
     plan: SubscriptionPlan,
 ):
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     if not payment.payment_currency:
         raise HTTPException(
             status_code=400,
             detail="Verified payment currency is missing.",
         )
+
+    payment_currency = payment.payment_currency.upper()
+
+    if payment_currency not in SUPPORTED_PAYMENT_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported verified payment currency.",
+        )
+
+    billing_interval = payment.billing_interval
+
+    if billing_interval is not None:
+        if billing_interval not in VALID_BILLING_INTERVALS:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid payment billing interval.",
+            )
 
     subscription = (
         db.query(BusinessSubscription)
@@ -260,23 +328,35 @@ def activate_subscription(
         .first()
     )
 
-    # Extend existing paid access rather than losing
-    # the remaining time on an active/cancelled subscription.
+    # Preserve remaining access for an unexpired paid
+    # subscription, including one that was cancelled.
+    #
+    # A trial upgrade starts the paid subscription immediately.
+    # An expired subscription also starts from the current time.
+
     if (
         subscription
-        and subscription.status in ["active", "cancelled"]
+        and subscription.status in {"active", "cancelled"}
         and subscription.expires_at is not None
-        and subscription.expires_at > now
+        and to_utc_naive(subscription.expires_at) > now
     ):
-        start_at = subscription.expires_at
+        start_at = to_utc_naive(subscription.expires_at)
+
     else:
         start_at = now
 
-    expires_at = calculate_expiry(
-        start_at,
-        plan,
-        payment.billing_interval,
-    )
+    try:
+        expires_at = calculate_expiry(
+            start_at,
+            plan,
+            billing_interval,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
 
     if subscription:
         subscription.plan_id = plan.id
@@ -284,14 +364,9 @@ def activate_subscription(
         subscription.started_at = start_at
         subscription.expires_at = expires_at
 
-        subscription.billing_interval = (
-            payment.billing_interval
-        )
+        subscription.billing_interval = billing_interval
 
-        subscription.payment_currency = (
-            payment.payment_currency
-        )
-
+        subscription.payment_currency = payment_currency
         subscription.amount_paid = payment.amount
 
     else:
@@ -299,8 +374,8 @@ def activate_subscription(
             business_id=payment.business_id,
             plan_id=plan.id,
             status="active",
-            billing_interval=payment.billing_interval,
-            payment_currency=payment.payment_currency,
+            billing_interval=billing_interval,
+            payment_currency=payment_currency,
             amount_paid=payment.amount,
             started_at=start_at,
             expires_at=expires_at,
@@ -337,7 +412,10 @@ def process_verified_payment(
     except Exception:
         raise HTTPException(
             status_code=503,
-            detail="Unable to verify payment with the provider. Please retry.",
+            detail=(
+                "Unable to verify payment with the provider. "
+                "Please retry."
+            ),
         )
 
     if not response or not response.get("status"):
@@ -353,7 +431,7 @@ def process_verified_payment(
         payment,
     )
 
-    # Record the currency returned by the verified transaction.
+    # Record the actual currency returned by Paystack.
     payment.payment_currency = verified_currency
 
     plan = (
@@ -569,25 +647,25 @@ def verify_subscription(
         )
 
     if payment.status == "success":
-        subscription = (
-            db.query(BusinessSubscription)
-            .filter(
-                BusinessSubscription.business_id == business_id
-            )
-            .first()
+        subscription = get_subscription_record(
+            db,
+            business_id,
         )
 
         return {
             "message": "Payment already verified.",
             "payment_status": "success",
             "subscription_status": (
-                subscription.status if subscription else "inactive"
+                get_effective_subscription_status(subscription)
+                if subscription
+                else "inactive"
             ),
             "plan_id": payment.plan_id,
             "payment_currency": payment.payment_currency,
             "expires": (
                 subscription.expires_at
-                if subscription else None
+                if subscription
+                else None
             ),
         }
 
@@ -648,7 +726,7 @@ def get_subscription(
 ):
     business_id = get_business_id(user)
 
-    subscription = get_valid_subscription(
+    subscription = get_subscription_record(
         db,
         business_id,
     )
@@ -658,6 +736,9 @@ def get_subscription(
             "status": "inactive",
             "plan": None,
             "expires": None,
+            "billing_interval": None,
+            "payment_currency": None,
+            "amount_paid": None,
         }
 
     plan = (
@@ -669,7 +750,7 @@ def get_subscription(
     )
 
     return {
-        "status": subscription.status,
+        "status": get_effective_subscription_status(subscription),
         "plan": plan.name if plan else None,
         "expires": subscription.expires_at,
         "billing_interval": subscription.billing_interval,
@@ -710,12 +791,7 @@ def cancel_subscription(
             detail="There is no active subscription to cancel.",
         )
 
-    now = datetime.utcnow()
-
-    if (
-        not subscription.expires_at
-        or subscription.expires_at <= now
-    ):
+    if is_subscription_expired(subscription):
         subscription.status = "expired"
         db.commit()
 
@@ -846,7 +922,10 @@ async def paystack_webhook(
         if exc.status_code >= 500:
             raise HTTPException(
                 status_code=503,
-                detail="Transaction verification is temporarily unavailable.",
+                detail=(
+                    "Transaction verification is temporarily "
+                    "unavailable."
+                ),
             )
 
         raise

@@ -27,7 +27,7 @@ class PlanBase(BaseModel):
     max_sales: int = Field(default=-1, ge=-1)
     max_products: int = Field(default=100, ge=-1)
     max_employees: int = Field(default=1, ge=-1)
-    max_customers: int = Field(default=-1, ge=-1)
+    
 
     # Features
     ai_enabled: bool = False
@@ -61,8 +61,7 @@ class SubscriptionPlanUpdate(BaseModel):
     max_sales: int | None = Field(default=None, ge=-1)
     max_products: int | None = Field(default=None, ge=-1)
     max_employees: int | None = Field(default=None, ge=-1)
-    max_customers: int | None = Field(default=None, ge=-1)
-
+    
     ai_enabled: bool | None = None
     reports_enabled: bool | None = None
     export_enabled: bool | None = None
@@ -85,7 +84,7 @@ class BusinessSubscriptionOut(BaseModel):
     plan_id: int
     status: str
     billing_interval: str = "monthly"
-    payment_currency: str = "NGN"
+    payment_currency: str | None = None
     amount_paid: Decimal = Decimal("0.00")
 
     started_at: datetime | None = None

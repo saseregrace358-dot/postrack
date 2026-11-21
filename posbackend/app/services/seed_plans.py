@@ -19,7 +19,7 @@ def seed_subscription_plans(db: Session):
             "description": "14-day full-access free trial",
             "max_employees": -1,
             "max_products": -1,
-            "max_customers": -1,
+            
             "max_sales": -1,
             "ai_enabled": True,
             "reports_enabled": True,
@@ -40,7 +40,7 @@ def seed_subscription_plans(db: Session):
             "description": "Essential tools for small businesses.",
             "max_employees": 3,
             "max_products": 500,
-            "max_customers": -1,
+            
             "max_sales": -1,
             "ai_enabled": False,
             "reports_enabled": True,
@@ -61,7 +61,7 @@ def seed_subscription_plans(db: Session):
             "description": "Advanced tools for growing businesses.",
             "max_employees": 20,
             "max_products": 5000,
-            "max_customers": -1,
+           
             "max_sales": -1,
             "ai_enabled": True,
             "reports_enabled": True,
@@ -85,7 +85,7 @@ def seed_subscription_plans(db: Session):
             ),
             "max_employees": -1,
             "max_products": -1,
-            "max_customers": -1,
+            
             "max_sales": -1,
             "ai_enabled": True,
             "reports_enabled": True,
