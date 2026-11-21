@@ -209,6 +209,7 @@ export default function BillingSettings({
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [payingPlan, setPayingPlan] =
     useState<string | null>(null);
 
@@ -288,8 +289,67 @@ export default function BillingSettings({
     }
   }
 
+  // ===========================
+  // Refresh Subscription
+  // ===========================
+
+  async function refreshSubscription() {
+    try {
+      const response = await getMySubscription();
+
+      setSubscription(response.data || null);
+    } catch (err) {
+      console.error(
+        "Unable to refresh subscription:",
+        err
+      );
+    }
+  }
+
+  // ===========================
+  // Initial Load and Return
+  // ===========================
+
   useEffect(() => {
     loadData();
+
+    // Called when the user returns to this page.
+    const handlePageShow = () => {
+      setPayingPlan(null);
+      refreshSubscription();
+    };
+
+    // Called when the browser tab becomes visible again.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setPayingPlan(null);
+        refreshSubscription();
+      }
+    };
+
+    // Handles browser navigation and BFCache restoration.
+    window.addEventListener(
+      "pageshow",
+      handlePageShow
+    );
+
+    // Handles returning from the Paystack tab/window.
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pageshow",
+        handlePageShow
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    };
   }, []);
 
   // ===========================
@@ -630,7 +690,7 @@ export default function BillingSettings({
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
 
-              {plans.map((plan, index) => {
+              {plans.map((plan) => {
                 const planKey =
                   plan.name.toLowerCase().trim();
 
