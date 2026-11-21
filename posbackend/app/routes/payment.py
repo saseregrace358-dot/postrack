@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal
 from uuid import uuid4
+
 import os
 import hashlib
 import hmac
 import json
+import logging
 
 from fastapi import (
     Request,
@@ -37,9 +39,19 @@ router = APIRouter(
     tags=["Payments"],
 )
 
+logger = logging.getLogger(__name__)
 
-SUPPORTED_PAYMENT_CURRENCIES = {"NGN", "USD"}
-VALID_BILLING_INTERVALS = {"monthly", "yearly"}
+
+SUPPORTED_PAYMENT_CURRENCIES = {
+    "NGN",
+    "USD",
+}
+
+VALID_BILLING_INTERVALS = {
+    "monthly",
+    "yearly",
+}
+
 VALID_SUBSCRIPTION_STATUSES = {
     "active",
     "cancelled",
@@ -55,9 +67,8 @@ def utc_now_naive():
     """
     Return current UTC time without timezone information.
 
-    The database models use DateTime without timezone=True.
+    Database models use DateTime without timezone=True.
     """
-
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -65,7 +76,6 @@ def to_utc_naive(value):
     """
     Normalize aware or naive datetimes to naive UTC.
     """
-
     if value is None:
         return None
 
@@ -79,7 +89,6 @@ def is_subscription_expired(subscription) -> bool:
     """
     Treat a missing expiry date as invalid.
     """
-
     if subscription.expires_at is None:
         return True
 
@@ -90,11 +99,9 @@ def is_subscription_expired(subscription) -> bool:
 
 def get_effective_subscription_status(subscription) -> str:
     """
-    Calculate the effective status without committing changes.
-
-    This is used when displaying subscription information.
+    Calculate effective subscription status without
+    modifying the database.
     """
-
     status = (subscription.status or "").strip().lower()
 
     if status not in VALID_SUBSCRIPTION_STATUSES:
@@ -112,13 +119,21 @@ def get_effective_subscription_status(subscription) -> str:
 
 class PaymentRequest(BaseModel):
     plan_name: str = Field(
-        validation_alias=AliasChoices("plan_name", "plan")
+        validation_alias=AliasChoices(
+            "plan_name",
+            "plan",
+        )
     )
 
-    billing_interval: Literal["monthly", "yearly"] = "monthly"
+    billing_interval: Literal[
+        "monthly",
+        "yearly",
+    ] = "monthly"
 
-    # Currency must be explicitly selected.
-    payment_currency: Literal["NGN", "USD"]
+    payment_currency: Literal[
+        "NGN",
+        "USD",
+    ]
 
 
 # ==========================================
@@ -153,7 +168,11 @@ def to_decimal(value) -> Decimal:
 
         return result
 
-    except (InvalidOperation, TypeError, ValueError):
+    except (
+        InvalidOperation,
+        TypeError,
+        ValueError,
+    ):
         raise ValueError("Invalid monetary amount.")
 
 
@@ -163,21 +182,24 @@ def get_plan_price(
     payment_currency: str,
 ) -> Decimal:
 
-    currency = payment_currency.upper()
+    currency = (payment_currency or "").strip().upper()
 
     if currency not in SUPPORTED_PAYMENT_CURRENCIES:
         raise ValueError("Unsupported payment currency.")
 
-    if billing_interval == "monthly":
-        field = f"monthly_price_{currency.lower()}"
-
-    elif billing_interval == "yearly":
-        field = f"yearly_price_{currency.lower()}"
-
-    else:
+    if billing_interval not in VALID_BILLING_INTERVALS:
         raise ValueError("Unsupported billing interval.")
 
+    field = (
+        f"{billing_interval}_price_{currency.lower()}"
+    )
+
     value = getattr(plan, field, None)
+
+    if value is None:
+        raise ValueError(
+            f"The {currency} price is not configured."
+        )
 
     return to_decimal(value)
 
@@ -186,7 +208,9 @@ def amount_to_minor_units(amount: Decimal) -> int:
     amount_decimal = to_decimal(amount)
 
     if amount_decimal <= Decimal("0.00"):
-        raise ValueError("Payment amount must be greater than zero.")
+        raise ValueError(
+            "Payment amount must be greater than zero."
+        )
 
     return int(
         (amount_decimal * Decimal("100")).quantize(
@@ -227,23 +251,30 @@ def validate_paystack_transaction(
             detail="Unsupported payment currency returned by provider.",
         )
 
-    if payment.payment_currency:
-        expected_currency = payment.payment_currency.upper()
+    expected_currency = (
+        payment.payment_currency or ""
+    ).strip().upper()
 
-        if verified_currency != expected_currency:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Verified payment currency does not match "
-                    "the initialized payment."
-                ),
-            )
+    if not expected_currency:
+        raise HTTPException(
+            status_code=400,
+            detail="Original payment currency is missing.",
+        )
+
+    if verified_currency != expected_currency:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Verified payment currency does not match "
+                "the initialized payment."
+            ),
+        )
 
     try:
         paid_amount_minor = int(data["amount"])
 
         expected_amount_minor = amount_to_minor_units(
-            to_decimal(payment.amount)
+            payment.amount
         )
 
     except (
@@ -293,15 +324,12 @@ def activate_subscription(
     payment: Payment,
     plan: SubscriptionPlan,
 ):
+
     now = utc_now_naive()
 
-    if not payment.payment_currency:
-        raise HTTPException(
-            status_code=400,
-            detail="Verified payment currency is missing.",
-        )
-
-    payment_currency = payment.payment_currency.upper()
+    payment_currency = (
+        payment.payment_currency or ""
+    ).strip().upper()
 
     if payment_currency not in SUPPORTED_PAYMENT_CURRENCIES:
         raise HTTPException(
@@ -311,12 +339,11 @@ def activate_subscription(
 
     billing_interval = payment.billing_interval
 
-    if billing_interval is not None:
-        if billing_interval not in VALID_BILLING_INTERVALS:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid payment billing interval.",
-            )
+    if billing_interval not in VALID_BILLING_INTERVALS:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid payment billing interval.",
+        )
 
     subscription = (
         db.query(BusinessSubscription)
@@ -328,11 +355,8 @@ def activate_subscription(
         .first()
     )
 
-    # Preserve remaining access for an unexpired paid
-    # subscription, including one that was cancelled.
-    #
-    # A trial upgrade starts the paid subscription immediately.
-    # An expired subscription also starts from the current time.
+    # Preserve remaining access from an unexpired
+    # active or cancelled subscription.
 
     if (
         subscription
@@ -340,7 +364,9 @@ def activate_subscription(
         and subscription.expires_at is not None
         and to_utc_naive(subscription.expires_at) > now
     ):
-        start_at = to_utc_naive(subscription.expires_at)
+        start_at = to_utc_naive(
+            subscription.expires_at
+        )
 
     else:
         start_at = now
@@ -363,9 +389,7 @@ def activate_subscription(
         subscription.status = "active"
         subscription.started_at = start_at
         subscription.expires_at = expires_at
-
         subscription.billing_interval = billing_interval
-
         subscription.payment_currency = payment_currency
         subscription.amount_paid = payment.amount
 
@@ -397,6 +421,7 @@ def process_verified_payment(
     db: Session,
     payment: Payment,
 ):
+
     if payment.status == "success":
         return None
 
@@ -407,16 +432,23 @@ def process_verified_payment(
         )
 
     try:
-        response = verify_payment(payment.reference)
+        response = verify_payment(
+            payment.reference
+        )
 
-    except Exception:
+    except Exception as exc:
+        logger.exception(
+            "Paystack verification request failed for reference %s",
+            payment.reference,
+        )
+
         raise HTTPException(
             status_code=503,
             detail=(
                 "Unable to verify payment with the provider. "
                 "Please retry."
             ),
-        )
+        ) from exc
 
     if not response or not response.get("status"):
         raise HTTPException(
@@ -431,7 +463,6 @@ def process_verified_payment(
         payment,
     )
 
-    # Record the actual currency returned by Paystack.
     payment.payment_currency = verified_currency
 
     plan = (
@@ -465,6 +496,7 @@ def initialize_subscription_payment(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+
     business_id = get_business_id(user)
     email = user.get("email")
 
@@ -474,7 +506,9 @@ def initialize_subscription_payment(
             detail="Your account email is missing.",
         )
 
-    payment_currency = payload.payment_currency.upper()
+    payment_currency = (
+        payload.payment_currency or ""
+    ).strip().upper()
 
     if payment_currency not in SUPPORTED_PAYMENT_CURRENCIES:
         raise HTTPException(
@@ -483,7 +517,8 @@ def initialize_subscription_payment(
         )
 
     frontend_url = os.getenv(
-        "FRONTEND_URL", ""
+        "FRONTEND_URL",
+        "",
     ).rstrip("/")
 
     if not frontend_url:
@@ -525,10 +560,10 @@ def initialize_subscription_payment(
             payment_currency=payment_currency,
         )
 
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail="The selected plan has an invalid price.",
+            detail=str(exc),
         )
 
     if amount <= Decimal("0.00"):
@@ -538,6 +573,28 @@ def initialize_subscription_payment(
                 f"This plan has no configured "
                 f"{payment_currency} price for the selected interval."
             ),
+        )
+
+    # Paystack's USD minimum transaction amount is $2.
+    if (
+        payment_currency == "USD"
+        and amount < Decimal("2.00")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The minimum Paystack USD transaction "
+                "amount is $2.00."
+            ),
+        )
+
+    try:
+        amount_to_minor_units(amount)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
         )
 
     reference = str(uuid4())
@@ -555,35 +612,89 @@ def initialize_subscription_payment(
     )
 
     db.add(payment)
-    db.commit()
-    db.refresh(payment)
+
+    try:
+        db.commit()
+        db.refresh(payment)
+
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Could not save pending payment."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create payment record.",
+        )
 
     try:
         response = initialize_payment(
             email=email,
             amount=amount,
             reference=reference,
-            callback_url=f"{frontend_url}/payment-success",
+            callback_url=(
+                f"{frontend_url}/payment-success"
+            ),
             business_id=business_id,
             plan=plan.name,
             currency=payment_currency,
         )
 
-    except Exception:
+    except RuntimeError as exc:
         payment.status = "failed"
-        db.commit()
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Could not update failed payment status."
+            )
+
+        logger.warning(
+            "Paystack initialization rejected. "
+            "Currency=%s Amount=%s Reference=%s Reason=%s",
+            payment_currency,
+            amount,
+            reference,
+            str(exc),
+        )
 
         raise HTTPException(
             status_code=502,
-            detail="Unable to initialize payment with the provider.",
+            detail=str(exc),
         )
+
+    except Exception as exc:
+        payment.status = "failed"
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Could not update failed payment status."
+            )
+
+        logger.exception(
+            "Unexpected Paystack initialization error."
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "An unexpected error occurred while "
+                "initializing payment."
+            ),
+        ) from exc
 
     if not response or not response.get("status"):
         payment.status = "failed"
         db.commit()
 
         raise HTTPException(
-            status_code=400,
+            status_code=502,
             detail=(
                 response.get(
                     "message",
@@ -628,6 +739,7 @@ def verify_subscription(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+
     business_id = get_business_id(user)
 
     payment = (
@@ -687,6 +799,11 @@ def verify_subscription(
     except Exception:
         db.rollback()
 
+        logger.exception(
+            "Subscription activation failed for payment %s",
+            reference,
+        )
+
         raise HTTPException(
             status_code=500,
             detail=(
@@ -724,6 +841,7 @@ def get_subscription(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+
     business_id = get_business_id(user)
 
     subscription = get_subscription_record(
@@ -755,7 +873,11 @@ def get_subscription(
         "expires": subscription.expires_at,
         "billing_interval": subscription.billing_interval,
         "payment_currency": subscription.payment_currency,
-        "amount_paid": str(subscription.amount_paid),
+        "amount_paid": (
+            str(subscription.amount_paid)
+            if subscription.amount_paid is not None
+            else None
+        ),
     }
 
 
@@ -768,6 +890,7 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+
     business_id = get_business_id(user)
 
     subscription = (
@@ -822,6 +945,7 @@ async def paystack_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ):
+
     secret = os.getenv("PAYSTACK_SECRET_KEY")
 
     if not secret:
@@ -857,7 +981,10 @@ async def paystack_webhook(
     try:
         event = json.loads(body)
 
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
         raise HTTPException(
             status_code=400,
             detail="Invalid webhook payload.",
@@ -933,9 +1060,16 @@ async def paystack_webhook(
     except Exception:
         db.rollback()
 
+        logger.exception(
+            "Paystack webhook processing failed for reference %s",
+            reference,
+        )
+
         raise HTTPException(
             status_code=503,
-            detail="Subscription activation failed; retry later.",
+            detail=(
+                "Subscription activation failed; retry later."
+            ),
         )
 
     return {

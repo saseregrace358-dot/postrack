@@ -39,11 +39,6 @@ def validate_currency(currency: str) -> str:
 
 
 def convert_to_minor_units(amount: Decimal) -> int:
-    """
-    Convert a two-decimal currency amount into its
-    smallest unit (kobo for NGN, cents for USD).
-    """
-
     amount_decimal = Decimal(str(amount))
 
     if not amount_decimal.is_finite() or amount_decimal <= 0:
@@ -69,7 +64,6 @@ def initialize_payment(
     currency: str,
 ):
     currency = validate_currency(currency)
-
     amount_minor = convert_to_minor_units(amount)
 
     payload = {
@@ -85,39 +79,63 @@ def initialize_payment(
         },
     }
 
-    response = requests.post(
-        f"{PAYSTACK_URL}/transaction/initialize",
-        json=payload,
-        headers=get_headers(),
-        timeout=20,
-    )
+    try:
+        response = requests.post(
+            f"{PAYSTACK_URL}/transaction/initialize",
+            json=payload,
+            headers=get_headers(),
+            timeout=20,
+        )
 
-    response.raise_for_status()
-
-    result = response.json()
-
-    if not result.get("status"):
+    except requests.RequestException as exc:
         raise RuntimeError(
-            result.get("message", "Paystack initialization failed.")
+            "Could not connect to Paystack. Please try again."
+        ) from exc
+
+    try:
+        result = response.json()
+    except ValueError:
+        raise RuntimeError(
+            "Paystack returned an invalid response."
+        )
+
+    if not response.ok or not result.get("status"):
+        raise RuntimeError(
+            result.get(
+                "message",
+                "Paystack payment initialization failed."
+            )
         )
 
     return result
 
 
 def verify_payment(reference: str):
-    response = requests.get(
-        f"{PAYSTACK_URL}/transaction/verify/{reference}",
-        headers=get_headers(),
-        timeout=20,
-    )
+    try:
+        response = requests.get(
+            f"{PAYSTACK_URL}/transaction/verify/{reference}",
+            headers=get_headers(),
+            timeout=20,
+        )
 
-    response.raise_for_status()
-
-    result = response.json()
-
-    if not result.get("status"):
+    except requests.RequestException as exc:
         raise RuntimeError(
-            result.get("message", "Paystack verification failed.")
+            "Could not connect to Paystack for verification."
+        ) from exc
+
+    try:
+        result = response.json()
+    except ValueError:
+        raise RuntimeError(
+            "Paystack returned an invalid verification response."
+        )
+
+    if not response.ok or not result.get("status"):
+        raise RuntimeError(
+            result.get(
+                "message",
+                "Paystack payment verification failed."
+            )
         )
 
     return result
