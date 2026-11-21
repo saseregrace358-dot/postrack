@@ -15,8 +15,8 @@ import {
   initializePayment,
 } from "../../../api/subscriptions";
 
-// Replace this with your actual WhatsApp number.
-// Use country code, without +, spaces, or hyphens.
+// Replace with the actual DGTrack WhatsApp number.
+// Country code included, without +, spaces, or hyphens.
 const DGTRACK_WHATSAPP_NUMBER = "234XXXXXXXXXX";
 
 interface Plan {
@@ -110,6 +110,31 @@ function getStatusLabel(status?: string | null) {
   }
 }
 
+function getSubscriptionInterval(subscription: Subscription | null) {
+  if (!subscription) return "Not available";
+
+  if (
+    (subscription.status || "").toLowerCase() === "trialing"
+  ) {
+    const durationValue =
+      subscription.plan?.duration_value || 14;
+
+    const durationUnit =
+      subscription.plan?.duration_unit || "days";
+
+    return `${durationValue}-${durationUnit === "days" ? "day" : durationUnit === "months" ? "month" : "year"} trial`;
+  }
+
+  switch ((subscription.billing_interval || "").toLowerCase()) {
+    case "monthly":
+      return "Monthly";
+    case "yearly":
+      return "Yearly";
+    default:
+      return "Not available";
+  }
+}
+
 function Feature({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2">
@@ -126,9 +151,7 @@ function getWhatsAppLink() {
   const message =
     "Hello DGTrack team, I am interested in the Enterprise plan. Please provide information about your custom pricing and available packages.";
 
-  return `https://wa.me/${DGTRACK_WHATSAPP_NUMBER}?text=${encodeURIComponent(
-    message
-  )}`;
+  return `https://wa.me/${DGTRACK_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
 
 export default function BillingSettings({ onBack }: Props) {
@@ -189,6 +212,7 @@ export default function BillingSettings({ onBack }: Props) {
     loadData();
   }, []);
 
+  // Actual amount charged for the selected billing interval.
   function getPlanPrice(plan: Plan) {
     if (billingInterval === "yearly") {
       return paymentCurrency === "USD"
@@ -199,6 +223,24 @@ export default function BillingSettings({ onBack }: Props) {
     return paymentCurrency === "USD"
       ? Number(plan.monthly_price_usd || 0)
       : Number(plan.monthly_price_ngn || 0);
+  }
+
+  // Main display price: yearly amount divided by 12
+  // when yearly billing is selected.
+  function getDisplayedMonthlyPrice(plan: Plan) {
+    const monthlyPrice =
+      paymentCurrency === "USD"
+        ? Number(plan.monthly_price_usd || 0)
+        : Number(plan.monthly_price_ngn || 0);
+
+    const yearlyPrice =
+      paymentCurrency === "USD"
+        ? Number(plan.yearly_price_usd || 0)
+        : Number(plan.yearly_price_ngn || 0);
+
+    return billingInterval === "yearly"
+      ? yearlyPrice / 12
+      : monthlyPrice;
   }
 
   async function subscribe(plan: Plan) {
@@ -296,7 +338,8 @@ export default function BillingSettings({ onBack }: Props) {
           </h2>
 
           {subscription ? (
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
               <div>
                 <p className="text-sm text-gray-500">
                   Current Plan
@@ -319,12 +362,22 @@ export default function BillingSettings({ onBack }: Props) {
 
               <div>
                 <p className="text-sm text-gray-500">
+                  Billing Interval
+                </p>
+                <p className="font-semibold">
+                  {getSubscriptionInterval(subscription)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500">
                   Expires
                 </p>
                 <p className="font-semibold">
                   {formatDate(subscription.expires_at)}
                 </p>
               </div>
+
             </div>
           ) : (
             <p className="mt-3 text-gray-600 dark:text-gray-300">
@@ -428,7 +481,7 @@ export default function BillingSettings({ onBack }: Props) {
               No subscription plans are currently available.
             </div>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
               {plans.map((plan) => {
                 const planKey = plan.name.toLowerCase().trim();
 
@@ -440,7 +493,13 @@ export default function BillingSettings({ onBack }: Props) {
                   `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
                 const isPaying = payingPlan === paymentKey;
+
+                // Actual charge amount.
                 const price = getPlanPrice(plan);
+
+                // Main displayed monthly equivalent.
+                const displayedMonthlyPrice =
+                  getDisplayedMonthlyPrice(plan);
 
                 const isFreePlan =
                   !plan.custom_pricing &&
@@ -448,11 +507,6 @@ export default function BillingSettings({ onBack }: Props) {
                   Number(plan.monthly_price_usd || 0) === 0 &&
                   Number(plan.yearly_price_ngn || 0) === 0 &&
                   Number(plan.yearly_price_usd || 0) === 0;
-
-                const period =
-                  billingInterval === "yearly"
-                    ? "/ year"
-                    : "/ month";
 
                 return (
                   <div
@@ -484,17 +538,21 @@ export default function BillingSettings({ onBack }: Props) {
                       ) : (
                         <div className="mt-3">
                           <p className="text-3xl font-bold text-blue-600">
-                            {formatPrice(price, paymentCurrency)}
+                            {formatPrice(
+                              displayedMonthlyPrice,
+                              paymentCurrency
+                            )}
                             <span className="text-sm font-normal text-gray-500">
-                              {" "}{period}
+                              {" "}/ month
                             </span>
                           </p>
 
-                          {billingInterval === "yearly" && (
-                            <p className="mt-2 text-sm text-gray-500">
-                              {formatPrice(price, paymentCurrency)} billed annually
-                            </p>
-                          )}
+                          <p className="mt-2 text-sm text-gray-500">
+                            {formatPrice(price, paymentCurrency)} billed{" "}
+                            {billingInterval === "yearly"
+                              ? "annually"
+                              : "monthly"}
+                          </p>
                         </div>
                       )}
                     </div>
