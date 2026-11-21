@@ -16,6 +16,7 @@ import {
 interface Plan {
   id: number;
   name: string;
+  description?: string;
 
   monthly_price_ngn: number;
   monthly_price_usd: number;
@@ -44,9 +45,9 @@ interface Subscription {
   status?: string;
   expires_at?: string | null;
   started_at?: string | null;
-  billing_interval?: string;
-  payment_currency?: string;
-  amount_paid?: number | string;
+  billing_interval?: string | null;
+  payment_currency?: string | null;
+  amount_paid?: number | string | null;
   plan?: Plan | null;
 }
 
@@ -55,17 +56,22 @@ interface Props {
 }
 
 type BillingInterval = "monthly" | "yearly";
+type PaymentCurrency = "NGN" | "USD";
 
-function formatPrice(amount: number, currency = "NGN") {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(amount || 0));
+function formatPrice(amount: number, currency: PaymentCurrency) {
+  return new Intl.NumberFormat(
+    currency === "NGN" ? "en-NG" : "en-US",
+    {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }
+  ).format(Number(amount || 0));
 }
 
-function formatLimit(value: number) {
-  return value === -1 ? "Unlimited" : Number(value).toLocaleString();
+function formatLimit(value: number | null | undefined) {
+  if (value == null || value === -1) return "Unlimited";
+  return Number(value).toLocaleString();
 }
 
 function formatDate(value?: string | null) {
@@ -80,13 +86,25 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString();
 }
 
+function getStatusLabel(status?: string | null) {
+  switch ((status || "").toLowerCase()) {
+    case "active":
+      return "Active";
+    case "trialing":
+      return "Free Trial";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    default:
+      return status || "Unknown";
+  }
+}
+
 function Feature({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2">
-      <CheckCircle
-        size={18}
-        className="shrink-0 text-green-600"
-      />
+      <CheckCircle size={18} className="shrink-0 text-green-600" />
       <span>{label}</span>
     </div>
   );
@@ -100,9 +118,11 @@ export default function BillingSettings({ onBack }: Props) {
   const [billingInterval, setBillingInterval] =
     useState<BillingInterval>("monthly");
 
+  const [paymentCurrency, setPaymentCurrency] =
+    useState<PaymentCurrency>("NGN");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [payingPlan, setPayingPlan] = useState<string | null>(null);
 
   async function loadData() {
@@ -117,17 +137,22 @@ export default function BillingSettings({ onBack }: Props) {
         ]);
 
       if (plansResult.status === "fulfilled") {
-        setPlans(plansResult.value.data || []);
+        const returnedPlans = plansResult.value.data;
+
+        setPlans(
+          Array.isArray(returnedPlans)
+            ? returnedPlans.filter(
+                (plan: Plan) => plan.active !== false
+              )
+            : []
+        );
       } else {
         setError("Unable to load subscription plans.");
       }
 
       if (subscriptionResult.status === "fulfilled") {
         const data = subscriptionResult.value.data;
-
-        setSubscription(
-          data?.plan_name ? data : null
-        );
+        setSubscription(data || null);
       } else {
         setSubscription(null);
       }
@@ -143,22 +168,27 @@ export default function BillingSettings({ onBack }: Props) {
     loadData();
   }, []);
 
+  function getPlanPrice(plan: Plan) {
+    if (billingInterval === "yearly") {
+      return paymentCurrency === "USD"
+        ? Number(plan.yearly_price_usd || 0)
+        : Number(plan.yearly_price_ngn || 0);
+    }
+
+    return paymentCurrency === "USD"
+      ? Number(plan.monthly_price_usd || 0)
+      : Number(plan.monthly_price_ngn || 0);
+  }
+
   async function subscribe(plan: Plan) {
-    if (plan.custom_pricing) {
+    if (plan.custom_pricing) return;
+
+    if (getPlanPrice(plan) <= 0) {
+      alert("This plan is not available for paid checkout.");
       return;
     }
 
-    const amount =
-      billingInterval === "yearly"
-        ? plan.yearly_price_ngn
-        : plan.monthly_price_ngn;
-
-    if (amount <= 0) {
-      alert("This plan cannot be purchased through checkout.");
-      return;
-    }
-
-    const paymentKey = `${plan.id}-${billingInterval}`;
+    const paymentKey = `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
     try {
       setPayingPlan(paymentKey);
@@ -166,7 +196,7 @@ export default function BillingSettings({ onBack }: Props) {
       const response = await initializePayment({
         plan: plan.name.toLowerCase(),
         billing_interval: billingInterval,
-        payment_currency: "NGN",
+        payment_currency: paymentCurrency,
       });
 
       const authorizationUrl =
@@ -179,37 +209,24 @@ export default function BillingSettings({ onBack }: Props) {
       window.location.href = authorizationUrl;
     } catch (err) {
       console.error("Payment initialization failed:", err);
-
-      alert(
-        "Unable to initialize payment. Please try again."
-      );
-
+      alert("Unable to initialize payment. Please try again.");
       setPayingPlan(null);
     }
   }
 
-  const paidPlans = plans.filter((plan) => {
-    const name = plan.name.toLowerCase();
-
-    return (
-      plan.active !== false &&
-      !name.includes("trial") &&
-      !name.includes("free")
-    );
-  });
-
   const currentPlanName =
-    subscription?.plan_name?.toLowerCase() || "";
+    subscription?.plan_name?.toLowerCase().trim() ||
+    subscription?.plan?.name?.toLowerCase().trim() ||
+    "";
 
-  const subscriptionExpiry = subscription?.expires_at
+  const expiryTime = subscription?.expires_at
     ? new Date(subscription.expires_at).getTime()
     : 0;
 
   const hasCurrentAccess =
     ["active", "cancelled", "trialing"].includes(
-      subscription?.status?.toLowerCase() || ""
-    ) &&
-    subscriptionExpiry > Date.now();
+      (subscription?.status || "").toLowerCase()
+    ) && expiryTime > Date.now();
 
   if (loading) {
     return (
@@ -223,8 +240,7 @@ export default function BillingSettings({ onBack }: Props) {
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="space-y-8">
-
-        {/* Back button */}
+        {/* Back */}
         <button
           onClick={onBack}
           className="flex items-center gap-2 font-medium text-blue-600 hover:text-blue-700"
@@ -233,13 +249,11 @@ export default function BillingSettings({ onBack }: Props) {
           Back
         </button>
 
-        {/* Error message */}
+        {/* Error */}
         {error && (
           <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950">
             <AlertCircle size={20} />
-
             <span>{error}</span>
-
             <button
               onClick={loadData}
               className="ml-auto font-semibold underline"
@@ -249,7 +263,7 @@ export default function BillingSettings({ onBack }: Props) {
           </div>
         )}
 
-        {/* Current subscription */}
+        {/* Current Subscription */}
         <section className="rounded-xl border bg-blue-50 p-6 dark:border-slate-700 dark:bg-slate-800">
           <h2 className="text-xl font-bold">
             Current Subscription
@@ -257,66 +271,28 @@ export default function BillingSettings({ onBack }: Props) {
 
           {subscription ? (
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-
               <div>
-                <p className="text-sm text-gray-500">
-                  Current Plan
-                </p>
+                <p className="text-sm text-gray-500">Current Plan</p>
                 <p className="font-semibold">
-                  {subscription.plan_name || "Not available"}
+                  {subscription.plan_name ||
+                    subscription.plan?.name ||
+                    "Not available"}
                 </p>
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">
-                  Status
-                </p>
-                <p className="font-semibold capitalize">
-                  {subscription.status || "Unknown"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  Billing Interval
-                </p>
-                <p className="font-semibold capitalize">
-                  {subscription.billing_interval || "Not available"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  Payment Currency
-                </p>
+                <p className="text-sm text-gray-500">Status</p>
                 <p className="font-semibold">
-                  {subscription.payment_currency || "Not available"}
+                  {getStatusLabel(subscription.status)}
                 </p>
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">
-                  Amount Paid
-                </p>
-                <p className="font-semibold">
-                  {subscription.amount_paid != null
-                    ? formatPrice(
-                        Number(subscription.amount_paid),
-                        subscription.payment_currency || "NGN"
-                      )
-                    : "Not available"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  Expires
-                </p>
+                <p className="text-sm text-gray-500">Expires</p>
                 <p className="font-semibold">
                   {formatDate(subscription.expires_at)}
                 </p>
               </div>
-
             </div>
           ) : (
             <p className="mt-3 text-gray-600 dark:text-gray-300">
@@ -340,7 +316,7 @@ export default function BillingSettings({ onBack }: Props) {
           )}
         </section>
 
-        {/* Plan selection */}
+        {/* Subscription Plans */}
         <section>
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
@@ -356,7 +332,7 @@ export default function BillingSettings({ onBack }: Props) {
             </p>
           </div>
 
-          {/* Billing interval selector */}
+          {/* Billing interval */}
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <button
               onClick={() => setBillingInterval("monthly")}
@@ -380,6 +356,33 @@ export default function BillingSettings({ onBack }: Props) {
               Yearly
             </button>
 
+            {/* Currency */}
+            <div className="ml-2 flex items-center gap-2">
+              <span className="text-sm text-gray-500">Currency:</span>
+
+              <button
+                onClick={() => setPaymentCurrency("NGN")}
+                className={`rounded-lg px-4 py-2 font-medium transition ${
+                  paymentCurrency === "NGN"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                    : "border bg-white dark:border-slate-600 dark:bg-slate-800"
+                }`}
+              >
+                NGN
+              </button>
+
+              <button
+                onClick={() => setPaymentCurrency("USD")}
+                className={`rounded-lg px-4 py-2 font-medium transition ${
+                  paymentCurrency === "USD"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                    : "border bg-white dark:border-slate-600 dark:bg-slate-800"
+                }`}
+              >
+                USD
+              </button>
+            </div>
+
             {billingInterval === "yearly" && (
               <span className="text-sm text-green-600">
                 Annual billing selected
@@ -387,28 +390,31 @@ export default function BillingSettings({ onBack }: Props) {
             )}
           </div>
 
-          {paidPlans.length === 0 ? (
+          {plans.length === 0 ? (
             <div className="rounded-lg border p-6 text-center text-gray-500">
-              No paid plans are currently available.
+              No subscription plans are currently available.
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {paidPlans.map((plan) => {
-                const planKey = plan.name.toLowerCase();
+              {plans.map((plan) => {
+                const planKey = plan.name.toLowerCase().trim();
 
                 const isCurrentPlan =
                   currentPlanName === planKey &&
                   hasCurrentAccess;
 
                 const paymentKey =
-                  `${plan.id}-${billingInterval}`;
+                  `${plan.id}-${billingInterval}-${paymentCurrency}`;
 
                 const isPaying = payingPlan === paymentKey;
+                const price = getPlanPrice(plan);
 
-                const price =
-                  billingInterval === "yearly"
-                    ? plan.yearly_price_ngn
-                    : plan.monthly_price_ngn;
+                const isFreePlan =
+                  !plan.custom_pricing &&
+                  Number(plan.monthly_price_ngn || 0) === 0 &&
+                  Number(plan.monthly_price_usd || 0) === 0 &&
+                  Number(plan.yearly_price_ngn || 0) === 0 &&
+                  Number(plan.yearly_price_usd || 0) === 0;
 
                 const period =
                   billingInterval === "yearly"
@@ -420,26 +426,31 @@ export default function BillingSettings({ onBack }: Props) {
                     key={plan.id}
                     className="flex flex-col rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
                   >
-                    {/* Plan heading */}
+                    {/* Heading */}
                     <div className="mb-5">
                       <h3 className="text-2xl font-bold">
                         {plan.name}
                       </h3>
+
+                      {plan.description && (
+                        <p className="mt-2 text-sm text-gray-500">
+                          {plan.description}
+                        </p>
+                      )}
 
                       {plan.custom_pricing ? (
                         <div className="mt-3">
                           <p className="text-2xl font-bold text-blue-600">
                             Custom Pricing
                           </p>
-
                           <p className="mt-2 text-sm text-gray-500">
                             Contact the sales team for a quotation.
                           </p>
                         </div>
                       ) : (
-                        <>
-                          <p className="mt-3 text-3xl font-bold text-blue-600">
-                            {formatPrice(price)}
+                        <div className="mt-3">
+                          <p className="text-3xl font-bold text-blue-600">
+                            {formatPrice(price, paymentCurrency)}
                             <span className="text-sm font-normal text-gray-500">
                               {" "}{period}
                             </span>
@@ -447,16 +458,15 @@ export default function BillingSettings({ onBack }: Props) {
 
                           {billingInterval === "yearly" && (
                             <p className="mt-2 text-sm text-gray-500">
-                              {formatPrice(plan.yearly_price_ngn)} billed annually
+                              {formatPrice(price, paymentCurrency)} billed annually
                             </p>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
 
                     {/* Features */}
                     <div className="flex-1 space-y-3">
-
                       <Feature
                         label={`${formatLimit(plan.max_products)} Products`}
                       />
@@ -486,14 +496,17 @@ export default function BillingSettings({ onBack }: Props) {
                       {plan.export_enabled && (
                         <Feature label="Data Export" />
                       )}
-
                     </div>
 
-                    {/* Plan action */}
+                    {/* Action */}
                     <div className="mt-6">
                       {plan.custom_pricing ? (
                         <div className="rounded-lg bg-gray-100 p-3 text-center text-sm font-medium text-gray-600 dark:bg-slate-700 dark:text-gray-300">
                           Contact sales for a quotation
+                        </div>
+                      ) : isFreePlan ? (
+                        <div className="rounded-lg bg-gray-100 p-3 text-center text-sm font-medium text-gray-600 dark:bg-slate-700 dark:text-gray-300">
+                          Free plan
                         </div>
                       ) : (
                         <button
@@ -507,10 +520,7 @@ export default function BillingSettings({ onBack }: Props) {
                         >
                           {isPaying ? (
                             <span className="flex items-center justify-center gap-2">
-                              <Loader2
-                                size={18}
-                                className="animate-spin"
-                              />
+                              <Loader2 size={18} className="animate-spin" />
                               Redirecting...
                             </span>
                           ) : isCurrentPlan ? (
@@ -527,13 +537,6 @@ export default function BillingSettings({ onBack }: Props) {
             </div>
           )}
         </section>
-
-        {/* Payment information */}
-        <div className="rounded-lg border p-4 text-sm text-gray-500 dark:border-slate-700">
-          Payments are currently processed in Nigerian Naira (NGN)
-          through Paystack. USD checkout is not yet available.
-        </div>
-
       </div>
     </div>
   );

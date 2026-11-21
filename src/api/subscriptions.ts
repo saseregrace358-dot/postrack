@@ -1,14 +1,16 @@
 
 import api from "./api";
 
-export const getPlans = () => api.get("/subscriptions/plans");
+export const getPlans = () =>
+  api.get("/subscriptions/plans");
 
-export const getMySubscription = () => api.get("/subscriptions/me");
+export const getMySubscription = () =>
+  api.get("/subscriptions/me");
 
 export interface PaymentRequest {
   plan: string;
   billing_interval: "monthly" | "yearly";
-  payment_currency: "NGN";
+  payment_currency: "NGN" | "USD";
 }
 
 export const initializePayment = (payload: PaymentRequest) =>
