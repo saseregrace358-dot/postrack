@@ -2,23 +2,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
+from app.database import get_db
 from app.models.notification import Notification
 from app.auth.dependencies import get_current_user
 
+from app.services.subscription_service import (
+    check_subscription_feature,
+)
 
 router = APIRouter(
     prefix="/notifications",
-    tags=["Notifications"]
+    tags=["Notifications"],
 )
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def get_business_id(user):
@@ -27,72 +22,86 @@ def get_business_id(user):
     if not business_id:
         raise HTTPException(
             status_code=403,
-            detail="Your account is not linked to a business."
+            detail="Your account is not linked to a business.",
         )
 
     return business_id
 
 
-# -------------------------------
-# NEW NOTIFICATIONS ONLY
-# -------------------------------
+def enforce_notifications_subscription(
+    db: Session,
+    business_id: int,
+):
+    check_subscription_feature(
+        db,
+        business_id,
+        "notifications",
+    )
+
 
 @router.get("/new")
 def get_new_notifications(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
     business_id = get_business_id(user)
+
+    enforce_notifications_subscription(
+        db,
+        business_id,
+    )
 
     return (
         db.query(Notification)
         .filter(
             Notification.business_id == business_id,
-            Notification.read == False
+            Notification.read.is_(False),
         )
         .order_by(Notification.created_at.desc())
         .all()
     )
 
-
-# -------------------------------
-# ALL NOTIFICATIONS
-# -------------------------------
 
 @router.get("/all")
 def get_all_notifications(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
     business_id = get_business_id(user)
+
+    enforce_notifications_subscription(
+        db,
+        business_id,
+    )
 
     return (
         db.query(Notification)
         .filter(
-            Notification.business_id == business_id
+            Notification.business_id == business_id,
         )
         .order_by(Notification.created_at.desc())
         .all()
     )
 
-
-# -------------------------------
-# MARK ONE AS READ
-# -------------------------------
 
 @router.patch("/{id}/read")
 def mark_read(
     id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
     business_id = get_business_id(user)
+
+    enforce_notifications_subscription(
+        db,
+        business_id,
+    )
 
     notification = (
         db.query(Notification)
         .filter(
             Notification.id == id,
-            Notification.business_id == business_id
+            Notification.business_id == business_id,
         )
         .first()
     )
@@ -100,7 +109,7 @@ def mark_read(
     if not notification:
         raise HTTPException(
             status_code=404,
-            detail="Notification not found."
+            detail="Notification not found.",
         )
 
     notification.read = True
@@ -111,31 +120,32 @@ def mark_read(
     return notification
 
 
-# -------------------------------
-# MARK ALL AS READ
-# -------------------------------
-
 @router.patch("/read-all")
 def mark_all_read(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_current_user),
 ):
     business_id = get_business_id(user)
+
+    enforce_notifications_subscription(
+        db,
+        business_id,
+    )
 
     (
         db.query(Notification)
         .filter(
             Notification.business_id == business_id,
-            Notification.read == False
+            Notification.read.is_(False),
         )
         .update(
             {"read": True},
-            synchronize_session=False
+            synchronize_session=False,
         )
     )
 
     db.commit()
 
     return {
-        "message": "All notifications marked as read"
+        "message": "All notifications marked as read."
     }

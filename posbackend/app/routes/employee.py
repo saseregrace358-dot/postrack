@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.employee import Employee
+from app.models.user import User
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeUpdate,
@@ -13,13 +14,13 @@ from app.utils.email_service import send_employee_login_email
 from app.auth.dependencies import get_current_user
 from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
-from app.models.user import User
 
 from app.services.subscription_service import (
-    get_valid_subscription,
     check_subscription_feature,
     check_creation_limit,
 )
+
+
 router = APIRouter(
     prefix="/employees",
     tags=["Employees"],
@@ -27,14 +28,10 @@ router = APIRouter(
 
 
 # ===========================
-# Create Employee
+# Helpers
 # ===========================
-@router.post("/")
-def create_employee(
-    payload: EmployeeCreate,
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user),
-):
+
+def get_business_id(user):
     business_id = user.get("business_id")
 
     if not business_id:
@@ -43,7 +40,46 @@ def create_employee(
             detail="Your account is not linked to a business.",
         )
 
-    # Validate subscription and employee limit.
+    return business_id
+
+
+def check_employee_access(db: Session, business_id):
+    check_subscription_feature(
+        db,
+        business_id,
+        "employees",
+    )
+
+
+def employee_response(employee: Employee):
+    """
+    Return employee details without exposing the stored password hash.
+    """
+    return {
+        "id": employee.id,
+        "full_name": employee.full_name,
+        "email": employee.email,
+        "permissions": employee.permissions,
+        "business_id": employee.business_id,
+    }
+
+
+# ===========================
+# Create Employee
+# ===========================
+
+@router.post("/")
+def create_employee(
+    payload: EmployeeCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    business_id = get_business_id(user)
+
+    # Confirm the subscription includes employee management.
+    check_employee_access(db, business_id)
+
+    # Enforce the employee limit for the current plan.
     check_creation_limit(
         db,
         business_id,
@@ -62,18 +98,21 @@ def create_employee(
     db.commit()
     db.refresh(employee)
 
-    return employee
+    return employee_response(employee)
 
 
 # ===========================
 # Get Employees
 # ===========================
+
 @router.get("")
 def get_employees(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user.get("business_id")
+    business_id = get_business_id(user)
+
+    check_employee_access(db, business_id)
 
     employees = (
         db.query(Employee)
@@ -81,12 +120,16 @@ def get_employees(
         .all()
     )
 
-    return employees
+    return [
+        employee_response(employee)
+        for employee in employees
+    ]
 
 
 # ===========================
 # Update Employee
 # ===========================
+
 @router.put("/{employee_id}")
 def update_employee(
     employee_id: int,
@@ -94,9 +137,9 @@ def update_employee(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user.get("business_id")
+    business_id = get_business_id(user)
 
-    get_valid_subscription(db, business_id)
+    check_employee_access(db, business_id)
 
     employee = (
         db.query(Employee)
@@ -110,7 +153,7 @@ def update_employee(
     if not employee:
         raise HTTPException(
             status_code=404,
-            detail="Employee not found",
+            detail="Employee not found.",
         )
 
     employee.full_name = payload.full_name
@@ -123,21 +166,22 @@ def update_employee(
     db.commit()
     db.refresh(employee)
 
-    return employee
+    return employee_response(employee)
 
 
 # ===========================
 # Delete Employee
 # ===========================
+
 @router.delete("/{employee_id}")
 def delete_employee(
     employee_id: int,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    business_id = user.get("business_id")
+    business_id = get_business_id(user)
 
-    get_valid_subscription(db, business_id)
+    check_employee_access(db, business_id)
 
     employee = (
         db.query(Employee)
@@ -151,20 +195,21 @@ def delete_employee(
     if not employee:
         raise HTTPException(
             status_code=404,
-            detail="Employee not found",
+            detail="Employee not found.",
         )
 
     db.delete(employee)
     db.commit()
 
     return {
-        "message": "Employee deleted successfully"
+        "message": "Employee deleted successfully."
     }
 
 
 # ===========================
 # Employee Login
 # ===========================
+
 @router.post("/login")
 async def employee_login(
     payload: EmployeeLogin,
@@ -179,7 +224,7 @@ async def employee_login(
     if not employee:
         raise HTTPException(
             status_code=401,
-            detail="Invalid credentials",
+            detail="Invalid credentials.",
         )
 
     if not verify_password(
@@ -188,8 +233,15 @@ async def employee_login(
     ):
         raise HTTPException(
             status_code=401,
-            detail="Invalid credentials",
+            detail="Invalid credentials.",
         )
+
+    # Do not issue an employee token if the business
+    # does not have access to the employee feature.
+    check_employee_access(
+        db,
+        employee.business_id,
+    )
 
     token = create_access_token(
         {
@@ -204,8 +256,10 @@ async def employee_login(
 
     owner = (
         db.query(User)
-        .filter(User.business_id == employee.business_id)
-        .filter(User.role == "owner")
+        .filter(
+            User.business_id == employee.business_id,
+            User.role == "owner",
+        )
         .first()
     )
 

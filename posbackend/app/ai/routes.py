@@ -9,9 +9,7 @@ from app.ai.service import ask_ai
 from app.ai.context import build_context
 
 from app.services.subscription_service import (
-    get_valid_subscription,
     check_subscription_feature,
-    
 )
 
 router = APIRouter(
@@ -77,7 +75,11 @@ def chat(
             detail="Your account is not linked to a business.",
         )
 
-    # Check AI access before quick replies or AI processing.
+    # =========================================
+    # SUBSCRIPTION ENFORCEMENT
+    # =========================================
+    # Must execute before quick replies, context building,
+    # or AI processing.
     check_subscription_feature(
         db,
         business_id,
@@ -87,11 +89,13 @@ def chat(
     message = payload.message.strip()
     lower = message.lower()
 
-    # Instant replies (no AI call).
+    # Instant replies are also protected by the AI subscription.
     if lower in QUICK_REPLIES:
-        return {"reply": QUICK_REPLIES[lower]}
+        return {
+            "reply": QUICK_REPLIES[lower]
+        }
 
-    # Only build business context when the question needs it.
+    # Only build business context for business-related questions.
     needs_context = any(
         word in lower
         for word in BUSINESS_KEYWORDS
@@ -110,4 +114,6 @@ def chat(
         context,
     )
 
-    return {"reply": answer}
+    return {
+        "reply": answer
+    }
