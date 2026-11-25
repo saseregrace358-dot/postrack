@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -44,25 +43,17 @@ def get_business_id(user):
 
 
 def check_employee_access(db: Session, business_id):
-    """
-    Confirm that the business has a valid subscription.
-    Employee limits are checked separately during creation.
-    """
-    get_valid_subscription(
-        db,
-        business_id,
-    )
+    get_valid_subscription(db, business_id)
 
 
 def employee_response(employee: Employee):
-    """
-    Return employee details without exposing the stored password hash.
-    """
     return {
         "id": employee.id,
         "full_name": employee.full_name,
         "email": employee.email,
-        "permissions": employee.permissions,
+        "role": employee.role,
+        "status": employee.status,
+        "permissions": employee.permissions or [],
         "business_id": employee.business_id,
     }
 
@@ -79,10 +70,8 @@ def create_employee(
 ):
     business_id = get_business_id(user)
 
-    # Confirm the business has a valid subscription.
     check_employee_access(db, business_id)
 
-    # Enforce the employee limit before creating.
     check_creation_limit(
         db,
         business_id,
@@ -93,6 +82,8 @@ def create_employee(
         full_name=payload.full_name,
         email=payload.email,
         password=hash_password(payload.password),
+        role=payload.role,
+        status=payload.status,
         permissions=payload.permissions,
         business_id=business_id,
     )
@@ -161,6 +152,8 @@ def update_employee(
 
     employee.full_name = payload.full_name
     employee.email = payload.email
+    employee.role = payload.role
+    employee.status = payload.status.lower()
     employee.permissions = payload.permissions
 
     if payload.password:
@@ -224,13 +217,7 @@ async def employee_login(
         .first()
     )
 
-    if not employee:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials.",
-        )
-
-    if not verify_password(
+    if not employee or not verify_password(
         payload.password,
         employee.password,
     ):
@@ -239,8 +226,13 @@ async def employee_login(
             detail="Invalid credentials.",
         )
 
-    # Do not issue an employee token if the business
-    # does not have a valid subscription.
+    # Inactive employees cannot log in.
+    if (employee.status or "").lower() != "active":
+        raise HTTPException(
+            status_code=403,
+            detail="Your employee account is inactive. Contact your business owner.",
+        )
+
     check_employee_access(
         db,
         employee.business_id,
@@ -251,8 +243,9 @@ async def employee_login(
             "sub": employee.email,
             "employee_id": employee.id,
             "business_id": employee.business_id,
-            "permissions": employee.permissions,
+            "permissions": employee.permissions or [],
             "role": "employee",
+            "job_role": employee.role,
             "name": employee.full_name,
         }
     )
@@ -280,6 +273,8 @@ async def employee_login(
             "name": employee.full_name,
             "email": employee.email,
             "role": "employee",
-            "permissions": employee.permissions,
+            "job_role": employee.role,
+            "status": employee.status,
+            "permissions": employee.permissions or [],
         },
     }

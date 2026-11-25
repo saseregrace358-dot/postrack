@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  User,
   Mail,
   Phone,
   Shield,
@@ -34,10 +33,13 @@ export default function EmployeeRow({
 }: Props) {
   const [open, setOpen] = useState(false);
 
+  const isActive = employee.status?.toLowerCase() === "active";
+
+  const statusLabel = isActive ? "Active" : "Inactive";
+
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
 
-      {/* Header */}
       <div
         onClick={() => setOpen(!open)}
         className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition"
@@ -53,22 +55,20 @@ export default function EmployeeRow({
             </h3>
 
             <p className="text-sm text-slate-500">
-              {employee.role}
+              {employee.role || "Employee"}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-
           <span
-            className={`text-xs px-3 py-1 rounded-full font-medium
-              ${
-                employee.status === "Active"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
-              }`}
+            className={`text-xs px-3 py-1 rounded-full font-medium ${
+              isActive
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+            }`}
           >
-            {employee.status}
+            {statusLabel}
           </span>
 
           {open ? (
@@ -97,13 +97,13 @@ export default function EmployeeRow({
           <Detail
             icon={<Shield size={16} />}
             label="Role"
-            value={employee.role}
+            value={employee.role || "Employee"}
           />
 
           <Detail
             icon={<BadgeCheck size={16} />}
             label="Status"
-            value={employee.status}
+            value={statusLabel}
           />
 
           <div>
@@ -112,7 +112,7 @@ export default function EmployeeRow({
             </p>
 
             <div className="flex flex-wrap gap-2">
-              {employee.permissions.length ? (
+              {employee.permissions?.length ? (
                 employee.permissions.map((permission) => (
                   <span
                     key={permission}
@@ -130,9 +130,11 @@ export default function EmployeeRow({
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2">
-
             <button
-              onClick={() => onEditEmployee(employee)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditEmployee(employee);
+              }}
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl transition"
             >
               <Pencil size={18} />
@@ -140,15 +142,16 @@ export default function EmployeeRow({
             </button>
 
             <button
-              onClick={() => onDeleteEmployee(employee.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteEmployee(employee.id);
+              }}
               className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl transition"
             >
               <Trash2 size={18} />
               Delete
             </button>
-
           </div>
-
         </div>
       )}
     </div>
