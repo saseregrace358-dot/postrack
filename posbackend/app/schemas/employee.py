@@ -7,17 +7,25 @@ class EmployeeCreate(BaseModel):
     full_name: str
     email: str
     password: str
+
+    phone: Optional[str] = None
+
     role: str = "Employee"
     status: Literal["active", "inactive"] = "active"
+
     permissions: List[str] = Field(default_factory=list)
 
 
 class EmployeeUpdate(BaseModel):
     full_name: str
     email: str
+
     password: Optional[str] = None
+    phone: Optional[str] = None
+
     role: str = "Employee"
     status: Literal["active", "inactive"] = "active"
+
     permissions: List[str] = Field(default_factory=list)
 
 
@@ -25,6 +33,9 @@ class EmployeeResponse(BaseModel):
     id: int
     full_name: str
     email: str
+
+    phone: Optional[str] = None
+
     role: str
     status: str
     permissions: List[str]

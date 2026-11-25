@@ -6,6 +6,7 @@ interface Employee {
   id?: string | number;
   full_name: string;
   email: string;
+  phone?: string;
   password?: string;
   role: string;
   status: string;
@@ -40,8 +41,9 @@ function AddEmployeeModal({
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("Employee");
+  const [role, setRole] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,8 +62,9 @@ function AddEmployeeModal({
     if (editingEmployee) {
       setFullName(editingEmployee.full_name || "");
       setEmail(editingEmployee.email || "");
+      setPhone(editingEmployee.phone || "");
       setPassword("");
-      setRole(editingEmployee.role || "Employee");
+      setRole(editingEmployee.role || "");
       setStatus(
         editingEmployee.status?.trim().toLowerCase() === "inactive"
           ? "inactive"
@@ -84,8 +87,9 @@ function AddEmployeeModal({
   const resetForm = () => {
     setFullName("");
     setEmail("");
+    setPhone("");
     setPassword("");
-    setRole("Employee");
+    setRole("");
     setStatus("active");
     setPermissions([]);
   };
@@ -130,6 +134,7 @@ function AddEmployeeModal({
         id: editingEmployee?.id,
         full_name: fullName.trim(),
         email: email.trim(),
+        phone: phone.trim(),
         role: role.trim(),
         status,
         permissions,
@@ -170,7 +175,6 @@ function AddEmployeeModal({
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">
               {isEdit ? "Edit Employee" : "Add Employee"}
             </h2>
-
             <p className="mt-1 text-sm text-slate-500">
               {isEdit
                 ? "Update employee information."
@@ -191,10 +195,8 @@ function AddEmployeeModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-
           <div className="flex-1 space-y-5 overflow-y-auto p-5">
 
-            {/* Full Name */}
             <TextField
               label="Full Name"
               value={fullName}
@@ -203,7 +205,6 @@ function AddEmployeeModal({
               required
             />
 
-            {/* Email */}
             <TextField
               label="Email Address"
               value={email}
@@ -213,7 +214,14 @@ function AddEmployeeModal({
               required
             />
 
-            {/* Password */}
+            <TextField
+              label="Phone Number"
+              value={phone}
+              setValue={setPhone}
+              type="tel"
+              placeholder="Enter employee's phone number"
+            />
+
             <TextField
               label={isEdit ? "New Password (Optional)" : "Password"}
               value={password}
@@ -227,33 +235,30 @@ function AddEmployeeModal({
               required={!isEdit}
             />
 
-            {/* Employee Role */}
+            {/* Free-text role input */}
             <div>
               <label htmlFor="employee-role" className={labelClass}>
                 Employee Role
               </label>
-
               <input
                 id="employee-role"
                 type="text"
                 value={role}
                 onChange={(event) => setRole(event.target.value)}
-                placeholder="e.g. Manager, Cashier, Salesperson"
+                placeholder="e.g. Branch Manager, Sales Officer, Accountant"
                 required
                 className={fieldClass}
               />
-
               <p className="mt-1 text-xs text-slate-500">
-                Enter the employee's job position.
+                Enter any job title for this employee.
               </p>
             </div>
 
-            {/* Employee Status */}
+            {/* Employee status */}
             <div>
               <label htmlFor="employee-status" className={labelClass}>
                 Employee Status
               </label>
-
               <select
                 id="employee-status"
                 value={status}
@@ -265,7 +270,6 @@ function AddEmployeeModal({
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
-
               <p className="mt-1 text-xs text-slate-500">
                 Inactive employees cannot log in to DGTrack.
               </p>
@@ -293,7 +297,6 @@ function AddEmployeeModal({
                       onChange={() => togglePermission(permission)}
                       className="h-5 w-5 accent-green-600"
                     />
-
                     <span className="text-sm capitalize text-slate-700 dark:text-white">
                       {permission}
                     </span>
@@ -345,7 +348,6 @@ function TextField({
       <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">
         {label}
       </label>
-
       <input
         type={type}
         value={value}

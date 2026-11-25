@@ -1,5 +1,7 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.employee import Employee
@@ -51,11 +53,33 @@ def employee_response(employee: Employee):
         "id": employee.id,
         "full_name": employee.full_name,
         "email": employee.email,
+        "phone": employee.phone,
         "role": employee.role,
         "status": employee.status,
         "permissions": employee.permissions or [],
         "business_id": employee.business_id,
     }
+
+
+def check_duplicate_email(
+    db: Session,
+    email: str,
+    exclude_employee_id=None,
+):
+    query = db.query(Employee).filter(
+        Employee.email == email
+    )
+
+    if exclude_employee_id is not None:
+        query = query.filter(
+            Employee.id != exclude_employee_id
+        )
+
+    if query.first():
+        raise HTTPException(
+            status_code=409,
+            detail="An employee with this email already exists.",
+        )
 
 
 # ===========================
@@ -78,19 +102,34 @@ def create_employee(
         "employees",
     )
 
+    check_duplicate_email(
+        db,
+        payload.email,
+    )
+
     employee = Employee(
-        full_name=payload.full_name,
-        email=payload.email,
+        full_name=payload.full_name.strip(),
+        email=payload.email.strip(),
+        phone=payload.phone.strip() if payload.phone else None,
         password=hash_password(payload.password),
-        role=payload.role,
+        role=payload.role.strip(),
         status=payload.status,
         permissions=payload.permissions,
         business_id=business_id,
     )
 
-    db.add(employee)
-    db.commit()
-    db.refresh(employee)
+    try:
+        db.add(employee)
+        db.commit()
+        db.refresh(employee)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="An employee with this email already exists.",
+        )
 
     return employee_response(employee)
 
@@ -111,6 +150,7 @@ def get_employees(
     employees = (
         db.query(Employee)
         .filter(Employee.business_id == business_id)
+        .order_by(Employee.created_at.desc())
         .all()
     )
 
@@ -150,17 +190,39 @@ def update_employee(
             detail="Employee not found.",
         )
 
-    employee.full_name = payload.full_name
-    employee.email = payload.email
-    employee.role = payload.role
-    employee.status = payload.status.lower()
+    check_duplicate_email(
+        db,
+        payload.email.strip(),
+        exclude_employee_id=employee.id,
+    )
+
+    employee.full_name = payload.full_name.strip()
+    employee.email = payload.email.strip()
+    employee.phone = (
+        payload.phone.strip()
+        if payload.phone
+        else None
+    )
+    employee.role = payload.role.strip()
+    employee.status = payload.status
     employee.permissions = payload.permissions
 
-    if payload.password:
-        employee.password = hash_password(payload.password)
+    if payload.password and payload.password.strip():
+        employee.password = hash_password(
+            payload.password
+        )
 
-    db.commit()
-    db.refresh(employee)
+    try:
+        db.commit()
+        db.refresh(employee)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="An employee with this email already exists.",
+        )
 
     return employee_response(employee)
 
@@ -272,6 +334,7 @@ async def employee_login(
             "id": employee.id,
             "name": employee.full_name,
             "email": employee.email,
+            "phone": employee.phone,
             "role": "employee",
             "job_role": employee.role,
             "status": employee.status,
