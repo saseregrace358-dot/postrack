@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import type { FormEvent, Dispatch, SetStateAction } from "react";
 
 interface Employee {
   id?: string | number;
@@ -19,11 +20,13 @@ interface AddEmployeeModalProps {
   editingEmployee: Employee | null;
 }
 
-interface InputProps {
+interface TextFieldProps {
   label: string;
   value: string;
-  setValue: React.Dispatch<React.SetStateAction<string>>;
+  setValue: Dispatch<SetStateAction<string>>;
   type?: string;
+  placeholder?: string;
+  required?: boolean;
 }
 
 function AddEmployeeModal({
@@ -33,7 +36,7 @@ function AddEmployeeModal({
   onUpdateEmployee,
   editingEmployee,
 }: AddEmployeeModalProps) {
-  const isEdit = !!editingEmployee;
+  const isEdit = Boolean(editingEmployee);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -52,14 +55,8 @@ function AddEmployeeModal({
   ];
 
   useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "auto";
+    if (!isOpen) return;
 
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
     if (editingEmployee) {
       setFullName(editingEmployee.full_name || "");
       setEmail(editingEmployee.email || "");
@@ -76,6 +73,14 @@ function AddEmployeeModal({
     }
   }, [editingEmployee, isOpen]);
 
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? "hidden" : "auto";
+
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [isOpen]);
+
   const resetForm = () => {
     setFullName("");
     setEmail("");
@@ -86,35 +91,35 @@ function AddEmployeeModal({
   };
 
   const togglePermission = (permission: string) => {
-    setPermissions((prev) =>
-      prev.includes(permission)
-        ? prev.filter((p) => p !== permission)
-        : [...prev, permission]
+    setPermissions((previous) =>
+      previous.includes(permission)
+        ? previous.filter((item) => item !== permission)
+        : [...previous, permission]
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
     if (loading) return;
 
     if (!fullName.trim()) {
-      alert("Full name is required");
+      alert("Full name is required.");
       return;
     }
 
     if (!email.trim()) {
-      alert("Email is required");
+      alert("Email address is required.");
       return;
     }
 
     if (!role.trim()) {
-      alert("Employee role is required");
+      alert("Employee role is required.");
       return;
     }
 
     if (!isEdit && !password.trim()) {
-      alert("Password is required");
+      alert("Password is required.");
       return;
     }
 
@@ -128,7 +133,7 @@ function AddEmployeeModal({
         role: role.trim(),
         status,
         permissions,
-        ...(password.trim() ? { password } : {}),
+        ...(password.trim() ? { password: password.trim() } : {}),
       };
 
       if (isEdit) {
@@ -139,9 +144,9 @@ function AddEmployeeModal({
 
       resetForm();
       onClose();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save employee");
+    } catch (error) {
+      console.error("Employee save error:", error);
+      alert("Failed to save employee. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -149,15 +154,24 @@ function AddEmployeeModal({
 
   if (!isOpen) return null;
 
+  const fieldClass =
+    "w-full min-h-[48px] rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500";
+
+  const labelClass =
+    "block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300";
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
-      <div className="flex flex-col w-full h-screen sm:h-auto sm:max-h-[90vh] sm:max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
-        <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-5 py-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 sm:p-6">
+      <div className="flex max-h-[95vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
           <div>
-            <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
               {isEdit ? "Edit Employee" : "Add Employee"}
             </h2>
-            <p className="text-sm text-slate-500">
+
+            <p className="mt-1 text-sm text-slate-500">
               {isEdit
                 ? "Update employee information."
                 : "Create a new employee account."}
@@ -167,91 +181,110 @@ function AddEmployeeModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            disabled={loading}
+            aria-label="Close modal"
+            className="rounded-lg px-3 py-2 text-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             ✕
           </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col flex-1 overflow-hidden"
-        >
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            <Input
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+
+          <div className="flex-1 space-y-5 overflow-y-auto p-5">
+
+            {/* Full Name */}
+            <TextField
               label="Full Name"
               value={fullName}
               setValue={setFullName}
+              placeholder="Enter employee's full name"
+              required
             />
 
-            <Input
+            {/* Email */}
+            <TextField
               label="Email Address"
               value={email}
               setValue={setEmail}
               type="email"
+              placeholder="Enter employee's email address"
+              required
             />
 
-            <Input
+            {/* Password */}
+            <TextField
               label={isEdit ? "New Password (Optional)" : "Password"}
               value={password}
               setValue={setPassword}
               type="password"
+              placeholder={
+                isEdit
+                  ? "Leave blank to keep current password"
+                  : "Create employee password"
+              }
+              required={!isEdit}
             />
 
+            {/* Employee Role */}
             <div>
-              <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
+              <label htmlFor="employee-role" className={labelClass}>
                 Employee Role
               </label>
 
-              <select
+              <input
+                id="employee-role"
+                type="text"
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500"
-              >
-                <option value="Employee">Employee</option>
-                <option value="Manager">Manager</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Cashier">Cashier</option>
-                <option value="Salesperson">Salesperson</option>
-                <option value="Storekeeper">Storekeeper</option>
-                <option value="Accountant">Accountant</option>
-              </select>
+                onChange={(event) => setRole(event.target.value)}
+                placeholder="e.g. Manager, Cashier, Salesperson"
+                required
+                className={fieldClass}
+              />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Enter the employee's job position.
+              </p>
             </div>
 
+            {/* Employee Status */}
             <div>
-              <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
+              <label htmlFor="employee-status" className={labelClass}>
                 Employee Status
               </label>
 
               <select
+                id="employee-status"
                 value={status}
-                onChange={(e) =>
-                  setStatus(e.target.value as "active" | "inactive")
+                onChange={(event) =>
+                  setStatus(event.target.value as "active" | "inactive")
                 }
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500"
+                className={fieldClass}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
 
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="mt-1 text-xs text-slate-500">
                 Inactive employees cannot log in to DGTrack.
               </p>
             </div>
 
+            {/* Permissions */}
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-3">
-                Permissions
+              <label className={labelClass}>
+                Employee Permissions
               </label>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {permissionOptions.map((permission) => (
                   <label
                     key={permission}
-                    className={`flex items-center gap-3 rounded-xl border p-4 cursor-pointer transition ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition ${
                       permissions.includes(permission)
                         ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                        : "border-slate-200 dark:border-slate-700 hover:border-green-400"
+                        : "border-slate-200 hover:border-green-400 dark:border-slate-700"
                     }`}
                   >
                     <input
@@ -261,7 +294,7 @@ function AddEmployeeModal({
                       className="h-5 w-5 accent-green-600"
                     />
 
-                    <span className="capitalize text-slate-700 dark:text-white">
+                    <span className="text-sm capitalize text-slate-700 dark:text-white">
                       {permission}
                     </span>
                   </label>
@@ -270,28 +303,28 @@ function AddEmployeeModal({
             </div>
           </div>
 
-          <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full sm:w-auto rounded-xl border border-slate-300 dark:border-slate-700 px-6 py-3"
-              >
-                Cancel
-              </button>
+          {/* Footer */}
+          <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full sm:w-auto rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold px-6 py-3"
-              >
-                {loading
-                  ? "Saving..."
-                  : isEdit
-                    ? "Update Employee"
-                    : "Create Employee"}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading
+                ? "Saving..."
+                : isEdit
+                  ? "Update Employee"
+                  : "Create Employee"}
+            </button>
           </div>
         </form>
       </div>
@@ -299,23 +332,27 @@ function AddEmployeeModal({
   );
 }
 
-function Input({
+function TextField({
   label,
   value,
   setValue,
   type = "text",
-}: InputProps) {
+  placeholder,
+  required = false,
+}: TextFieldProps) {
   return (
     <div>
-      <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
+      <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">
         {label}
       </label>
 
       <input
         type={type}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white focus:border-green-500 focus:ring-2 focus:ring-green-500 outline-none transition"
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={placeholder}
+        required={required}
+        className="w-full min-h-[48px] rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
       />
     </div>
   );
