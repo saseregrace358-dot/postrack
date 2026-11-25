@@ -1,20 +1,21 @@
+
 import { useEffect, useState } from "react";
 
 interface Employee {
-  id?: string;
+  id?: string | number;
   full_name: string;
   email: string;
-  password: string;
+  password?: string;
   role: string;
-  status: "active" | "inactive";
+  status: string;
   permissions: string[];
 }
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddEmployee: (employee: Employee) => void;
-  onUpdateEmployee: (employee: Employee) => void;
+  onAddEmployee: (employee: Employee) => void | Promise<void>;
+  onUpdateEmployee: (employee: Employee) => void | Promise<void>;
   editingEmployee: Employee | null;
 }
 
@@ -60,12 +61,12 @@ function AddEmployeeModal({
 
   useEffect(() => {
     if (editingEmployee) {
-      setFullName(editingEmployee.full_name);
-      setEmail(editingEmployee.email);
+      setFullName(editingEmployee.full_name || "");
+      setEmail(editingEmployee.email || "");
       setPassword("");
       setRole(editingEmployee.role || "Employee");
       setStatus(
-        editingEmployee.status?.toLowerCase() === "inactive"
+        editingEmployee.status?.trim().toLowerCase() === "inactive"
           ? "inactive"
           : "active"
       );
@@ -74,14 +75,6 @@ function AddEmployeeModal({
       resetForm();
     }
   }, [editingEmployee, isOpen]);
-
-  const togglePermission = (permission: string) => {
-    setPermissions((prev) =>
-      prev.includes(permission)
-        ? prev.filter((p) => p !== permission)
-        : [...prev, permission]
-    );
-  };
 
   const resetForm = () => {
     setFullName("");
@@ -92,9 +85,15 @@ function AddEmployeeModal({
     setPermissions([]);
   };
 
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const togglePermission = (permission: string) => {
+    setPermissions((prev) =>
+      prev.includes(permission)
+        ? prev.filter((p) => p !== permission)
+        : [...prev, permission]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (loading) return;
@@ -126,10 +125,10 @@ function AddEmployeeModal({
         id: editingEmployee?.id,
         full_name: fullName.trim(),
         email: email.trim(),
-        password,
         role: role.trim(),
         status,
         permissions,
+        ...(password.trim() ? { password } : {}),
       };
 
       if (isEdit) {
@@ -153,14 +152,11 @@ function AddEmployeeModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
       <div className="flex flex-col w-full h-screen sm:h-auto sm:max-h-[90vh] sm:max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
-
-        {/* Header */}
         <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-5 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">
               {isEdit ? "Edit Employee" : "Add Employee"}
             </h2>
-
             <p className="text-sm text-slate-500">
               {isEdit
                 ? "Update employee information."
@@ -177,13 +173,11 @@ function AddEmployeeModal({
           </button>
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="flex flex-col flex-1 overflow-hidden"
         >
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
-
             <Input
               label="Full Name"
               value={fullName}
@@ -204,7 +198,6 @@ function AddEmployeeModal({
               type="password"
             />
 
-            {/* Employee Role */}
             <div>
               <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
                 Employee Role
@@ -225,7 +218,6 @@ function AddEmployeeModal({
               </select>
             </div>
 
-            {/* Employee Status */}
             <div>
               <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
                 Employee Status
@@ -247,7 +239,6 @@ function AddEmployeeModal({
               </p>
             </div>
 
-            {/* Permissions */}
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-3">
                 Permissions
@@ -279,7 +270,6 @@ function AddEmployeeModal({
             </div>
           </div>
 
-          {/* Footer */}
           <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <button
@@ -298,8 +288,8 @@ function AddEmployeeModal({
                 {loading
                   ? "Saving..."
                   : isEdit
-                  ? "Update Employee"
-                  : "Create Employee"}
+                    ? "Update Employee"
+                    : "Create Employee"}
               </button>
             </div>
           </div>

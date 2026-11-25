@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   Mail,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 
 interface Employee {
-  id: string;
+  id: string | number;
   full_name: string;
   email: string;
   phone?: string;
@@ -23,7 +24,7 @@ interface Employee {
 interface Props {
   employee: Employee;
   onEditEmployee: (employee: Employee) => void;
-  onDeleteEmployee: (employeeId: string) => void;
+  onDeleteEmployee: (employeeId: string | number) => void;
 }
 
 export default function EmployeeRow({
@@ -33,27 +34,34 @@ export default function EmployeeRow({
 }: Props) {
   const [open, setOpen] = useState(false);
 
-  const isActive = employee.status?.toLowerCase() === "active";
+  const normalizedStatus = String(employee.status ?? "")
+    .trim()
+    .toLowerCase();
 
-  const statusLabel = isActive ? "Active" : "Inactive";
+  const isActive = normalizedStatus === "active";
+  const isInactive = normalizedStatus === "inactive";
+
+  const statusLabel = isActive
+    ? "Active"
+    : isInactive
+      ? "Inactive"
+      : "Unknown";
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-
       <div
         onClick={() => setOpen(!open)}
         className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition"
       >
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-green-600 flex items-center justify-center text-white font-bold text-lg">
-            {employee.full_name.charAt(0).toUpperCase()}
+            {employee.full_name?.charAt(0).toUpperCase() || "E"}
           </div>
 
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-white">
               {employee.full_name}
             </h3>
-
             <p className="text-sm text-slate-500">
               {employee.role || "Employee"}
             </p>
@@ -65,7 +73,9 @@ export default function EmployeeRow({
             className={`text-xs px-3 py-1 rounded-full font-medium ${
               isActive
                 ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-700"
+                : isInactive
+                  ? "bg-red-100 text-red-700"
+                  : "bg-yellow-100 text-yellow-700"
             }`}
           >
             {statusLabel}
@@ -81,7 +91,6 @@ export default function EmployeeRow({
 
       {open && (
         <div className="border-t border-slate-200 dark:border-slate-700 p-5 space-y-5">
-
           <Detail
             icon={<Mail size={16} />}
             label="Email"
@@ -107,10 +116,7 @@ export default function EmployeeRow({
           />
 
           <div>
-            <p className="text-sm text-slate-500 mb-2">
-              Permissions
-            </p>
-
+            <p className="text-sm text-slate-500 mb-2">Permissions</p>
             <div className="flex flex-wrap gap-2">
               {employee.permissions?.length ? (
                 employee.permissions.map((permission) => (
@@ -169,15 +175,11 @@ function Detail({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="text-green-600 mt-1">
-        {icon}
-      </div>
-
+      <div className="text-green-600 mt-1">{icon}</div>
       <div>
         <p className="text-xs uppercase tracking-wide text-slate-500">
           {label}
         </p>
-
         <p className="font-medium text-slate-900 dark:text-white">
           {value}
         </p>
