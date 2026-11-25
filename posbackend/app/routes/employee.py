@@ -16,7 +16,7 @@ from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
 
 from app.services.subscription_service import (
-    check_subscription_feature,
+    get_valid_subscription,
     check_creation_limit,
 )
 
@@ -44,10 +44,13 @@ def get_business_id(user):
 
 
 def check_employee_access(db: Session, business_id):
-    check_subscription_feature(
+    """
+    Confirm that the business has a valid subscription.
+    Employee limits are checked separately during creation.
+    """
+    get_valid_subscription(
         db,
         business_id,
-        "employees",
     )
 
 
@@ -76,10 +79,10 @@ def create_employee(
 ):
     business_id = get_business_id(user)
 
-    # Confirm the subscription includes employee management.
+    # Confirm the business has a valid subscription.
     check_employee_access(db, business_id)
 
-    # Enforce the employee limit for the current plan.
+    # Enforce the employee limit before creating.
     check_creation_limit(
         db,
         business_id,
@@ -237,7 +240,7 @@ async def employee_login(
         )
 
     # Do not issue an employee token if the business
-    # does not have access to the employee feature.
+    # does not have a valid subscription.
     check_employee_access(
         db,
         employee.business_id,
