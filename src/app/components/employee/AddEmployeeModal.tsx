@@ -56,6 +56,22 @@ function AddEmployeeModal({
     "settings",
   ];
 
+  const fieldClass =
+    "block w-full min-h-[48px] rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500";
+
+  const labelClass =
+    "block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300";
+
+  const resetForm = () => {
+    setFullName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setRole("");
+    setStatus("active");
+    setPermissions([]);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -83,16 +99,6 @@ function AddEmployeeModal({
       document.body.style.overflow = "auto";
     };
   }, [isOpen]);
-
-  const resetForm = () => {
-    setFullName("");
-    setEmail("");
-    setPhone("");
-    setPassword("");
-    setRole("");
-    setStatus("active");
-    setPermissions([]);
-  };
 
   const togglePermission = (permission: string) => {
     setPermissions((previous) =>
@@ -134,11 +140,13 @@ function AddEmployeeModal({
         id: editingEmployee?.id,
         full_name: fullName.trim(),
         email: email.trim(),
-        phone: phone.trim(),
+        phone: phone.trim() || undefined,
         role: role.trim(),
         status,
         permissions,
-        ...(password.trim() ? { password: password.trim() } : {}),
+        ...(password.trim()
+          ? { password: password.trim() }
+          : {}),
       };
 
       if (isEdit) {
@@ -159,12 +167,6 @@ function AddEmployeeModal({
 
   if (!isOpen) return null;
 
-  const fieldClass =
-    "w-full min-h-[48px] rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500";
-
-  const labelClass =
-    "block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300";
-
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 sm:p-6">
       <div className="flex max-h-[95vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
@@ -175,6 +177,7 @@ function AddEmployeeModal({
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">
               {isEdit ? "Edit Employee" : "Add Employee"}
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               {isEdit
                 ? "Update employee information."
@@ -194,9 +197,13 @@ function AddEmployeeModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <div className="flex-1 space-y-5 overflow-y-auto p-5">
 
+            {/* Full Name */}
             <TextField
               label="Full Name"
               value={fullName}
@@ -205,6 +212,7 @@ function AddEmployeeModal({
               required
             />
 
+            {/* Email */}
             <TextField
               label="Email Address"
               value={email}
@@ -214,16 +222,35 @@ function AddEmployeeModal({
               required
             />
 
-            <TextField
-              label="Phone Number"
-              value={phone}
-              setValue={setPhone}
-              type="tel"
-              placeholder="Enter employee's phone number"
-            />
+            {/* Phone Number - Direct Input */}
+            <div>
+              <label
+                htmlFor="employee-phone"
+                className={labelClass}
+              >
+                Phone Number
+              </label>
 
+              <input
+                id="employee-phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="Enter employee's phone number"
+                className={fieldClass}
+              />
+            </div>
+
+            {/* Password */}
             <TextField
-              label={isEdit ? "New Password (Optional)" : "Password"}
+              label={
+                isEdit
+                  ? "New Password (Optional)"
+                  : "Password"
+              }
               value={password}
               setValue={setPassword}
               type="password"
@@ -235,13 +262,18 @@ function AddEmployeeModal({
               required={!isEdit}
             />
 
-            {/* Free-text role input */}
+            {/* Custom Employee Role */}
             <div>
-              <label htmlFor="employee-role" className={labelClass}>
+              <label
+                htmlFor="employee-role"
+                className={labelClass}
+              >
                 Employee Role
               </label>
+
               <input
                 id="employee-role"
+                name="role"
                 type="text"
                 value={role}
                 onChange={(event) => setRole(event.target.value)}
@@ -249,27 +281,36 @@ function AddEmployeeModal({
                 required
                 className={fieldClass}
               />
+
               <p className="mt-1 text-xs text-slate-500">
                 Enter any job title for this employee.
               </p>
             </div>
 
-            {/* Employee status */}
+            {/* Employee Status */}
             <div>
-              <label htmlFor="employee-status" className={labelClass}>
+              <label
+                htmlFor="employee-status"
+                className={labelClass}
+              >
                 Employee Status
               </label>
+
               <select
                 id="employee-status"
+                name="status"
                 value={status}
                 onChange={(event) =>
-                  setStatus(event.target.value as "active" | "inactive")
+                  setStatus(
+                    event.target.value as "active" | "inactive"
+                  )
                 }
                 className={fieldClass}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+
               <p className="mt-1 text-xs text-slate-500">
                 Inactive employees cannot log in to DGTrack.
               </p>
@@ -297,6 +338,7 @@ function AddEmployeeModal({
                       onChange={() => togglePermission(permission)}
                       className="h-5 w-5 accent-green-600"
                     />
+
                     <span className="text-sm capitalize text-slate-700 dark:text-white">
                       {permission}
                     </span>
@@ -348,13 +390,14 @@ function TextField({
       <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">
         {label}
       </label>
+
       <input
         type={type}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder={placeholder}
         required={required}
-        className="w-full min-h-[48px] rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+        className="block min-h-[48px] w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
       />
     </div>
   );
